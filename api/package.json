@@ -9,7 +9,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
-    "dev": "ts-node-dev --respawn --transpile-only src/main.ts",
+    "dev": "npm run migration:run && npm run seed:data && npm run seed && ts-node-dev --respawn --transpile-only src/main.ts",
     "typecheck": "tsc -p tsconfig.build.json --noEmit",
     "test": "jest",
     "test:cov": "jest --coverage",

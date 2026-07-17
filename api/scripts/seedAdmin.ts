@@ -1,27 +1,19 @@
 import 'dotenv/config';
-import * as readline from 'readline';
 import * as bcrypt from 'bcryptjs';
 import { AppDataSource } from '../src/database/data-source';
 import { Admin } from '../src/database/entities/admin.entity';
 
-function ask(question: string): Promise<string> {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  return new Promise((resolve) => {
-    rl.question(question, (answer) => {
-      rl.close();
-      resolve(answer.trim());
-    });
-  });
-}
+// Defaults to the same account api/init.sql bootstraps for a fresh Docker
+// database, so this script stays a safe no-op (password already matches)
+// in the common case, and a deliberate override when ADMIN_USERNAME/
+// ADMIN_PASSWORD are set — e.g. in CI, or for a real deployment where you
+// want a different admin account from day one.
+const DEFAULT_USERNAME = 'carla';
+const DEFAULT_PASSWORD = 'Carla0303!';
 
 (async () => {
-  console.log('=== Création / mise à jour du compte administrateur ===');
-
-  let username = process.env.ADMIN_USERNAME;
-  let password = process.env.ADMIN_PASSWORD;
-
-  if (!username) username = await ask("Nom d'utilisateur admin : ");
-  if (!password) password = await ask('Mot de passe (min. 10 caractères) : ');
+  const username = process.env.ADMIN_USERNAME || DEFAULT_USERNAME;
+  const password = process.env.ADMIN_PASSWORD || DEFAULT_PASSWORD;
 
   if (!username || password.length < 10) {
     console.error("Nom d'utilisateur invalide ou mot de passe trop court (10 caractères min).");

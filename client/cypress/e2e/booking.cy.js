@@ -19,14 +19,19 @@ describe('Booking flow', () => {
   });
 
   it('a visitor books that day', () => {
+    // Intercept /api/hours so the test fails with a clear, inspectable
+    // reason (bad/empty response) instead of a vague "element never
+    // found" timeout if the day picker doesn't render as expected.
+    cy.intercept('GET', '/api/hours').as('getHours');
+
     cy.visit('/booking');
+    cy.wait('@getHours').then(({ response }) => {
+      expect(response.statusCode).to.eq(200);
+      const openDays = response.body.days.filter((d) => d.isSet && !d.isClosed && d.ranges.length > 0);
+      expect(openDays, 'at least one day should be open after the previous test').to.have.length.greaterThan(0);
+    });
 
     cy.get('.service-pick-card').first().click();
-    // The day picker only renders once both /api/services and /api/hours
-    // have resolved (see Booking.jsx) — on a cold container this can take
-    // longer than Cypress's 4s default, so wait out the loading hint
-    // explicitly before asserting on the day chips themselves.
-    cy.get('.day-picker-hint', { timeout: 15000 }).should('not.exist');
     cy.get('.day-chip.is-open', { timeout: 15000 }).first().click();
 
     cy.get('#slot').should('not.be.disabled');

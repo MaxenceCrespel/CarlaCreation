@@ -8,6 +8,14 @@ services:
       POSTGRES_DB: salon
     volumes:
       - salon-postgres:/var/lib/postgresql/data
+      # Runs once, only against a brand new (empty) volume: creates the
+      # schema, seeds default services/gallery/reviews, and an admin
+      # account (carla / Carla0303! — change it after first login). This
+      # is what makes a bare `docker compose up` enough on its own — no
+      # separate migration/seed commands needed for a first launch.
+      # :Z relabels the file for SELinux (Fedora/RHEL + Podman) so Postgres
+      # can actually read it — harmless no-op on hosts without SELinux.
+      - ./api/init.sql:/docker-entrypoint-initdb.d/init.sql:ro,Z
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U salon"]
       interval: 10s
@@ -25,18 +33,26 @@ services:
         condition: service_healthy
     ports:
       - '3000:3000'
-    # Optional: api/.env is gitignored and won't exist on a fresh checkout
-    # (CI, or a first `docker compose up` before anyone's created one) —
+    # Optional: api/.env is gitignored and won't exist on a fresh checkout —
     # `required: false` means compose just skips it instead of erroring out.
-    # JWT_SECRET still has to come from *somewhere* for the app to boot;
-    # either put it in api/.env for local/real use, or pass it via
-    # `environment:`/`docker compose run -e` (CI does the latter).
+    # NOTE: Compose's `environment:` block below always wins over env_file
+    # for the same variable name, so api/.env CANNOT override JWT_SECRET/
+    # COOKIE_SECURE as long as they're hardcoded here — for a real
+    # deployment, edit the two lines below directly instead (or delete them
+    # from here and put JWT_SECRET/COOKIE_SECURE in api/.env instead, not
+    # both places).
     env_file:
       - path: api/.env
         required: false
     environment:
       NODE_ENV: production
       DATABASE_URL: postgres://salon:salon@postgres:5432/salon
+      # Insecure placeholders so a bare `docker compose up` boots with zero
+      # config. Replace both before exposing this beyond your own machine:
+      # JWT_SECRET with `openssl rand -hex 64`, COOKIE_SECURE with "true"
+      # once you're behind a real HTTPS reverse proxy.
+      JWT_SECRET: dev-only-insecure-default-jwt-secret-change-me-before-any-real-deploy
+      COOKIE_SECURE: "false"
     volumes:
       - salon-uploads:/app/uploads
     healthcheck:

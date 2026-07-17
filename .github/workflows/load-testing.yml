@@ -9,19 +9,13 @@ jobs:
     steps:
       - name: Checkout du code
         uses: actions/checkout@v4
-      - name: Génération d'un .env pour Docker Compose
-        run: |
-          cat > api/.env <<EOF
-          JWT_SECRET=ci-load-testing-jwt-secret-not-used-anywhere-else-1234567890
-          COOKIE_SECURE=false
-          PUBLIC_ORIGIN=http://localhost:3000
-          EOF
+      # No .env, no migration/seed step needed: docker-compose.yml ships
+      # working defaults (JWT_SECRET, COOKIE_SECURE) and api/init.sql
+      # bootstraps the schema + seed data automatically on first boot.
       - name: Démarrage de l'infrastructure
         run: |
           docker compose up -d --build
           sleep 15
-      - name: Migration de la base de données
-        run: docker compose exec -T web npm run migration:run
       - name: Exécution du test de charge Siege (Mode Sidecar Ubuntu)
         run: |
           APP_CONTAINER=$(docker compose ps -q web)

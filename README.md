@@ -180,19 +180,21 @@ docker run -d --name salon-postgres -p 5432:5432 \
   postgres:15-alpine
 ```
 
-Terminal 1 — l'API :
+Terminal 1 — l'API : **juste `npm install` puis `npm run dev`**, rien
+d'autre. `npm run dev` crée le schéma, insère les données par défaut
+(prestations/galerie/avis) et le compte admin (`carla` /
+`Carla0303!`) automatiquement avant de démarrer le serveur — ces trois
+étapes sont sans effet si elles ont déjà été faites, donc redémarrer ne
+casse ni ne duplique rien.
 
 ```bash
 cd api
 npm install
 cp .env.example .env
-openssl rand -hex 64          # coller le résultat dans JWT_SECRET du .env
-                                # DATABASE_URL par défaut du .env.example correspond
-                                # déjà à la commande docker run ci-dessus
-npm run migration:run          # crée le schéma
-npm run seed:data              # prestations/galerie/avis par défaut
-npm run seed                   # crée le compte admin (mode interactif)
-npm run dev                    # NestJS sur http://localhost:3000
+openssl rand -hex 64   # optionnel : coller le résultat dans JWT_SECRET du .env
+                         # (une valeur par défaut existe déjà dans .env.example
+                         # pour ne pas bloquer un premier essai)
+npm run dev             # NestJS sur http://localhost:3000, DB prête automatiquement
 ```
 
 Terminal 2 — le frontend :
@@ -204,7 +206,8 @@ npm run dev                   # Vite sur http://localhost:5173 (proxifie /api ve
 ```
 
 Ouvrez `http://localhost:5173` pendant le développement (hot-reload React).
-L'espace admin est sur `http://localhost:5173/admin`.
+L'espace admin est sur `http://localhost:5173/admin` (identifiants
+`carla` / `Carla0303!` par défaut — changez-les avant tout déploiement réel).
 
 Après une modification, `npm test` (dans `api/`, tests unitaires, pas besoin
 de base de données) et `npm run test:e2e` (tests d'intégration Supertest,
@@ -223,51 +226,51 @@ fonctionnera pas correctement sans HTTPS en production**.
 
 ### Option A — Docker (recommandé)
 
-Tout est déjà défini dans `api/Dockerfile` (build multi-étapes : React
-puis NestJS) et `docker-compose.yml` à la racine, qui inclut aussi un
-service **PostgreSQL** avec un volume nommé (les données survivent à la
-recréation du conteneur). `api/.env` est optionnel dans `docker-compose.yml`
-(`env_file: ... required: false`) — s'il n'existe pas, pensez à passer
-`JWT_SECRET` autrement (variable d'environnement du shell, secret CI…), sinon
-l'API refuse de démarrer.
+**`docker compose up -d --build`, rien d'autre.** Tout est déjà défini dans
+`api/Dockerfile` (build multi-étapes : React puis NestJS) et
+`docker-compose.yml` à la racine, qui inclut aussi un service **PostgreSQL**
+avec un volume nommé (les données survivent à la recréation du conteneur).
+Au tout premier démarrage (volume vide), Postgres exécute automatiquement
+`api/init.sql` : schéma, prestations/galerie/avis par défaut, et un compte
+admin **`carla` / `Carla0303!`**. `docker-compose.yml` fournit aussi des
+valeurs par défaut pour `JWT_SECRET`/`COOKIE_SECURE` — le site fonctionne
+donc dès la première commande, sans aucun fichier `.env` à créer.
 
 ```bash
-cp api/.env.example api/.env
-# Éditez api/.env :
-#   - JWT_SECRET : openssl rand -hex 64
-#   - PUBLIC_ORIGIN : l'URL publique réelle du site (ex: https://carla-creation.fr)
-#   - DATABASE_URL n'a pas besoin d'être modifié : docker-compose.yml le
-#     surcharge déjà pour pointer vers le service postgres du même réseau.
-
 docker compose up -d --build
 ```
 
-> **⚠️ Testez en local sans HTTPS (ex: `http://localhost:3000`) ?** Le
-> `docker-compose.yml` fourni passe `NODE_ENV=production`, ce qui active le
-> flag `Secure` sur les cookies de session/CSRF — un navigateur refuse de les
-> stocker en dehors de HTTPS, donc **la connexion admin ne fonctionnera pas**
-> tant que le site n'est pas servi en HTTPS. Pour tester en local, ajoutez
-> une ligne `COOKIE_SECURE=false` (pas juste décommenter l'exemple — la
-> ligne doit être active, sans `#`) dans `api/.env` avant `docker
-> compose up`. En production réelle (derrière un reverse proxy HTTPS), ne
-> mettez rien : le flag `Secure` s'active automatiquement.
+**Pour un vrai déploiement (pas juste un essai local)**, remplacez les
+valeurs par défaut — elles sont volontairement peu sûres pour ne pas
+bloquer un premier lancement, pas pour tourner ainsi en production :
 
-Une fois les conteneurs démarrés, créez le schéma, les données par défaut et
-le compte admin (une seule fois, ou après chaque changement de schéma pour
-la migration) :
+1. Dans `docker-compose.yml`, éditez directement les deux lignes
+   `JWT_SECRET`/`COOKIE_SECURE` du service `web` (`openssl rand -hex 64`
+   pour la première, `"true"` pour la seconde une fois derrière un vrai
+   HTTPS). **Ces deux-là ne peuvent pas être surchargées via `api/.env`** —
+   `environment:` dans `docker-compose.yml` est toujours prioritaire sur
+   `env_file`, donc autant les changer directement à la source.
+2. Pour le reste (`PUBLIC_ORIGIN`, SMTP…), `cp api/.env.example api/.env`
+   et éditez normalement.
+3. Changez le mot de passe du compte `carla` (ou créez le vôtre) :
 
 ```bash
-docker compose exec web npm run migration:run
-docker compose exec web npm run seed:data
-docker compose exec web sh -c "ADMIN_USERNAME=admin ADMIN_PASSWORD='un-mot-de-passe-fort' npm run seed"
+docker compose exec web sh -c "ADMIN_USERNAME=votre-identifiant ADMIN_PASSWORD='un-mot-de-passe-fort' npm run seed"
 ```
+
+> **⚠️ Testez en local sans HTTPS (ex: `http://localhost:3000`) ?** Par
+> défaut `COOKIE_SECURE=false`, donc la connexion admin fonctionne
+> directement en HTTP local — c'est voulu. **En production derrière un
+> reverse proxy HTTPS**, pensez à repasser `COOKIE_SECURE` à `"true"` dans
+> `docker-compose.yml` (étape 1 ci-dessus) — sinon le flag `Secure` des
+> cookies de session/CSRF ne sera jamais activé.
 
 Mettre à jour après un changement de code :
 
 ```bash
 git pull
 docker compose up -d --build
-docker compose exec web npm run migration:run   # si le schéma a changé
+docker compose exec web npm run migration:run   # si le schéma a changé depuis
 ```
 
 ### Option B — VPS classique avec PM2
