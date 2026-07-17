@@ -29,6 +29,11 @@ jobs:
 
       - name: Upload Semgrep SARIF
         uses: github/codeql-action/upload-sarif@v4
+        # Code scanning (the Security tab SARIF viewer) requires GitHub
+        # Advanced Security, not available on private repos on every plan —
+        # the actual scan above still runs and blocks on real findings,
+        # this step is only a nice-to-have visualization on top of that.
+        continue-on-error: true
         if: always()
         with:
           sarif_file: semgrep.sarif

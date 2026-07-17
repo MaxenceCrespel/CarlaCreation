@@ -1,0 +1,10 @@
+# Old Express/EJS implementation, kept only for reference (see README) —
+# not built, deployed, or otherwise part of the live app. Findings here
+# aren't actionable.
+legacy-express-ejs/
+
+# Action versions are pinned to mutable tags (@v4, @master...), not commit
+# SHAs — deliberate choice to avoid the maintenance overhead of updating
+# SHAs on every action release, at the cost of the supply-chain hardening
+# Semgrep's github-actions-mutable-action-tag rule flags.
+.github/workflows/
