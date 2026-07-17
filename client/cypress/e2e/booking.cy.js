@@ -19,6 +19,13 @@ describe('Booking flow', () => {
     cy.contains('button.admin-tab', 'Horaires').click();
 
     cy.get('.day-chip.is-unset').first().click();
+    // An unset day's `isClosed` defaults to true (the API's "closed by
+    // default" sentinel — see getEffectiveHoursForDate) and DayEditor seeds
+    // its checkbox straight from that, so it starts out checked. Uncheck it
+    // before saving, or the day gets saved as closed with no ranges — which
+    // is exactly what was happening before this fix (confirmed via the
+    // /api/hours diagnostic below: isClosed: true, ranges: []).
+    cy.get('.day-editor-closed input[type="checkbox"]').uncheck();
     cy.contains('button', 'Enregistrer').click();
 
     cy.wait('@saveDay').then(({ request, response }) => {
