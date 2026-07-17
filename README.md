@@ -30,10 +30,14 @@ serveur front séparé à faire tourner.
 
 ## Stack détaillée
 
-- **Backend** : NestJS 11, TypeScript, SQLite (`better-sqlite3`, accès
-  direct — pas d'ORM), Multer (upload d'images), class-validator (DTOs)
+- **Backend** : NestJS 11, TypeScript, PostgreSQL via TypeORM (repositories,
+  migrations versionnées — pas de `synchronize`), Multer (upload d'images),
+  class-validator (DTOs)
 - **Frontend** : React 19, Vite, react-router-dom, JS/JSX (pas de build
   TypeScript côté client)
+- **Tests** : unitaires (Jest, services mockés), intégration (Jest +
+  Supertest contre une vraie base Postgres), E2E (Cypress contre la stack
+  complète) — voir la section « Tests & CI/CD » plus bas
 - **Sécurité** : Helmet (CSP/HSTS), `@nestjs/throttler` (rate limiting),
   protection CSRF (double-submit cookie, `CsrfGuard`), validation stricte des
   entrées (DTOs + `ValidationPipe` avec whitelist), mots de passe hashés
@@ -46,11 +50,15 @@ serveur front séparé à faire tourner.
 ```
 api/
   src/
-    config.ts               config technique validée (PORT, JWT_SECRET, COOKIE_SECURE…)
+    config.ts               config technique validée (PORT, JWT_SECRET, DATABASE_URL, COOKIE_SECURE…)
     site-config.ts           contenu/branding (nom, slogan, téléphone, nav…) — seul fichier à éditer pour un rebrand
     main.ts                  bootstrap : Helmet, CORS, CSRF, arrêt propre
     app.module.ts             assemble tous les modules + sert le build React
-    database/                 schema.ts (SQLite), database.module.ts, entities/ (types)
+    database/
+      database.module.ts       TypeOrmModule.forRoot (synchronize: false)
+      data-source.ts            DataSource autonome, utilisé par le CLI de migration et les scripts
+      entities/                 une classe @Entity() par table
+      migrations/                schéma versionné (npm run migration:run)
     common/                   admin-auth.guard.ts (JWT), csrf.ts (CsrfGuard)
     modules/
       auth/                    login/logout/me
@@ -58,11 +66,13 @@ api/
       gallery/                  galerie : liste publique + upload/CRUD admin
       reservations/              disponibilité, réservation, gestion admin
       settings/                  horaires jour par jour (aucun horaire récurrent)
+      reviews/                   avis clients : soumission publique + modération admin
       contact/                   formulaire de contact
+      seo/                       robots.txt, sitemap.xml
       health/                    /healthz
       misc/                      /api/csrf-token, /api/site-config
-  scripts/                  seedAdmin.ts, backup.ts, smoketest.ts
-  data/salon.db              base SQLite (persistante, créée au premier lancement)
+  scripts/                  seedAdmin.ts, seed.ts (données par défaut), backup.ts, smoketest.ts
+  test/                     tests d'intégration (Jest + Supertest, *.e2e-spec.ts)
   uploads/                    photos téléversées par l'admin (persistantes)
   Dockerfile, ecosystem.config.js   deux façons de lancer en production
 
@@ -71,15 +81,14 @@ client/
     api/client.js              fetch CSRF-aware (jeton + credentials), partagé partout
     context/                    SiteConfigContext (branding), ToastContext
     components/                 Header (logo + nav + CTA unique), Footer, Layout, GalleryGrid
+    hooks/useSeo.js              titre/meta/Open Graph par page
     pages/                      Home, Services, Gallery, Booking, Contact, NotFound
     pages/admin/                AdminApp (onglets), LoginForm, ReservationsTab,
-                                GalleryTab, HoursTab, ServicesTab
+                                GalleryTab, HoursTab, ServicesTab, AvisTab
     styles/main.css             palette de couleurs, tous les styles du site + de l'admin
+  cypress/e2e/                 tests E2E (parcours complets, navigateur réel)
   public/images/                visuels de secours (placeholders) servis tels quels
   dist/                        généré par `npm run build` — c'est ce que NestJS sert
-
-legacy-express-ejs/         ancienne implémentation (Express + EJS + JS natif),
-                            conservée pour référence, non utilisée en production
 ```
 
 ## Fonctionnalités
@@ -123,7 +132,7 @@ legacy-express-ejs/         ancienne implémentation (Express + EJS + JS natif),
   jours défilante montre en un coup d'œil quels jours sont ouverts
   (« Disponible ») ou fermés — plus besoin d'ouvrir un calendrier à l'aveugle
   pour découvrir qu'un jour n'est pas réservable.
-- Espace `/admin` protégé par mot de passe, organisé en quatre onglets :
+- Espace `/admin` protégé par mot de passe, organisé en cinq onglets :
   - **Réservations** : liste, changement de statut (dont **Refuser**, un
     bouton dédié en plus du menu déroulant), suppression, et **ajout manuel**
     d'une réservation prise par téléphone ou en personne (protégé par la même
@@ -145,33 +154,51 @@ legacy-express-ejs/         ancienne implémentation (Express + EJS + JS natif),
     exceptionnelles » : fermer un jour ponctuellement, c'est simplement ne
     pas l'ouvrir (ou cocher « Fermé » pour l'enregistrer
     explicitement).
+  - **Avis** : modération des avis clients (en attente / approuvé / refusé),
+    avec suppression — seuls les avis approuvés comptent dans la moyenne et
+    les témoignages affichés sur `/`.
 
 ## Persistance des données
 
-Toutes les données sont stockées dans `api/data/salon.db` (SQLite) et
-survivent aux redémarrages du serveur : réservations, prestations, galerie,
-horaires jour par jour, comptes admin. Les photos téléversées sont stockées
-sur disque dans `api/uploads/` et référencées en base.
-Sauvegardez ces deux emplacements pour ne rien perdre (voir `npm run backup`
-plus bas).
+Toutes les données (réservations, prestations, galerie, horaires jour par
+jour, avis, comptes admin) sont stockées dans une base **PostgreSQL**, dont
+le schéma est géré par des migrations TypeORM versionnées
+(`api/src/database/migrations/`) — pas de `synchronize` automatique, le
+schéma en base est toujours exactement ce que les migrations décrivent.
+Les photos téléversées sont stockées sur disque dans `api/uploads/` et
+référencées en base. Sauvegardez la base (voir `npm run backup` plus bas) et
+`api/uploads/` pour ne rien perdre.
 
 ## Lancer le site en développement
+
+Il faut un PostgreSQL accessible en local. Le plus simple sans rien
+installer :
+
+```bash
+docker run -d --name salon-postgres -p 5432:5432 \
+  -e POSTGRES_USER=salon -e POSTGRES_PASSWORD=salon -e POSTGRES_DB=salon \
+  postgres:15-alpine
+```
 
 Terminal 1 — l'API :
 
 ```bash
-cd backend
+cd api
 npm install
 cp .env.example .env
-openssl rand -hex 64        # coller le résultat dans JWT_SECRET du .env
-npm run seed                 # créer le compte admin (mode interactif)
-npm run dev                   # NestJS sur http://localhost:3000
+openssl rand -hex 64          # coller le résultat dans JWT_SECRET du .env
+                                # DATABASE_URL par défaut du .env.example correspond
+                                # déjà à la commande docker run ci-dessus
+npm run migration:run          # crée le schéma
+npm run seed:data              # prestations/galerie/avis par défaut
+npm run seed                   # crée le compte admin (mode interactif)
+npm run dev                    # NestJS sur http://localhost:3000
 ```
 
 Terminal 2 — le frontend :
 
 ```bash
-cd frontend
+cd client
 npm install
 npm run dev                   # Vite sur http://localhost:5173 (proxifie /api vers :3000)
 ```
@@ -179,10 +206,12 @@ npm run dev                   # Vite sur http://localhost:5173 (proxifie /api ve
 Ouvrez `http://localhost:5173` pendant le développement (hot-reload React).
 L'espace admin est sur `http://localhost:5173/admin`.
 
-Après une modification, avec l'API démarrée, `npm run smoketest` (dans
-`api/`) rejoue automatiquement les principaux scénarios (pages
-publiques, réservation, CSRF, contrôle d'accès admin) pour repérer
-rapidement une régression.
+Après une modification, `npm test` (dans `api/`, tests unitaires, pas besoin
+de base de données) et `npm run test:e2e` (tests d'intégration Supertest,
+nécessite Postgres) permettent de repérer rapidement une régression — voir
+la section « Tests & CI/CD » plus bas pour le détail. `npm run smoketest`
+reste disponible comme vérification manuelle de bout en bout contre une
+instance qui tourne (pratique après un déploiement).
 
 ## Déploiement en production
 
@@ -195,15 +224,20 @@ fonctionnera pas correctement sans HTTPS en production**.
 ### Option A — Docker (recommandé)
 
 Tout est déjà défini dans `api/Dockerfile` (build multi-étapes : React
-puis NestJS) et `docker-compose.yml` à la racine. Les données (base SQLite +
-photos) sont stockées dans des volumes Docker nommés, donc elles survivent à
-la recréation du conteneur.
+puis NestJS) et `docker-compose.yml` à la racine, qui inclut aussi un
+service **PostgreSQL** avec un volume nommé (les données survivent à la
+recréation du conteneur). `api/.env` est optionnel dans `docker-compose.yml`
+(`env_file: ... required: false`) — s'il n'existe pas, pensez à passer
+`JWT_SECRET` autrement (variable d'environnement du shell, secret CI…), sinon
+l'API refuse de démarrer.
 
 ```bash
 cp api/.env.example api/.env
 # Éditez api/.env :
 #   - JWT_SECRET : openssl rand -hex 64
 #   - PUBLIC_ORIGIN : l'URL publique réelle du site (ex: https://carla-creation.fr)
+#   - DATABASE_URL n'a pas besoin d'être modifié : docker-compose.yml le
+#     surcharge déjà pour pointer vers le service postgres du même réseau.
 
 docker compose up -d --build
 ```
@@ -218,9 +252,13 @@ docker compose up -d --build
 > compose up`. En production réelle (derrière un reverse proxy HTTPS), ne
 > mettez rien : le flag `Secure` s'active automatiquement.
 
-Créez le compte admin une fois le conteneur démarré :
+Une fois les conteneurs démarrés, créez le schéma, les données par défaut et
+le compte admin (une seule fois, ou après chaque changement de schéma pour
+la migration) :
 
 ```bash
+docker compose exec web npm run migration:run
+docker compose exec web npm run seed:data
 docker compose exec web sh -c "ADMIN_USERNAME=admin ADMIN_PASSWORD='un-mot-de-passe-fort' npm run seed"
 ```
 
@@ -229,20 +267,25 @@ Mettre à jour après un changement de code :
 ```bash
 git pull
 docker compose up -d --build
+docker compose exec web npm run migration:run   # si le schéma a changé
 ```
 
 ### Option B — VPS classique avec PM2
 
-```bash
-cd frontend
-npm ci
-npm run build                 # génère client/dist, servi par le backend
+Nécessite un PostgreSQL accessible (local sur le VPS, ou managé).
 
-cd ../backend
+```bash
+cd client
+npm ci
+npm run build                 # génère client/dist, servi par l'API
+
+cd ../api
 npm ci
 npm run build                 # compile TypeScript vers api/dist
 cp .env.example .env
-# Éditez .env : JWT_SECRET, PUBLIC_ORIGIN, NODE_ENV=production
+# Éditez .env : JWT_SECRET, DATABASE_URL, PUBLIC_ORIGIN, NODE_ENV=production
+npm run migration:run
+npm run seed:data
 npm run seed
 
 npm install -g pm2
@@ -272,7 +315,8 @@ server {
 ```
 
 (Certificat via `certbot --nginx`.) Mettre à jour après un changement de
-code : `git pull`, puis rebuild frontend et backend comme ci-dessus, puis
+code : `git pull`, puis rebuild frontend et backend comme ci-dessus
+(`npm run migration:run` si le schéma a changé), puis
 `pm2 reload ecosystem.config.js`.
 
 ### Vérifier le déploiement
@@ -282,23 +326,25 @@ fourni, qui vérifie les pages publiques, l'API, le flux de réservation, la
 protection CSRF et les contrôles d'accès admin :
 
 ```bash
-BASE_URL=https://carla-creation.fr npm --prefix backend run smoketest
+BASE_URL=https://carla-creation.fr npm --prefix api run smoketest
 ```
 
 ### Sauvegardes
 
 ```bash
-npm run backup   # depuis api/
+npm run backup   # depuis api/, nécessite pg_dump installé localement
 ```
 
-Crée une archive `api/backups/salon-backup-<date>.tar.gz` contenant un
-instantané cohérent de la base SQLite (via l'API de sauvegarde de
-better-sqlite3, sûre même serveur démarré) et le dossier `uploads/`. Les 14
-dernières archives sont conservées, les plus anciennes sont supprimées
-automatiquement. À planifier via cron :
+Crée une archive `api/backups/salon-backup-<date>.sql.gz`, un dump complet
+et cohérent de la base Postgres (`pg_dump` gzippé) à partir de
+`DATABASE_URL`. Les 14 dernières archives sont conservées, les plus
+anciennes sont supprimées automatiquement. En production, préférez si
+possible les sauvegardes automatiques natives de votre hébergeur Postgres
+(point-in-time recovery) — ce script reste utile pour un instantané manuel
+ou local. À planifier via cron :
 
 ```cron
-0 3 * * * cd /chemin/vers/backend && npm run backup >> /var/log/carla-backup.log 2>&1
+0 3 * * * cd /chemin/vers/api && npm run backup >> /var/log/carla-backup.log 2>&1
 ```
 
 En Docker : `docker compose exec web npm run backup`, puis copiez l'archive
@@ -385,6 +431,39 @@ fichier est déjà chargé via `env_file` dans `docker-compose.yml`).
   une fiche Google Business Profile pour la recherche locale ("coiffeur
   Lille").
 
+## Tests & CI/CD
+
+Trois niveaux de tests, tous automatisés dans le pipeline GitHub Actions
+(`.github/workflows/`) :
+
+- **Unitaires** (Jest, `api/src/**/*.spec.ts`) — services testés isolément
+  avec des repositories mockés, sans base de données. `npm test` (dans
+  `api/`), ou `npm run test:cov` pour la couverture.
+- **Intégration** (Jest + Supertest, `api/test/*.e2e-spec.ts`) — l'application
+  Nest complète, testée via de vraies requêtes HTTP contre une vraie base
+  Postgres. `npm run test:e2e` (nécessite `DATABASE_URL`, migrations déjà
+  appliquées).
+- **End-to-end** (Cypress, `client/cypress/e2e/*.cy.js`) — parcours complets
+  dans un vrai navigateur, contre la stack `docker compose` entière (front +
+  API + Postgres). `npm run cypress:run` (dans `client/`, nécessite la stack
+  démarrée sur `http://localhost:3000`).
+
+`scripts/smoketest.ts` reste dans le repo comme outil manuel (HTTP pur, pas
+besoin d'installer quoi que ce soit d'autre) — pratique pour un check rapide
+après un déploiement, mais ce n'est plus lui qui fait foi en CI.
+
+**Pipeline** (`main.yml`, un job par fichier dans `.github/workflows/`) :
+`Linter-and-Tests` (typecheck + unitaires + build + intégration) tourne en
+parallèle de `Secret-Scanning` (Gitleaks) et `IaC-Security-Checkov`, puis
+déclenche `SAST-Semgrep` et `SCA-Dependency-Scan` (`npm audit`). Une fois ces
+vérifications passées, `Docker-Build-and-Security` construit l'image et la
+scanne (Trivy, bloquant sur CRITICAL/HIGH), avant de lancer en parallèle
+`Load-Testing` (Siege), `DAST-OWASP-ZAP` et `E2E-Cypress` contre la stack
+`docker compose` complète. `Deploy-Production` ne se déclenche que sur
+`main`/`master`, une fois tout le reste au vert — la cible de déploiement
+réelle (VPS via SSH) n'est pour l'instant qu'un squelette, à compléter avant
+un vrai déploiement automatisé.
+
 ## Sécurité — points clés
 
 - Toutes les requêtes qui modifient des données (réservation, contact,
@@ -401,6 +480,9 @@ fichier est déjà chargé via `env_file` dans `docker-compose.yml`).
 - Toutes les entrées API sont validées et assainies via des DTOs
   `class-validator`, avec `whitelist: true` (les champs non déclarés sont
   rejetés).
+- Accès base de données via TypeORM (repositories + requêtes paramétrées),
+  jamais de concaténation de SQL brut — protection native contre les
+  injections SQL.
 - Upload de photos : type MIME vérifié côté serveur (JPEG/PNG/WebP
   uniquement), taille limitée à 5 Mo, nom de fichier régénéré aléatoirement
   côté serveur, réservé aux administrateurs authentifiés.

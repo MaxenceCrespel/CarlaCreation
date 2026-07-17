@@ -25,6 +25,11 @@ RUN npm prune --omit=dev
 FROM node:22-alpine
 WORKDIR /app
 
+# pg_dump, for `npm run backup` (scripts/backup.ts) to work via
+# `docker compose exec web npm run backup` — not needed by the app itself
+# at request-serving time, only by that one manual/cron script.
+RUN apk add --no-cache postgresql-client
+
 # The npm version bundled with the base image lags behind and vendors its
 # own (occasionally vulnerable) copies of tar/glob/minimatch/cross-spawn/
 # sigstore — irrelevant to our app code, but still part of the image Trivy
