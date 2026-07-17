@@ -1,8 +1,0 @@
-**/node_modules
-backend/data
-backend/uploads
-backend/.env
-.git
-.gitignore
-*.log
-npm-debug.log*

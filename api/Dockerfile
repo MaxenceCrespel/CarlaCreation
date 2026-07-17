@@ -2,24 +2,36 @@
 # built React frontend. Multi-stage: frontend and backend build in parallel,
 # only their build output + runtime deps end up in the final image.
 
-FROM node:20-alpine AS client-build
+FROM node:22-alpine AS client-build
 WORKDIR /build/client
 COPY client/package.json client/package-lock.json ./
 RUN npm ci
 COPY client/ ./
 RUN npm run build
 
-FROM node:20-alpine AS api-build
-# better-sqlite3 needs to compile a native addon on install.
-RUN apk add --no-cache python3 make g++
+FROM node:22-alpine AS api-build
 WORKDIR /build/api
 COPY api/package.json api/package-lock.json ./
 RUN npm ci
 COPY api/ ./
 RUN npm run build
+# Strip devDependencies (jest, ts-jest, supertest, @nestjs/testing, type
+# packages...) from node_modules now that the build is done — none of that
+# test tooling belongs in the shipped image, it only widens the scanned
+# surface for no runtime benefit. ts-node/typescript stay (they're runtime
+# `dependencies`, needed for the migration/seed CLI scripts below).
+RUN npm prune --omit=dev
 
-FROM node:20-alpine
+FROM node:22-alpine
 WORKDIR /app
+
+# The npm version bundled with the base image lags behind and vendors its
+# own (occasionally vulnerable) copies of tar/glob/minimatch/cross-spawn/
+# sigstore — irrelevant to our app code, but still part of the image Trivy
+# scans, and `npm run <script>` (migrations/seed) does invoke this npm at
+# container runtime. Upgrading it here keeps that surface current without
+# waiting on a base image rebuild.
+RUN npm install -g npm@latest
 
 COPY --from=api-build /build/api/node_modules ./node_modules
 COPY --from=api-build /build/api/dist ./dist
