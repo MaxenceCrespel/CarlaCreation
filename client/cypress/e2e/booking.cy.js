@@ -22,7 +22,12 @@ describe('Booking flow', () => {
     cy.visit('/booking');
 
     cy.get('.service-pick-card').first().click();
-    cy.get('.day-chip.is-open').first().click();
+    // The day picker only renders once both /api/services and /api/hours
+    // have resolved (see Booking.jsx) — on a cold container this can take
+    // longer than Cypress's 4s default, so wait out the loading hint
+    // explicitly before asserting on the day chips themselves.
+    cy.get('.day-picker-hint', { timeout: 15000 }).should('not.exist');
+    cy.get('.day-chip.is-open', { timeout: 15000 }).first().click();
 
     cy.get('#slot').should('not.be.disabled');
     cy.get('#slot option').its('length').should('be.gte', 2);
