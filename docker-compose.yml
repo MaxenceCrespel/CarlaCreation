@@ -25,8 +25,15 @@ services:
         condition: service_healthy
     ports:
       - '3000:3000'
+    # Optional: api/.env is gitignored and won't exist on a fresh checkout
+    # (CI, or a first `docker compose up` before anyone's created one) —
+    # `required: false` means compose just skips it instead of erroring out.
+    # JWT_SECRET still has to come from *somewhere* for the app to boot;
+    # either put it in api/.env for local/real use, or pass it via
+    # `environment:`/`docker compose run -e` (CI does the latter).
     env_file:
-      - api/.env
+      - path: api/.env
+        required: false
     environment:
       NODE_ENV: production
       DATABASE_URL: postgres://salon:salon@postgres:5432/salon

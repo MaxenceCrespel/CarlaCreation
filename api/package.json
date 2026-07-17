@@ -14,12 +14,12 @@
     "test": "jest",
     "test:cov": "jest --coverage",
     "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
-    "typeorm": "typeorm-ts-node-commonjs -d src/database/data-source.ts",
+    "typeorm": "TS_NODE_TRANSPILE_ONLY=true typeorm-ts-node-commonjs -d src/database/data-source.ts",
     "migration:run": "npm run typeorm -- migration:run",
-    "seed:data": "ts-node scripts/seed.ts",
-    "seed": "ts-node scripts/seedAdmin.ts",
-    "backup": "ts-node scripts/backup.ts",
-    "smoketest": "ts-node scripts/smoketest.ts"
+    "seed:data": "TS_NODE_TRANSPILE_ONLY=true ts-node scripts/seed.ts",
+    "seed": "TS_NODE_TRANSPILE_ONLY=true ts-node scripts/seedAdmin.ts",
+    "backup": "TS_NODE_TRANSPILE_ONLY=true ts-node scripts/backup.ts",
+    "smoketest": "TS_NODE_TRANSPILE_ONLY=true ts-node scripts/smoketest.ts"
   },
   "jest": {
     "rootDir": "src",

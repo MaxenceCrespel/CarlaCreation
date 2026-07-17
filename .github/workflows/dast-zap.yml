@@ -9,6 +9,13 @@ jobs:
     steps:
       - name: Checkout du code
         uses: actions/checkout@v4
+      - name: Génération d'un .env pour Docker Compose
+        run: |
+          cat > api/.env <<EOF
+          JWT_SECRET=ci-dast-zap-jwt-secret-not-used-anywhere-else-1234567890
+          COOKIE_SECURE=false
+          PUBLIC_ORIGIN=http://localhost:3000
+          EOF
       - name: Démarrage de l'infrastructure
         run: |
           docker compose up -d --build
