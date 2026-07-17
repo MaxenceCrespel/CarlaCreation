@@ -15,14 +15,16 @@ describe('Booking flow', () => {
       const openedDate = request.url.split('/').pop();
       cy.log(`Opened date: ${openedDate}`);
 
-      // 2. VISITOR FLOW (Nested within the resolved date context)
+      // 2. VISITOR FLOW
       cy.intercept('GET', '/api/hours').as('getHours');
+      // Intercept availability lookup to pause Cypress until state maps correctly
+      cy.intercept('GET', '/api/reservations/availability*').as('getSlots');
+      
       cy.visit('/booking');
 
       cy.wait('@getHours').then((hoursResult) => {
         expect(hoursResult.response.statusCode, 'GET /api/hours status').to.eq(200);
         
-        // Find exactly where our day sits in the current calendar response
         const openedDayIndex = hoursResult.response.body.days.findIndex((d) => d.date === openedDate);
         const day = hoursResult.response.body.days[openedDayIndex];
         
@@ -32,13 +34,19 @@ describe('Booking flow', () => {
           `day ${openedDate} should be open — got ${JSON.stringify(day)}`,
         ).to.eq(true);
 
-        // Pick the service
+        // Pick a service to unveil components
         cy.get('.service-pick-card').first().click();
         
-        // Click the exact day chip calculated by index
+        // Click the concrete target chip
         cy.get('.day-chip', { timeout: 15000 }).eq(openedDayIndex).click();
 
-        // Fill out slots and booking details
+        // Hard wait for the backend network confirmation to hydrate the client application state
+        cy.wait('@getSlots').then((slotsResult) => {
+          expect(slotsResult.response.statusCode, 'GET availability status').to.eq(200);
+          expect(slotsResult.response.body.slots.length, 'Available open slots validation').to.be.greaterThan(0);
+        });
+
+        // Now safe to interact with the select input
         cy.get('#slot').should('not.be.disabled');
         cy.get('#slot option').should('have.length.at.least', 1);
         cy.get('#slot').select(0);
