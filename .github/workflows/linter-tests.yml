@@ -1,0 +1,87 @@
+name: Linter & Tests
+
+on:
+  workflow_call:
+
+jobs:
+  Linter-and-Tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: salon
+          POSTGRES_PASSWORD: salon
+          POSTGRES_DB: salon
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgres://salon:salon@localhost:5432/salon
+      JWT_SECRET: ci-only-jwt-secret-not-used-anywhere-else-1234567890
+      COOKIE_SECURE: "false"
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: CiSmokeTest123!
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Configuration de Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Installation des dépendances API
+        run: |
+          cd api
+          npm install
+
+      - name: Vérification des types (API)
+        run: |
+          cd api
+          npm run typecheck
+
+      - name: Tests unitaires (API)
+        run: |
+          cd api
+          npm run test:cov
+
+      - name: Build de l'API
+        run: |
+          cd api
+          npm run build
+
+      - name: Migration et seed de la base de données
+        run: |
+          cd api
+          npm run migration:run
+          npm run seed:data
+          npm run seed
+
+      # Tests d'intégration Supertest, contre le Postgres du service CI —
+      # remplace le boot manuel + smoketest.ts qui servait jusqu'ici de
+      # vérification de bout en bout. smoketest.ts reste dans le repo comme
+      # outil manuel (voir README), mais ne fait plus partie de la CI.
+      - name: Tests d'intégration (API)
+        run: |
+          cd api
+          npm run test:e2e
+
+      - name: Sauvegarde des rapports de couverture
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: code-coverage-reports
+          path: api/coverage/lcov-report/
+
+      - name: Installation, lint et build du Client
+        run: |
+          cd client
+          npm install
+          npm run lint
+          npm run build

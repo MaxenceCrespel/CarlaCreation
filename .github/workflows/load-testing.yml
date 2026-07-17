@@ -1,0 +1,28 @@
+name: Load Testing
+
+on:
+  workflow_call:
+
+jobs:
+  Load-Testing:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+      - name: Démarrage de l'infrastructure
+        run: |
+          docker compose up -d --build
+          sleep 15
+      - name: Migration de la base de données
+        run: docker compose exec -T web npm run migration:run
+      - name: Exécution du test de charge Siege (Mode Sidecar Ubuntu)
+        run: |
+          APP_CONTAINER=$(docker compose ps -q web)
+          docker run --rm --network container:$APP_CONTAINER ubuntu:22.04 sh -c "\
+            apt-get update && \
+            apt-get install -y siege && \
+            mkdir -p ~/.siege && \
+            siege -c 20 -t 10s http://localhost:3000/"
+      - name: Arrêt des services
+        if: always()
+        run: docker compose down -v

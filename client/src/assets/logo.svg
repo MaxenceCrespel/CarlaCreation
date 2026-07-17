@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 140" role="img" aria-label="Carla Création">
+  <defs>
+    <style>
+      .cc-letter { font-family: Georgia, 'Times New Roman', serif; font-size: 68px; fill: #B8735A; }
+      .cc-name { font-family: Georgia, 'Times New Roman', serif; font-size: 21px; letter-spacing: 3px; fill: #3A2E27; }
+      .cc-sub { font-family: 'Segoe UI', system-ui, sans-serif; font-size: 10px; letter-spacing: 4px; fill: #9A5F4B; }
+    </style>
+  </defs>
+  <text x="70" y="62" text-anchor="middle" class="cc-letter">C</text>
+  <text x="110" y="62" text-anchor="middle" class="cc-letter" opacity="0.55">C</text>
+  <text x="110" y="98" text-anchor="middle" class="cc-name">CARLA CRÉATION</text>
+  <text x="110" y="116" text-anchor="middle" class="cc-sub">NAIL STUDIO</text>
+</svg>

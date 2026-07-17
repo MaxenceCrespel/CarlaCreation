@@ -1,0 +1,11 @@
+**/node_modules
+api/data
+api/uploads
+api/dist
+api/.env
+client/dist
+legacy-express-ejs
+.git
+.gitignore
+*.log
+npm-debug.log*

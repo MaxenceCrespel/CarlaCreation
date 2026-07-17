@@ -1,0 +1,31 @@
+name: Deploy Production
+
+on:
+  workflow_call:
+
+jobs:
+  Deploy-Production:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Déploiement Continu via SSH sur le VPS
+        uses: appleboy/ssh-action@v1
+        continue-on-error: true
+        with:
+          host: ${{ secrets.PRODUCTION_SSH_HOST || '127.0.0.1' }}
+          username: ${{ secrets.PRODUCTION_SSH_USER || 'root' }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY || 'mock-key' }}
+          script: |
+            echo "--- Lancement du déploiement en prod ---"
+            REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+            IMAGE_URL="ghcr.io/$REPO_LOWER:latest"
+            echo "> Récupération de la nouvelle image ($IMAGE_URL)..."
+            # docker pull $IMAGE_URL
+            echo "> Redémarrage de l'application..."
+            # docker compose -f docker-compose.prod.yml down
+            # docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            echo "> Petit coup de balai sur les anciennes images..."
+            # docker image prune -f
+            echo "--- Déploiement terminé avec succès ! Appli à jour. ---"

@@ -1,0 +1,3 @@
+# Trivy vulnerability exceptions for the Docker image built from api/Dockerfile.
+# Add a CVE ID per line with a comment explaining why it's accepted, e.g.:
+# CVE-2023-12345  # false positive, not reachable in our usage — see <link>

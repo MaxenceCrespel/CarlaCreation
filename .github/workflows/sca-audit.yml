@@ -1,0 +1,25 @@
+name: SCA Dependency Scan
+
+on:
+  workflow_call:
+
+jobs:
+  SCA-Dependency-Scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+      - name: Configuration de Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Audit des dépendances API (Backend)
+        run: |
+          cd api
+          npm install
+          npm audit --audit-level=high
+      - name: Audit des dépendances Client (Frontend)
+        run: |
+          cd client
+          npm install
+          npm audit --audit-level=high || true

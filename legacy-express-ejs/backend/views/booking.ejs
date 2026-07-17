@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<%- include('partials/head', { title: 'Réserver', description: 'Réservez votre rendez-vous coiffure ou ongles en ligne.' }) %>
+</head>
+<body>
+<%- include('partials/header') %>
+
+  <main id="main">
+    <section class="section page-hero">
+      <div class="container">
+        <p class="eyebrow center">Réservation en ligne</p>
+        <h1 class="center">Prenez rendez-vous en quelques clics</h1>
+        <p class="section-lead center">
+          Choisissez votre prestation, une date et un créneau disponible : votre demande est envoyée
+          immédiatement au studio. Vous recevrez une confirmation par email.
+        </p>
+      </div>
+    </section>
+
+    <section class="section section-alt">
+      <div class="container booking-grid">
+        <div class="booking-intro">
+          <div class="hours-card">
+            <h3>Horaires d'ouverture</h3>
+            <ul id="hours-list">
+              <li><span>Chargement…</span><span></span></li>
+            </ul>
+          </div>
+          <p class="booking-contact-note">
+            Une question avant de réserver ? Appelez-nous au
+            <a href="tel:<%= sitePhoneHref %>"><%= sitePhone %></a>.
+          </p>
+        </div>
+
+        <form id="booking-form" class="card booking-form" novalidate>
+          <div class="form-row">
+            <label for="service">Prestation</label>
+            <select id="service" name="serviceId" required>
+              <option value="" disabled selected>Choisissez une prestation</option>
+            </select>
+          </div>
+
+          <div class="form-row">
+            <label for="date">Date</label>
+            <input type="date" id="date" name="date" required />
+          </div>
+
+          <div class="form-row">
+            <label for="slot">Créneau disponible</label>
+            <select id="slot" name="startTime" required disabled>
+              <option value="" selected>Choisissez d'abord une date et une prestation</option>
+            </select>
+          </div>
+
+          <div class="form-row">
+            <label for="clientName">Nom complet</label>
+            <input type="text" id="clientName" name="clientName" autocomplete="name" required minlength="2" maxlength="100" />
+          </div>
+
+          <div class="form-row two-col">
+            <div>
+              <label for="clientEmail">Email</label>
+              <input type="email" id="clientEmail" name="clientEmail" autocomplete="email" required />
+            </div>
+            <div>
+              <label for="clientPhone">Téléphone</label>
+              <input type="tel" id="clientPhone" name="clientPhone" autocomplete="tel" required placeholder="06 12 34 56 78" />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <label for="notes">Message (optionnel)</label>
+            <textarea id="notes" name="notes" rows="3" maxlength="500" placeholder="Précisions sur votre demande…"></textarea>
+          </div>
+
+          <div class="honeypot" aria-hidden="true">
+            <label for="website">Ne pas remplir ce champ</label>
+            <input type="text" id="website" name="website" tabindex="-1" autocomplete="off" />
+          </div>
+
+          <div id="booking-feedback" class="form-feedback" role="status" aria-live="polite"></div>
+
+          <button type="submit" class="btn btn-primary btn-block" id="booking-submit">
+            Confirmer ma demande de rendez-vous
+          </button>
+        </form>
+      </div>
+    </section>
+  </main>
+
+<%- include('partials/footer') %>
+<script type="module" src="/js/pages/booking.js"></script>
+</body>
+</html>

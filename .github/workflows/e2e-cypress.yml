@@ -1,0 +1,47 @@
+name: E2E Cypress Tests
+
+on:
+  workflow_call:
+
+env:
+  ADMIN_USERNAME: admin
+  ADMIN_PASSWORD: CypressCiTest123!
+
+jobs:
+  Cypress-Tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Démarrage de l'infrastructure Docker (DB + API + Front)
+        run: |
+          docker compose up -d --build
+          sleep 15
+
+      - name: Migration et seed de la base de données
+        run: |
+          docker compose exec -T web npm run migration:run
+          docker compose exec -T web npm run seed:data
+          docker compose exec -T -e ADMIN_USERNAME -e ADMIN_PASSWORD web npm run seed
+
+      - name: Exécution des tests Cypress
+        uses: cypress-io/github-action@v6
+        with:
+          working-directory: client
+          wait-on: "http://localhost:3000"
+          wait-on-timeout: 60
+        env:
+          CYPRESS_ADMIN_USERNAME: ${{ env.ADMIN_USERNAME }}
+          CYPRESS_ADMIN_PASSWORD: ${{ env.ADMIN_PASSWORD }}
+
+      - name: Sauvegarde de la vidéo en cas d'échec
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: cypress-video
+          path: client/cypress/videos
+
+      - name: Extinction de l'infrastructure
+        if: always()
+        run: docker compose down -v
