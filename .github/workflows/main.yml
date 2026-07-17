@@ -16,48 +16,40 @@ permissions:
   packages: write
 
 jobs:
-  # DESACTIVÉ pour isolation Cypress
   Linter-and-Tests:
-    if: false
     uses: ./.github/workflows/linter-tests.yml
 
-  # DESACTIVÉ pour isolation Cypress
   Secret-Scanning:
-    if: false
     uses: ./.github/workflows/secret-scan.yml
 
-  # DESACTIVÉ pour isolation Cypress
   SAST-Semgrep:
-    if: false
+    needs: Linter-and-Tests
     uses: ./.github/workflows/sast-semgrep.yml
 
-  # DESACTIVÉ pour isolation Cypress
   SCA-Dependency-Scan:
-    if: false
+    needs: Linter-and-Tests
     uses: ./.github/workflows/sca-audit.yml
 
-  # DESACTIVÉ pour isolation Cypress
   IaC-Security-Checkov:
-    if: false
     uses: ./.github/workflows/iac-checkov.yml
 
-  # DESACTIVÉ pour isolation Cypress
   Docker-Build-and-Security:
-    if: false
+    needs: Linter-and-Tests
     uses: ./.github/workflows/docker-build.yml
 
   Load-Testing:
-    if: false
+    needs: Docker-Build-and-Security
     uses: ./.github/workflows/load-testing.yml
 
   DAST-OWASP-ZAP:
-    if: false
+    needs: Docker-Build-and-Security
     uses: ./.github/workflows/dast-zap.yml
 
   E2E-Cypress:
+    needs: Docker-Build-and-Security
     uses: ./.github/workflows/e2e-cypress.yml
 
   Deploy-Production:
-    needs: [E2E-Cypress]
+    needs: [Load-Testing, DAST-OWASP-ZAP, E2E-Cypress]
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
     uses: ./.github/workflows/deploy.yml
