@@ -6,7 +6,8 @@ describe('Booking flow', () => {
     cy.adminLogin();
     cy.contains('button.admin-tab', 'Horaires').click();
 
-    cy.get('.day-chip.is-unset').first().click();
+    // Pick an unset day slightly in the future (index 3) to avoid "today" expiring slots 
+    cy.get('.day-chip.is-unset').eq(3).click();
     cy.get('.day-editor-closed input[type="checkbox"]').uncheck();
     cy.contains('button', 'Enregistrer').click();
 
@@ -17,7 +18,6 @@ describe('Booking flow', () => {
 
       // 2. VISITOR FLOW
       cy.intercept('GET', '/api/hours').as('getHours');
-      // Intercept availability lookup to pause Cypress until state maps correctly
       cy.intercept('GET', '/api/reservations/availability*').as('getSlots');
       
       cy.visit('/booking');
@@ -37,16 +37,16 @@ describe('Booking flow', () => {
         // Pick a service to unveil components
         cy.get('.service-pick-card').first().click();
         
-        // Click the concrete target chip
+        // Click the exact day chip calculated by index
         cy.get('.day-chip', { timeout: 15000 }).eq(openedDayIndex).click();
 
-        // Hard wait for the backend network confirmation to hydrate the client application state
+        // Wait for slots to load from the server
         cy.wait('@getSlots').then((slotsResult) => {
           expect(slotsResult.response.statusCode, 'GET availability status').to.eq(200);
           expect(slotsResult.response.body.slots.length, 'Available open slots validation').to.be.greaterThan(0);
         });
 
-        // Now safe to interact with the select input
+        // Safe to interact with the select input now
         cy.get('#slot').should('not.be.disabled');
         cy.get('#slot option').should('have.length.at.least', 1);
         cy.get('#slot').select(0);
