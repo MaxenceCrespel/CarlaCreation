@@ -3,32 +3,44 @@
 // opened — see api/src/modules/settings/settings.service.ts), then a
 // visitor books that same day from the public booking page.
 //
-// Rather than matching a specific calendar date between the admin and
-// client day-pickers (fragile — both render a rolling window and format
-// dates as short labels, not raw ISO strings), this picks the first
-// never-configured day in the admin calendar, opens it, then on the client
-// side relies on it being the only ".day-chip.is-open" day.
+// The exact date opened by the admin is captured from the PUT request
+// itself and re-checked explicitly in the second test, instead of assuming
+// "first unset chip in the admin calendar" and "first open chip in the
+// client calendar" refer to the same day — if they ever don't line up
+// (different window sizes, ordering, whatever), this fails with a clear
+// "day X should be open, got {...}" message instead of a vague timeout.
 describe('Booking flow', () => {
+  let openedDate;
+
   it('admin opens an unconfigured day', () => {
+    cy.intercept('PUT', '/api/admin/settings/daily-hours/*').as('saveDay');
+
     cy.adminLogin();
     cy.contains('button.admin-tab', 'Horaires').click();
 
     cy.get('.day-chip.is-unset').first().click();
     cy.contains('button', 'Enregistrer').click();
+
+    cy.wait('@saveDay').then(({ request, response }) => {
+      expect(response.statusCode, 'PUT daily-hours status').to.eq(200);
+      openedDate = request.url.split('/').pop();
+      cy.log(`Opened date: ${openedDate}`);
+    });
     cy.contains('Enregistré').should('be.visible');
   });
 
   it('a visitor books that day', () => {
-    // Intercept /api/hours so the test fails with a clear, inspectable
-    // reason (bad/empty response) instead of a vague "element never
-    // found" timeout if the day picker doesn't render as expected.
     cy.intercept('GET', '/api/hours').as('getHours');
 
     cy.visit('/booking');
     cy.wait('@getHours').then(({ response }) => {
-      expect(response.statusCode).to.eq(200);
-      const openDays = response.body.days.filter((d) => d.isSet && !d.isClosed && d.ranges.length > 0);
-      expect(openDays, 'at least one day should be open after the previous test').to.have.length.greaterThan(0);
+      expect(response.statusCode, 'GET /api/hours status').to.eq(200);
+      const day = response.body.days.find((d) => d.date === openedDate);
+      expect(day, `day ${openedDate} (opened in the previous test) should be present in /api/hours`).to.exist;
+      expect(
+        Boolean(day.isSet && !day.isClosed && day.ranges.length > 0),
+        `day ${openedDate} should be open — got ${JSON.stringify(day)}`,
+      ).to.eq(true);
     });
 
     cy.get('.service-pick-card').first().click();
