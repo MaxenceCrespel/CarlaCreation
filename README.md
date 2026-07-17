@@ -181,21 +181,24 @@ docker run -d --name salon-postgres -p 5432:5432 \
 ```
 
 Terminal 1 — l'API : **juste `npm install` puis `npm run dev`**, rien
-d'autre. `npm run dev` crée le schéma, insère les données par défaut
-(prestations/galerie/avis) et le compte admin (`carla` /
-`Carla0303!`) automatiquement avant de démarrer le serveur — ces trois
-étapes sont sans effet si elles ont déjà été faites, donc redémarrer ne
-casse ni ne duplique rien.
+d'autre — pas de `.env` à créer. Sans `DATABASE_URL`/`JWT_SECRET` définis,
+`api/src/config.ts` utilise automatiquement des valeurs de dev par défaut
+(qui correspondent à la commande `docker run` ci-dessus) tant que
+`NODE_ENV` n'est pas `production`. `npm run dev` crée aussi le schéma,
+insère les données par défaut (prestations/galerie/avis) et le compte admin
+(`carla` / `Carla0303!`) avant de démarrer le serveur — ces trois étapes
+sont sans effet si elles ont déjà été faites, donc redémarrer ne casse ni
+ne duplique rien.
 
 ```bash
 cd api
 npm install
-cp .env.example .env
-openssl rand -hex 64   # optionnel : coller le résultat dans JWT_SECRET du .env
-                         # (une valeur par défaut existe déjà dans .env.example
-                         # pour ne pas bloquer un premier essai)
 npm run dev             # NestJS sur http://localhost:3000, DB prête automatiquement
 ```
+
+Besoin de personnaliser (vrai secret JWT, autre base, SMTP…) ?
+`cp .env.example .env` puis éditez — sinon les valeurs par défaut
+suffisent pour développer.
 
 Terminal 2 — le frontend :
 

@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import 'dotenv/config';
 import { DataSource } from 'typeorm';
+import { config } from '../config';
 import { Admin } from './entities/admin.entity';
 import { Service } from './entities/service.entity';
 import { Reservation } from './entities/reservation.entity';
@@ -16,7 +17,7 @@ import { DailyHoursRange } from './entities/daily-hours-range.entity';
 // TypeOrmModule.forRoot in database.module.ts, not this file.
 export const AppDataSource = new DataSource({
   type: 'postgres',
-  url: process.env.DATABASE_URL,
+  url: config.DATABASE_URL,
   entities: [Admin, Service, Reservation, Gallery, ContactMessage, Review, DailyHours, DailyHoursRange],
   migrations: [__dirname + '/migrations/*.{ts,js}'],
   synchronize: false,

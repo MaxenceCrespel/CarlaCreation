@@ -8,7 +8,14 @@ if (!Number.isInteger(PORT) || PORT <= 0) {
   throw new Error(`Invalid PORT: ${process.env.PORT}`);
 }
 
-const JWT_SECRET = process.env.JWT_SECRET;
+// Dev-only fallbacks so `npm install && npm run dev` works with zero setup
+// against the standard local Postgres from the README (`docker run --name
+// salon-postgres ...`) — never used in production: isProd still hard-
+// requires a real JWT_SECRET to be set, same as before.
+const DEV_JWT_SECRET = 'dev-only-insecure-default-jwt-secret-change-me-before-any-real-deploy';
+const DEV_DATABASE_URL = 'postgres://salon:salon@localhost:5432/salon';
+
+const JWT_SECRET = process.env.JWT_SECRET || (!isProd ? DEV_JWT_SECRET : undefined);
 if (!JWT_SECRET) {
   // eslint-disable-next-line no-console
   console.error('FATAL: JWT_SECRET is not set. Copy api/.env.example to api/.env and fill it in.');
@@ -20,7 +27,7 @@ if (isProd && JWT_SECRET.length < 32) {
   process.exit(1);
 }
 
-const DATABASE_URL = process.env.DATABASE_URL;
+const DATABASE_URL = process.env.DATABASE_URL || (!isProd ? DEV_DATABASE_URL : undefined);
 if (!DATABASE_URL) {
   // eslint-disable-next-line no-console
   console.error('FATAL: DATABASE_URL is not set. Copy api/.env.example to api/.env and fill it in (Postgres connection string).');
