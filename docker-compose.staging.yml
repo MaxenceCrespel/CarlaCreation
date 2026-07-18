@@ -1,0 +1,21 @@
+# Override de staging — s'utilise EN PLUS de docker-compose.yml, jamais seul:
+#   docker compose -f docker-compose.yml -f docker-compose.staging.yml up -d --build
+#
+# Le service `postgres` (et son init.sql) reste celui de docker-compose.yml,
+# partagé tel quel. Seul `web` change ici : vrai JWT_SECRET (lu depuis un
+# .env RACINE, distinct de api/.env — voir .env.example), cookies Secure
+# (on est derrière Caddy en HTTPS), et un port dédié (127.0.0.1:3001) pour
+# ne pas entrer en conflit avec une éventuelle stack de prod sur le même
+# VPS plus tard (127.0.0.1:3000).
+services:
+  web:
+    # !override remplace complètement la liste `ports` du service de base au
+    # lieu de la fusionner (comportement par défaut de Compose pour les
+    # listes) — sans ça, le port 3000 public de docker-compose.yml resterait
+    # exposé EN PLUS du 127.0.0.1:3001 ci-dessous.
+    ports: !override
+      - '127.0.0.1:3001:3000'
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+      COOKIE_SECURE: "true"
+      PUBLIC_ORIGIN: https://staging.${DOMAIN}

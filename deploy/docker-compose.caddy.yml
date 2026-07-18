@@ -1,0 +1,24 @@
+# Stack Caddy autonome, séparée des stacks applicatives (docker-compose.yml
+# / docker-compose.staging.yml). Démarrée une fois sur le VPS et laissée
+# tourner ; à redéployer seulement si Caddyfile change:
+#   cd deploy && docker compose -f docker-compose.caddy.yml up -d
+#
+# network_mode: host pour que `reverse_proxy 127.0.0.1:3001` dans le
+# Caddyfile atteigne directement le port publié par le service `web` de la
+# stack staging (qui n'écoute que sur 127.0.0.1, pas sur l'interface
+# publique) — seul Caddy est exposé sur 80/443.
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

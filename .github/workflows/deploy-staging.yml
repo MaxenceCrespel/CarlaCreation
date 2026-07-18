@@ -1,0 +1,21 @@
+name: Deploy Staging
+
+on:
+  workflow_call:
+
+jobs:
+  Deploy-Staging:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Déploiement Continu via SSH sur le VPS (staging)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.STAGING_SSH_HOST }}
+          username: ${{ secrets.STAGING_SSH_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/carla-creation
+            git pull
+            docker compose -f docker-compose.yml -f docker-compose.staging.yml up -d --build
+            docker compose exec -T web npm run migration:run

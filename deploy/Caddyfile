@@ -1,0 +1,17 @@
+# Reverse proxy pour le VPS staging+prod (un seul VPS, un seul Caddy).
+# Démarré une fois via docker-compose.caddy.yml, indépendamment des
+# déploiements applicatifs (redéployer seulement si ce fichier change).
+#
+# {$DOMAIN} est lu depuis le .env racine du VPS (voir .env.example).
+
+staging.{$DOMAIN} {
+	reverse_proxy 127.0.0.1:3001
+}
+
+# Prod — décommenter quand le VPS de prod (ou cette même machine) est prêt.
+# La stack applicative correspondante (docker-compose.prod.yml) écoutera
+# alors sur 127.0.0.1:3000, comme le service `web` par défaut.
+#
+# {$DOMAIN} {
+# 	reverse_proxy 127.0.0.1:3000
+# }

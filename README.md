@@ -219,7 +219,7 @@ la section « Tests & CI/CD » plus bas pour le détail. `npm run smoketest`
 reste disponible comme vérification manuelle de bout en bout contre une
 instance qui tourne (pratique après un déploiement).
 
-## Déploiement en production
+## Déploiement
 
 Deux façons de lancer le site sont fournies et testées : **Docker**
 (recommandé) ou **PM2 sur un VPS**. Dans les deux cas, mettez le site
@@ -356,6 +356,64 @@ ou local. À planifier via cron :
 En Docker : `docker compose exec web npm run backup`, puis copiez l'archive
 hors du conteneur avec `docker compose cp`.
 
+## Déploiement staging (VPS)
+
+Un environnement de **staging** public, déployé automatiquement par la CI
+(job `Deploy-Staging` dans `main.yml`, à chaque push sur `main`/`master`
+une fois les autres jobs au vert). La **prod** est volontairement différée
+à plus tard — voir en bas de section comment la dupliquer le moment venu.
+
+**Architecture** : un seul VPS pas cher (~4€/mois, OVH VPS Value ou
+Hetzner CX22 par exemple), un conteneur **Caddy** en reverse proxy
+(HTTPS automatique via Let's Encrypt, `deploy/Caddyfile`) qui route
+`staging.<domaine>` vers le port `127.0.0.1:3001`, sur lequel écoute la
+stack applicative (`docker-compose.yml` + l'override
+`docker-compose.staging.yml`). Le service `web` staging n'est jamais
+exposé directement — seul Caddy écoute sur 80/443.
+
+### Checklist de mise en place (une fois, manuelle)
+
+1. Acheter un nom de domaine, puis créer un enregistrement DNS **A**
+   `staging.<domaine>` → IP du VPS.
+2. Commander un VPS (Ubuntu 22.04/24.04).
+3. Sur le VPS : installer Docker + le plugin Compose, créer un utilisateur
+   dédié au déploiement, générer une paire de clés SSH réservée à GitHub
+   Actions (clé publique dans `~deploy/.ssh/authorized_keys`), cloner ce
+   repo dans `/opt/carla-creation`.
+4. Dans `/opt/carla-creation`, créer le `.env` **racine** (`cp .env.example
+   .env`, à ne jamais commiter) avec un `JWT_SECRET` généré
+   (`openssl rand -hex 64`) et `DOMAIN=<votre domaine>`.
+5. Démarrer Caddy une fois pour toutes :
+   ```bash
+   cd /opt/carla-creation/deploy
+   docker compose -f docker-compose.caddy.yml up -d
+   ```
+6. Dans les secrets GitHub Actions du repo (Settings → Secrets and
+   variables → Actions), ajouter `STAGING_SSH_HOST`, `STAGING_SSH_USER`,
+   `STAGING_SSH_KEY` (clé privée générée à l'étape 3).
+7. Pousser sur `main`/`master` : la CI construit, teste, puis déclenche
+   `Deploy-Staging`, qui se connecte en SSH et lance :
+   ```bash
+   cd /opt/carla-creation
+   git pull
+   docker compose -f docker-compose.yml -f docker-compose.staging.yml up -d --build
+   docker compose exec -T web npm run migration:run
+   ```
+8. **Important** : une fois le site accessible publiquement sur
+   `https://staging.<domaine>`, connectez-vous en admin
+   (`carla` / `Carla0303!`, le compte pré-créé par `init.sql`) et changez
+   immédiatement le mot de passe — ce compte par défaut n'est prévu que
+   pour un premier lancement local.
+
+### Prod, plus tard
+
+Même mécanisme, dupliqué : un `docker-compose.prod.yml` (port
+`127.0.0.1:3000`), un bloc `{$DOMAIN} { reverse_proxy 127.0.0.1:3000 }` à
+décommenter dans `deploy/Caddyfile`, un `deploy-production.yml` équivalent
+à `deploy-staging.yml` avec des secrets `PRODUCTION_SSH_*`, et un nouveau
+job dans `main.yml`. Peut tourner sur le même VPS que le staging (deux
+stacks Compose distinctes, un seul Caddy) ou sur un second VPS séparé.
+
 ## Emails de confirmation
 
 Le site envoie automatiquement un email au client :
@@ -465,10 +523,12 @@ déclenche `SAST-Semgrep` et `SCA-Dependency-Scan` (`npm audit`). Une fois ces
 vérifications passées, `Docker-Build-and-Security` construit l'image et la
 scanne (Trivy, bloquant sur CRITICAL/HIGH), avant de lancer en parallèle
 `Load-Testing` (Siege), `DAST-OWASP-ZAP` et `E2E-Cypress` contre la stack
-`docker compose` complète. `Deploy-Production` ne se déclenche que sur
-`main`/`master`, une fois tout le reste au vert — la cible de déploiement
-réelle (VPS via SSH) n'est pour l'instant qu'un squelette, à compléter avant
-un vrai déploiement automatisé.
+`docker compose` complète. `Deploy-Staging` ne se déclenche que sur
+`main`/`master`, une fois tout le reste au vert : il se connecte en SSH au
+VPS de staging (secrets `STAGING_SSH_HOST`/`STAGING_SSH_USER`/
+`STAGING_SSH_KEY`) et relance la stack avec `docker-compose.staging.yml`.
+Voir [Déploiement staging (VPS)](#déploiement-staging-vps) ci-dessous. La
+prod (VPS séparé ou même VPS, job CI équivalent) est différée à plus tard.
 
 ## Sécurité — points clés
 
