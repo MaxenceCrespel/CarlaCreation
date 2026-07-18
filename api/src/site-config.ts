@@ -7,7 +7,7 @@ export const siteConfig = {
   sitePhone: '06 19 64 07 66',
   sitePhoneHref: '+33619640766',
   siteEmail: 'contact@carlacreation.example',
-  siteAddress: '15 rue Faidherbe, 59000 Lille',
+  siteAddress: '1 rue Georges Clemenceau, 59120 Loos',
   navLinks: [
     { href: '/', label: 'Accueil', key: 'home' },
     { href: '/services', label: 'Prestations', key: 'services' },
