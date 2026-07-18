@@ -8,6 +8,6 @@ export class GalleryController {
   @Get()
   async findAll() {
     const items = await this.galleryService.findAll();
-    return items.map((g) => ({ id: g.id, url: g.url, alt_text: g.alt_text }));
+    return items.map((g) => ({ id: g.id, url: g.url, before_url: g.before_url, alt_text: g.alt_text }));
   }
 }

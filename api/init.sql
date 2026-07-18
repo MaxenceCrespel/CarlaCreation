@@ -62,6 +62,7 @@ CREATE TABLE
     IF NOT EXISTS gallery (
         id SERIAL PRIMARY KEY,
         url TEXT NOT NULL,
+        before_url TEXT,
         alt_text TEXT NOT NULL DEFAULT '',
         sort_order INTEGER NOT NULL DEFAULT 0,
         is_upload BOOLEAN NOT NULL DEFAULT false,
@@ -118,7 +119,8 @@ CREATE TABLE
 INSERT INTO
     migrations (timestamp, name)
 VALUES
-    (1784301498502, 'InitSchema1784301498502');
+    (1784301498502, 'InitSchema1784301498502'),
+    (1784321118308, 'AddGalleryBeforeAfter1784321118308');
 
 -- Admin account — username "carla", password "Carla0303!" (bcrypt, cost 12).
 -- Change this password after first login in a real deployment.

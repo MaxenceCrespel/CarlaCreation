@@ -1,7 +1,7 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
-import { BadRequestException, Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { BadRequestException, Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, UploadedFiles, UseGuards, UseInterceptors } from '@nestjs/common';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { AdminAuthGuard } from '../../common/admin-auth.guard';
 import { CsrfGuard } from '../../common/csrf';
@@ -25,7 +25,7 @@ const uploadOptions = {
       cb(null, `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${ext}`);
     },
   }),
-  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+  limits: { fileSize: 5 * 1024 * 1024, files: 2 },
   fileFilter: (req: unknown, file: Express.Multer.File, cb: (error: Error | null, accept: boolean) => void) => {
     if (!ALLOWED_MIME_TYPES[file.mimetype]) {
       return cb(new BadRequestException('Format non supporté. Utilisez JPEG, PNG ou WebP.'), false);
@@ -46,12 +46,25 @@ export class AdminGalleryController {
 
   @UseGuards(CsrfGuard)
   @Post()
-  @UseInterceptors(FileInterceptor('photo', uploadOptions))
-  upload(@UploadedFile() file: Express.Multer.File, @Body() dto: UploadGalleryDto) {
-    if (!file) {
-      throw new BadRequestException('Aucune image reçue.');
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        { name: 'photoBefore', maxCount: 1 },
+        { name: 'photoAfter', maxCount: 1 },
+      ],
+      uploadOptions,
+    ),
+  )
+  upload(
+    @UploadedFiles() files: { photoBefore?: Express.Multer.File[]; photoAfter?: Express.Multer.File[] },
+    @Body() dto: UploadGalleryDto,
+  ) {
+    const before = files.photoBefore?.[0];
+    const after = files.photoAfter?.[0];
+    if (!before || !after) {
+      throw new BadRequestException('Les photos avant et après sont toutes les deux requises.');
     }
-    return this.galleryService.addUpload(file.filename, dto.altText);
+    return this.galleryService.addUpload(before.filename, after.filename, dto.altText);
   }
 
   @UseGuards(CsrfGuard)

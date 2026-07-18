@@ -44,10 +44,11 @@ describe('GalleryService', () => {
     repo.create.mockImplementation((v) => v);
     repo.save.mockImplementation((v) => Promise.resolve({ id: 4, ...v }));
 
-    const result = await service.addUpload('photo.jpg', 'Alt text');
+    const result = await service.addUpload('before.jpg', 'photo.jpg', 'Alt text');
 
     expect(result.sort_order).toBe(4);
     expect(result.url).toBe('uploads/photo.jpg');
+    expect(result.before_url).toBe('uploads/before.jpg');
     expect(result.is_upload).toBe(true);
   });
 
@@ -57,7 +58,7 @@ describe('GalleryService', () => {
       getRawOne: jest.fn().mockResolvedValue({ max: 0 }),
     });
 
-    const result = await service.addUpload('first.jpg', 'First');
+    const result = await service.addUpload('before-first.jpg', 'first.jpg', 'First');
     expect(result.sort_order).toBe(1);
   });
 
@@ -73,6 +74,15 @@ describe('GalleryService', () => {
     await service.remove(1);
 
     expect(fs.unlink).toHaveBeenCalled();
+  });
+
+  it('remove deletes both files when a before_url is set', async () => {
+    repo.findOne.mockResolvedValue({ id: 1, url: 'uploads/after.jpg', before_url: 'uploads/before.jpg', is_upload: true });
+    repo.delete.mockResolvedValue({ affected: 1 });
+
+    await service.remove(1);
+
+    expect(fs.unlink).toHaveBeenCalledTimes(2);
   });
 
   it('remove does not attempt to delete a file for a non-upload (placeholder) entry', async () => {

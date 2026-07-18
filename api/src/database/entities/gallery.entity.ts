@@ -8,6 +8,12 @@ export class Gallery {
   @Column()
   url: string;
 
+  // Optional "before" photo — when set, `url` is shown as the "after" side
+  // of a before/after comparison slider. Null for regular single-photo
+  // entries.
+  @Column({ type: 'text', nullable: true })
+  before_url: string | null;
+
   @Column({ default: '' })
   alt_text: string;
 

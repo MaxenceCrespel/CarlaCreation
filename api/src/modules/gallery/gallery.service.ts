@@ -16,7 +16,7 @@ export class GalleryService {
     return this.galleryRepo.find({ order: { sort_order: 'ASC', id: 'ASC' } });
   }
 
-  async addUpload(filename: string, altText: string): Promise<Gallery> {
+  async addUpload(beforeFilename: string, afterFilename: string, altText: string): Promise<Gallery> {
     const raw = await this.galleryRepo
       .createQueryBuilder('gallery')
       .select('COALESCE(MAX(gallery.sort_order), 0)', 'max')
@@ -24,7 +24,8 @@ export class GalleryService {
     const max = raw?.max ?? 0;
 
     const item = this.galleryRepo.create({
-      url: `uploads/${filename}`,
+      url: `uploads/${afterFilename}`,
+      before_url: `uploads/${beforeFilename}`,
       alt_text: altText,
       sort_order: Number(max) + 1,
       is_upload: true,
@@ -56,6 +57,12 @@ export class GalleryService {
       fs.unlink(filePath, () => {
         // best-effort cleanup, ignore errors
       });
+      if (item.before_url) {
+        const beforePath = path.join(UPLOAD_DIR, path.basename(item.before_url));
+        fs.unlink(beforePath, () => {
+          // best-effort cleanup, ignore errors
+        });
+      }
     }
   }
 }

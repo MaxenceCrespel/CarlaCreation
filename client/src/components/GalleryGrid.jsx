@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import BeforeAfterSlider from './BeforeAfterSlider';
 
 export default function GalleryGrid({ items, previewClass = false }) {
   const [lightbox, setLightbox] = useState(null);
@@ -19,17 +20,23 @@ export default function GalleryGrid({ items, previewClass = false }) {
   return (
     <>
       <div className={`gallery-grid ${previewClass ? 'gallery-grid-preview' : ''}`}>
-        {items.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className="gallery-item"
-            aria-label={`Agrandir : ${item.alt_text}`}
-            onClick={() => setLightbox(item)}
-          >
-            <img src={`/${item.url}`} alt={item.alt_text} loading="lazy" />
-          </button>
-        ))}
+        {items.map((item) =>
+          item.before_url ? (
+            <div key={item.id} className="gallery-item gallery-item-pair">
+              <BeforeAfterSlider beforeUrl={item.before_url} afterUrl={item.url} altText={item.alt_text} />
+            </div>
+          ) : (
+            <button
+              key={item.id}
+              type="button"
+              className="gallery-item"
+              aria-label={`Agrandir : ${item.alt_text}`}
+              onClick={() => setLightbox(item)}
+            >
+              <img src={`/${item.url}`} alt={item.alt_text} loading="lazy" />
+            </button>
+          ),
+        )}
       </div>
 
       {lightbox && (

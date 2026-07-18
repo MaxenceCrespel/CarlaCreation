@@ -9,7 +9,8 @@ export default function GalleryTab() {
   const [altText, setAltText] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadFeedback, setUploadFeedback] = useState(null);
-  const fileInputRef = useRef(null);
+  const beforeInputRef = useRef(null);
+  const afterInputRef = useRef(null);
 
   function load() {
     setError(null);
@@ -23,14 +24,16 @@ export default function GalleryTab() {
   async function handleUpload(e) {
     e.preventDefault();
     setUploadFeedback(null);
-    const file = fileInputRef.current?.files?.[0];
-    if (!file || !altText.trim()) {
+    const before = beforeInputRef.current?.files?.[0];
+    const after = afterInputRef.current?.files?.[0];
+    if (!before || !after || !altText.trim()) {
       e.target.reportValidity();
       return;
     }
 
     const formData = new FormData();
-    formData.append('photo', file);
+    formData.append('photoBefore', before);
+    formData.append('photoAfter', after);
     formData.append('altText', altText.trim());
 
     setUploading(true);
@@ -38,9 +41,10 @@ export default function GalleryTab() {
       const created = await apiUpload('/admin/gallery', formData);
       setItems((rows) => [...(rows ?? []), created]);
       setAltText('');
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      setUploadFeedback({ type: 'success', text: 'Photo ajoutée avec succès.' });
-      showToast('Photo ajoutée.', 'success');
+      if (beforeInputRef.current) beforeInputRef.current.value = '';
+      if (afterInputRef.current) afterInputRef.current.value = '';
+      setUploadFeedback({ type: 'success', text: 'Photos ajoutées avec succès.' });
+      showToast('Photos ajoutées.', 'success');
     } catch (err) {
       setUploadFeedback({ type: 'error', text: err.message });
       showToast(err.message, 'error');
@@ -99,10 +103,14 @@ export default function GalleryTab() {
   return (
     <>
       <form className="card upload-form" noValidate onSubmit={handleUpload}>
-        <h2>Ajouter une photo</h2>
+        <h2>Ajouter une photo avant/après</h2>
         <div className="form-row">
-          <label htmlFor="photo-file">Fichier image (JPEG, PNG ou WebP, 5 Mo max)</label>
-          <input type="file" id="photo-file" ref={fileInputRef} accept="image/jpeg,image/png,image/webp" required />
+          <label htmlFor="photo-before">Photo « avant » (JPEG, PNG ou WebP, 5 Mo max)</label>
+          <input type="file" id="photo-before" ref={beforeInputRef} accept="image/jpeg,image/png,image/webp" required />
+        </div>
+        <div className="form-row">
+          <label htmlFor="photo-after">Photo « après » (JPEG, PNG ou WebP, 5 Mo max)</label>
+          <input type="file" id="photo-after" ref={afterInputRef} accept="image/jpeg,image/png,image/webp" required />
         </div>
         <div className="form-row">
           <label htmlFor="photo-alt">Légende</label>
@@ -112,7 +120,7 @@ export default function GalleryTab() {
           <div className={`form-feedback ${uploadFeedback.type}`} role="status" aria-live="polite">{uploadFeedback.text}</div>
         )}
         <button type="submit" className="btn btn-primary" disabled={uploading}>
-          {uploading ? 'Envoi en cours…' : 'Téléverser la photo'}
+          {uploading ? 'Envoi en cours…' : 'Téléverser les photos'}
         </button>
       </form>
 
@@ -147,7 +155,14 @@ function GalleryCard({ item, isFirst, isLast, onSave, onDelete, onMoveUp, onMove
 
   return (
     <div className="admin-gallery-card">
-      <img src={`/${item.url}`} alt={item.alt_text} loading="lazy" />
+      {item.before_url ? (
+        <div className="admin-gallery-card-pair">
+          <img src={`/${item.before_url}`} alt={`Avant — ${item.alt_text}`} loading="lazy" />
+          <img src={`/${item.url}`} alt={`Après — ${item.alt_text}`} loading="lazy" />
+        </div>
+      ) : (
+        <img src={`/${item.url}`} alt={item.alt_text} loading="lazy" />
+      )}
       <div className="admin-gallery-card-body">
         <input type="text" className="alt-input" value={alt} maxLength={150} aria-label="Légende" onChange={(e) => setAlt(e.target.value)} />
         <div className="admin-gallery-card-actions">
