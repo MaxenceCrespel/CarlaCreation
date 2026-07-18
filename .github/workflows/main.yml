@@ -1,4 +1,4 @@
-name: Pipeline CI/CD Collector.shop
+name: Pipeline CI/CD CarlaCreation
 
 on:
   push:

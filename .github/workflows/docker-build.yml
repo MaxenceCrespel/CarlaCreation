@@ -65,7 +65,7 @@ jobs:
       - name: Sauvegarde du fichier SBOM
         uses: actions/upload-artifact@v4
         with:
-          name: sbom-collector-app
+          name: sbom-carlacreation-app
           path: sbom.spdx.json
 
       - name: Publication de l'image sur GHCR (Continuous Delivery)
