@@ -3,6 +3,7 @@ import { CanActivate, Injectable, Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { ServeStaticModule } from '@nestjs/serve-static';
+import { ScheduleModule } from '@nestjs/schedule';
 import { config } from './config';
 import { DatabaseModule } from './database/database.module';
 import { MailModule } from './modules/mail/mail.module';
@@ -36,6 +37,10 @@ class NoopThrottlerGuard implements CanActivate {
     ThrottlerModule.forRoot({
       throttlers: [{ limit: 300, ttl: 900_000 }],
     }),
+    // Powers the @Cron reminder job in ReservationsService (24h-before
+    // appointment emails) — registering it here makes SchedulerRegistry
+    // available app-wide.
+    ScheduleModule.forRoot(),
     // Serves the built React app and falls back to index.html for any
     // client-side route (e.g. /booking, /admin) that isn't a real file —
     // excluding /api, /uploads and /healthz, which are handled by controllers.

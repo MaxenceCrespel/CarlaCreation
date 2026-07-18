@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { CsrfGuard } from '../../common/csrf';
 import { ReservationsService } from './reservations.service';
@@ -25,5 +25,20 @@ export class ReservationsController {
   async create(@Body() dto: CreateReservationDto) {
     const reservation = await this.reservationsService.create(dto);
     return { success: true, reservation };
+  }
+
+  // "Manage my booking" link sent in confirmation emails — group_id itself
+  // is the unguessable access token, no login needed.
+  @Get('lookup/:groupId')
+  lookup(@Param('groupId', ParseUUIDPipe) groupId: string) {
+    return this.reservationsService.findByGroupId(groupId);
+  }
+
+  @Throttle({ default: { limit: 20, ttl: 3_600_000 } })
+  @UseGuards(CsrfGuard)
+  @Post('lookup/:groupId/cancel')
+  async cancel(@Param('groupId', ParseUUIDPipe) groupId: string) {
+    await this.reservationsService.cancelByGroupId(groupId);
+    return { success: true };
   }
 }

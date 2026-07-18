@@ -422,7 +422,20 @@ Le site envoie automatiquement un email au client :
   confirmation ») ;
 - quand l'admin change son statut vers **confirmée**, **refusée** ou
   **annulée** (les statuts « en attente » et « terminée » n'envoient pas
-  d'email).
+  d'email) ;
+- un **rappel automatique** ~24h avant chaque rendez-vous **confirmé**
+  (job planifié qui vérifie toutes les 10 minutes, voir
+  `ReservationsService.dispatchDueReminders` — chaque réservation n'est
+  rappelée qu'une seule fois grâce à la colonne `reminder_sent`).
+
+Chaque email de confirmation/rappel contient aussi un lien « Voir ou annuler
+mon rendez-vous » (`/mon-rendez-vous/<id>`) permettant au client de gérer sa
+réservation sans compte, et le logo du studio en en-tête
+(`client/public/logo-email.png` — voir "Personnalisation" ci-dessous).
+
+En plus des emails clients, **chaque nouvelle demande de réservation envoie
+aussi une notification à l'adresse SMTP configurée** (`SMTP_USER`) — utile
+puisqu'il n'y a pas d'autre système de notification admin.
 
 **Aucune configuration n'est requise pour que le site fonctionne** : tant que
 `SMTP_HOST` n'est pas défini dans `api/.env`, les emails sont simplement
@@ -467,7 +480,10 @@ fichier est déjà chargé via `env_file` dans `docker-compose.yml`).
   individuellement (aucun horaire récurrent par défaut).
 - **Logo** : remplacez `client/src/assets/logo.svg` par votre fichier
   définitif (SVG, PNG ou JPEG — ajustez l'import dans
-  `client/src/components/Header.jsx` si l'extension change).
+  `client/src/components/Header.jsx` si l'extension change). Pensez aussi à
+  régénérer `client/public/logo-email.png` (les emails ne supportent pas
+  bien le SVG) : `magick -background none -density 300 votre-logo.svg
+  -resize 440x280 client/public/logo-email.png`.
 - **Couleurs** : variables CSS en tête de `client/src/styles/main.css`.
 - **Nom, slogan, téléphone, adresse, email, liens de navigation** : un seul
   fichier, `api/src/site-config.ts`. La page React `/api/site-config`

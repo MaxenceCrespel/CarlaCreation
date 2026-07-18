@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import { useSiteConfig } from '../context/SiteConfigContext';
 import { useToast } from '../context/ToastContext';
@@ -112,6 +113,7 @@ export default function Booking() {
     ...getSavedContact(),
   }));
   const [feedback, setFeedback] = useState(null);
+  const [manageGroupId, setManageGroupId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
   const dateSectionRef = useRef(null);
@@ -240,6 +242,7 @@ export default function Booking() {
   async function handleSubmit(e) {
     e.preventDefault();
     setFeedback(null);
+    setManageGroupId(null);
 
     if (!selectedServiceId || !date || !selectedSlot) {
       setFeedback({ type: 'error', text: 'Choisissez une prestation, une date et un créneau.' });
@@ -256,7 +259,7 @@ export default function Booking() {
 
     setSubmitting(true);
     try {
-      await apiFetch('/reservations', {
+      const { reservation } = await apiFetch('/reservations', {
         method: 'POST',
         body: {
           serviceId: selectedServiceId,
@@ -274,6 +277,7 @@ export default function Booking() {
             ? `Votre demande de rendez-vous pour ${totalPeople} personnes a bien été envoyée. Vous recevrez une confirmation prochainement.`
             : 'Votre demande de rendez-vous a bien été envoyée. Vous recevrez une confirmation prochainement.',
       });
+      setManageGroupId(reservation.groupId);
       showToast('Réservation envoyée avec succès !', 'success');
       saveContact({ clientName: form.clientName, clientEmail: form.clientEmail, clientPhone: form.clientPhone });
       setForm((f) => ({ ...f, notes: '', website: '' }));
@@ -492,6 +496,12 @@ export default function Booking() {
             {feedback && (
               <div className={`form-feedback ${feedback.type}`} role="status" aria-live="polite">
                 {feedback.text}
+                {manageGroupId && (
+                  <>
+                    {' '}
+                    <Link to={`/mon-rendez-vous/${manageGroupId}`}>Voir ou annuler ce rendez-vous</Link>
+                  </>
+                )}
               </div>
             )}
 

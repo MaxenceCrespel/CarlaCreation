@@ -13,8 +13,10 @@ export interface EmailGuest {
 export interface BookingEmailInput {
   clientName: string;
   clientEmail: string;
+  clientPhone?: string;
   date: string;
   guests: EmailGuest[];
+  groupId?: string;
 }
 
 const DAY_NAMES_FR = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
@@ -63,8 +65,56 @@ export class MailService {
     const subject = `Demande de rendez-vous reçue — ${siteConfig.siteName}`;
     const intro =
       input.guests.length > 1
-        ? `Nous avons bien reçu votre demande de rendez-vous pour ${input.guests.length} personnes. Elle est actuellement <strong>en attente de confirmation</strong> par le studio.`
-        : `Nous avons bien reçu votre demande de rendez-vous. Elle est actuellement <strong>en attente de confirmation</strong> par le studio.`;
+        ? `Nous avons bien reçu votre demande de rendez-vous pour ${input.guests.length} personnes. Elle est actuellement <strong>en attente de confirmation</strong>.`
+        : `Nous avons bien reçu votre demande de rendez-vous. Elle est actuellement <strong>en attente de confirmation</strong>.`;
+    await this.send(input.clientEmail, subject, this.renderBookingEmail(input, intro));
+  }
+
+  // Sent to the studio's own inbox (SMTP_USER) so the absence of an admin
+  // notification system is covered by email — there is no other alert
+  // mechanism when a new booking request comes in.
+  async sendAdminNewBookingNotification(input: BookingEmailInput): Promise<void> {
+    if (!this.transporter || !config.SMTP_USER) return;
+
+    const subject = `Nouvelle demande de rendez-vous — ${input.clientName}`;
+    const rows = input.guests
+      .map(
+        (g) => `
+        <tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #E9DED2;">${escapeHtml(g.name)}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #E9DED2;">${escapeHtml(g.serviceName)}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #E9DED2;">${g.startTime} – ${g.endTime}</td>
+        </tr>`,
+      )
+      .join('');
+
+    const html = `
+      <div style="font-family: Segoe UI, Arial, sans-serif; color:#3A2E27; max-width:560px; margin:0 auto;">
+        <h2 style="color:#9A5F4B;">Nouvelle demande de rendez-vous</h2>
+        <p><strong>${escapeHtml(input.clientName)}</strong> — ${escapeHtml(input.clientEmail)}${input.clientPhone ? ` — ${escapeHtml(input.clientPhone)}` : ''}</p>
+        <p style="margin:16px 0 4px;"><strong>Date :</strong> ${formatDateFr(input.date)}</p>
+        <table style="border-collapse:collapse;width:100%;margin:12px 0;">
+          <thead>
+            <tr style="background:#F8F4EF;">
+              <th style="text-align:left;padding:8px 12px;">Personne</th>
+              <th style="text-align:left;padding:8px 12px;">Prestation</th>
+              <th style="text-align:left;padding:8px 12px;">Horaire</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <p style="margin-top:24px;"><a href="${config.PUBLIC_ORIGIN}/admin" style="color:#9A5F4B;">Confirmer ou refuser dans l'espace admin</a></p>
+      </div>
+    `;
+    await this.send(config.SMTP_USER, subject, html);
+  }
+
+  async sendReminder(input: BookingEmailInput): Promise<void> {
+    const subject = `Rappel — rendez-vous demain — ${siteConfig.siteName}`;
+    const intro =
+      input.guests.length > 1
+        ? `Petit rappel : vous avez rendez-vous demain pour ${input.guests.length} personnes.`
+        : `Petit rappel : vous avez rendez-vous demain.`;
     await this.send(input.clientEmail, subject, this.renderBookingEmail(input, intro));
   }
 
@@ -101,9 +151,13 @@ export class MailService {
       )
       .join('');
 
+    const manageLink = input.groupId
+      ? `<p style="margin-top:16px;"><a href="${config.PUBLIC_ORIGIN}/mon-rendez-vous/${input.groupId}" style="color:#9A5F4B;">Voir ou annuler mon rendez-vous</a></p>`
+      : '';
+
     return `
       <div style="font-family: Segoe UI, Arial, sans-serif; color:#3A2E27; max-width:560px; margin:0 auto;">
-        <h2 style="color:#9A5F4B;">${escapeHtml(siteConfig.siteName)}</h2>
+        <img src="${config.PUBLIC_ORIGIN}/logo-email.png" alt="${escapeHtml(siteConfig.siteName)}" width="140" style="display:block;margin:0 0 16px;" />
         <p>Bonjour ${escapeHtml(input.clientName)},</p>
         <p>${introHtml}</p>
         <p style="margin:16px 0 4px;"><strong>Date :</strong> ${formatDateFr(input.date)}</p>
@@ -118,6 +172,7 @@ export class MailService {
           </thead>
           <tbody>${rows}</tbody>
         </table>
+        ${manageLink}
         <p style="margin-top:24px;">Une question ? Appelez-nous au ${escapeHtml(siteConfig.sitePhone)} ou répondez à cet email.</p>
         <p style="color:#6B5C51;font-size:0.85em;margin-top:32px;">${escapeHtml(siteConfig.siteName)} — ${escapeHtml(siteConfig.siteAddress)}</p>
       </div>

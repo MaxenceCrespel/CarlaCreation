@@ -44,6 +44,9 @@ export class Reservation {
   @Column({ default: 'pending' })
   status: ReservationStatus;
 
+  @Column({ default: false })
+  reminder_sent: boolean;
+
   @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;
 }

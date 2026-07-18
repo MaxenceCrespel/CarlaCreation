@@ -51,6 +51,7 @@ CREATE TABLE
         end_time TEXT NOT NULL,
         notes TEXT NOT NULL DEFAULT '',
         status TEXT NOT NULL DEFAULT 'pending',
+        reminder_sent BOOLEAN NOT NULL DEFAULT false,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
@@ -120,7 +121,8 @@ INSERT INTO
     migrations (timestamp, name)
 VALUES
     (1784301498502, 'InitSchema1784301498502'),
-    (1784321118308, 'AddGalleryBeforeAfter1784321118308');
+    (1784321118308, 'AddGalleryBeforeAfter1784321118308'),
+    (1784394804417, 'AddReservationReminderSent1784394804417');
 
 -- Admin account — username "carla", password "Carla0303!" (bcrypt, cost 12).
 -- Change this password after first login in a real deployment.
