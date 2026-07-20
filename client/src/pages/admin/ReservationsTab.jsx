@@ -19,8 +19,10 @@ const EMPTY_MANUAL_FORM = {
   clientName: '',
   clientEmail: '',
   clientPhone: '',
+  clientAddress: '',
   notes: '',
   status: 'confirmed',
+  atClientHome: false,
 };
 
 function AddReservationForm({ onCreated, onCancel }) {
@@ -62,6 +64,10 @@ function AddReservationForm({ onCreated, onCancel }) {
       setFeedback('Complétez le nom et la prestation de chaque personne ajoutée, ou retirez-la.');
       return;
     }
+    if (form.atClientHome && !form.clientAddress.trim()) {
+      setFeedback('Indiquez une adresse pour un rendez-vous à domicile.');
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -70,6 +76,7 @@ function AddReservationForm({ onCreated, onCancel }) {
         body: {
           ...form,
           serviceId: Number(form.serviceId),
+          clientAddress: form.atClientHome ? form.clientAddress.trim() : undefined,
           additionalGuests: guests.map((g) => ({ name: g.name.trim(), serviceId: Number(g.serviceId) })),
         },
       });
@@ -163,6 +170,33 @@ function AddReservationForm({ onCreated, onCancel }) {
           <input type="tel" id="manual-phone" required placeholder="06 12 34 56 78" value={form.clientPhone} onChange={update('clientPhone')} />
         </div>
       </div>
+
+      <div className="form-row checkbox-row">
+        <label htmlFor="manual-at-home">
+          <input
+            type="checkbox"
+            id="manual-at-home"
+            checked={form.atClientHome}
+            onChange={(e) => setForm((f) => ({ ...f, atClientHome: e.target.checked }))}
+          />
+          Rendez-vous à domicile (Carla se déplace)
+        </label>
+      </div>
+
+      {form.atClientHome && (
+        <div className="form-row">
+          <label htmlFor="manual-address">Adresse du client·e</label>
+          <input
+            type="text"
+            id="manual-address"
+            required
+            minLength={5}
+            maxLength={300}
+            value={form.clientAddress}
+            onChange={update('clientAddress')}
+          />
+        </div>
+      )}
 
       <div className="form-row two-col">
         <div>
@@ -315,22 +349,23 @@ export default function ReservationsTab() {
               <th>Prestation</th>
               <th>Client·e</th>
               <th>Contact</th>
+              <th>Lieu</th>
               <th>Note</th>
               <th>Statut</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {error && <tr><td colSpan={8}>Erreur : {error}</td></tr>}
-            {!error && reservations === null && <tr><td colSpan={8}>Chargement…</td></tr>}
+            {error && <tr><td colSpan={9}>Erreur : {error}</td></tr>}
+            {!error && reservations === null && <tr><td colSpan={9}>Chargement…</td></tr>}
             {!error && reservations !== null && rows.length === 0 && (
-              <tr><td colSpan={8}>Aucune réservation trouvée.</td></tr>
+              <tr><td colSpan={9}>Aucune réservation trouvée.</td></tr>
             )}
             {!error && groups.map((group) => (
               <Fragment key={group.key}>
                 {group.rows.length > 1 && (
                   <tr className="group-header-row">
-                    <td colSpan={8}>
+                    <td colSpan={9}>
                       <div className="group-header">
                         <span className="group-badge">Rendez-vous groupé · {group.rows.length} personnes</span>
                         <div className="group-actions">
@@ -348,6 +383,7 @@ export default function ReservationsTab() {
                     <td>{r.service_name}</td>
                     <td>{r.client_name}</td>
                     <td>{r.client_email}<br />{r.client_phone}</td>
+                    <td>{r.at_client_home ? <><span className="location-badge">Domicile</span><br />{r.client_address}</> : 'Studio'}</td>
                     <td>{r.notes || '—'}</td>
                     <td>
                       <div className="status-cell">

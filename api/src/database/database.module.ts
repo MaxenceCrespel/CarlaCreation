@@ -9,6 +9,7 @@ import { ContactMessage } from './entities/contact-message.entity';
 import { Review } from './entities/review.entity';
 import { DailyHours } from './entities/daily-hours.entity';
 import { DailyHoursRange } from './entities/daily-hours-range.entity';
+import { AppSettings } from './entities/app-settings.entity';
 
 // `synchronize: false` permanently — even in dev. Migrations
 // (database/migrations/*.ts, run via `npm run migration:run`) are the only
@@ -20,11 +21,11 @@ import { DailyHoursRange } from './entities/daily-hours-range.entity';
     TypeOrmModule.forRoot({
       type: 'postgres',
       url: config.DATABASE_URL,
-      entities: [Admin, Service, Reservation, Gallery, ContactMessage, Review, DailyHours, DailyHoursRange],
+      entities: [Admin, Service, Reservation, Gallery, ContactMessage, Review, DailyHours, DailyHoursRange, AppSettings],
       synchronize: false,
       migrationsRun: false,
     }),
-    TypeOrmModule.forFeature([Admin, Service, Reservation, Gallery, ContactMessage, Review, DailyHours, DailyHoursRange]),
+    TypeOrmModule.forFeature([Admin, Service, Reservation, Gallery, ContactMessage, Review, DailyHours, DailyHoursRange, AppSettings]),
   ],
   exports: [TypeOrmModule],
 })

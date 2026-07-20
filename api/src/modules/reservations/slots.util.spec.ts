@@ -6,7 +6,7 @@ import { Reservation } from '../../database/entities/reservation.entity';
 function fakeDataSource(opts: {
   isClosed: boolean;
   ranges: { open_time: string; close_time: string }[];
-  busy?: { start_time: string; end_time: string }[];
+  busy?: { start_time: string; end_time: string; at_client_home?: boolean }[];
 }) {
   const repos: Record<string, unknown> = {
     [DailyHours.name]: { findOne: jest.fn().mockResolvedValue({ date: 'x', is_closed: opts.isClosed }) },
@@ -81,6 +81,66 @@ describe('getAvailableSlots', () => {
     expect(slots).not.toContain('10:30');
     expect(slots).toContain('10:00');
     expect(slots).toContain('10:45');
+  });
+
+  it('blocks a wider window around an existing à-domicile booking (travel buffer)', async () => {
+    // A 30-minute buffer around a 10:15–10:45 home visit effectively
+    // busies 09:45–11:15.
+    const dataSource = fakeDataSource({
+      isClosed: false,
+      ranges: [{ open_time: '09:00', close_time: '12:00' }],
+      busy: [{ start_time: '10:15', end_time: '10:45', at_client_home: true }],
+    });
+    const slots = await getAvailableSlots(dataSource, FUTURE_DATE, 15, false, 30);
+
+    expect(slots).not.toContain('09:45');
+    expect(slots).not.toContain('10:30');
+    expect(slots).not.toContain('11:00');
+    expect(slots).toContain('09:30');
+    expect(slots).toContain('11:15');
+  });
+
+  it('expands the candidate slot itself with a travel buffer when booking à domicile', async () => {
+    const dataSource = fakeDataSource({
+      isClosed: false,
+      ranges: [{ open_time: '09:00', close_time: '12:00' }],
+      busy: [{ start_time: '11:00', end_time: '11:15' }],
+    });
+
+    // Studio booking: only needs its own 15 minutes, 10:45 is fine.
+    const studioSlots = await getAvailableSlots(dataSource, FUTURE_DATE, 15, false, 30);
+    expect(studioSlots).toContain('10:45');
+
+    // À-domicile booking: needs the 30-minute buffer on top too, so a slot
+    // ending right before the existing reservation is no longer safe.
+    const homeSlots = await getAvailableSlots(dataSource, FUTURE_DATE, 15, true, 30);
+    expect(homeSlots).not.toContain('10:45');
+  });
+
+  it('reserves travel time at the very start/end of the open window for an à-domicile booking, even with no other bookings that day', async () => {
+    // This is the bug the admin actually hit: a day opened 09:00–19:00
+    // must not offer a 09:00 à-domicile slot — she needs the 30-minute
+    // buffer just to physically get there first.
+    const dataSource = fakeDataSource({
+      isClosed: false,
+      ranges: [{ open_time: '09:00', close_time: '19:00' }],
+    });
+
+    const homeSlots = await getAvailableSlots(dataSource, FUTURE_DATE, 30, true, 30);
+    expect(homeSlots).not.toContain('09:00');
+    expect(homeSlots).not.toContain('09:15');
+    expect(homeSlots).toContain('09:30');
+    // Symmetric on the other edge: the appointment (30 min) must END with
+    // 30 min still free before closing at 19:00, so the last bookable
+    // start is 18:00 (ends 18:30), not 18:15 or 18:30.
+    expect(homeSlots).not.toContain('18:30');
+    expect(homeSlots).not.toContain('18:15');
+    expect(homeSlots).toContain('18:00');
+
+    // A studio booking on the very same day is unaffected by the buffer.
+    const studioSlots = await getAvailableSlots(dataSource, FUTURE_DATE, 30, false, 30);
+    expect(studioSlots).toContain('09:00');
+    expect(studioSlots).toContain('18:30');
   });
 
   it('excludes past time slots when the requested date is today', async () => {

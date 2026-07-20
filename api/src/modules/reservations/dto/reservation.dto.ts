@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsEmail,
   IsEmpty,
   IsIn,
@@ -12,6 +13,7 @@ import {
   Length,
   Matches,
   Min,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 
@@ -27,6 +29,17 @@ export class AvailabilityQueryDto {
   @IsInt({ each: true })
   @Min(1, { each: true })
   serviceIds!: number[];
+
+  // "true"/"false" query string — à-domicile bookings need extra travel
+  // buffer factored into availability, see getAvailableSlots.
+  // Global ValidationPipe has enableImplicitConversion on, which coerces
+  // ANY non-empty query string (including "false") to boolean `true`
+  // before a @Transform keyed on `value` ever sees it — so read the raw,
+  // un-coerced value straight off `obj` instead.
+  @IsOptional()
+  @Transform(({ obj }) => obj.atClientHome === true || obj.atClientHome === 'true')
+  @IsBoolean()
+  atClientHome?: boolean;
 }
 
 export class NextAvailableQueryDto {
@@ -37,6 +50,15 @@ export class NextAvailableQueryDto {
   @IsInt({ each: true })
   @Min(1, { each: true })
   serviceIds!: number[];
+
+  // Global ValidationPipe has enableImplicitConversion on, which coerces
+  // ANY non-empty query string (including "false") to boolean `true`
+  // before a @Transform keyed on `value` ever sees it — so read the raw,
+  // un-coerced value straight off `obj` instead.
+  @IsOptional()
+  @Transform(({ obj }) => obj.atClientHome === true || obj.atClientHome === 'true')
+  @IsBoolean()
+  atClientHome?: boolean;
 }
 
 // A person booked alongside the primary contact (e.g. a mother booking for
@@ -78,6 +100,17 @@ export class CreateReservationDto {
   @IsString()
   @Length(0, 500)
   notes?: string;
+
+  // Carla is a solo auto-entrepreneuse, not a fixed salon: the client
+  // either comes to her (default) or she travels to clientAddress.
+  @IsOptional()
+  @IsBoolean()
+  atClientHome?: boolean;
+
+  @ValidateIf((o) => o.atClientHome === true)
+  @IsString()
+  @Length(5, 300)
+  clientAddress?: string;
 
   // Honeypot: must stay empty. Bots that auto-fill every field trip this.
   @IsEmpty({ message: 'Requête invalide.' })
@@ -127,6 +160,15 @@ export class AdminCreateReservationDto {
   @IsString()
   @Length(0, 500)
   notes?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  atClientHome?: boolean;
+
+  @ValidateIf((o) => o.atClientHome === true)
+  @IsString()
+  @Length(5, 300)
+  clientAddress?: string;
 
   @IsOptional()
   @IsIn(['pending', 'confirmed', 'completed'])

@@ -17,6 +17,8 @@ export interface BookingEmailInput {
   date: string;
   guests: EmailGuest[];
   groupId?: string;
+  atClientHome?: boolean;
+  clientAddress?: string | null;
 }
 
 const DAY_NAMES_FR = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
@@ -93,6 +95,11 @@ export class MailService {
         <h2 style="color:#9A5F4B;">Nouvelle demande de rendez-vous</h2>
         <p><strong>${escapeHtml(input.clientName)}</strong> — ${escapeHtml(input.clientEmail)}${input.clientPhone ? ` — ${escapeHtml(input.clientPhone)}` : ''}</p>
         <p style="margin:16px 0 4px;"><strong>Date :</strong> ${formatDateFr(input.date)}</p>
+        <p style="margin:0 0 4px;"><strong>Lieu :</strong> ${
+          input.atClientHome
+            ? `à domicile${input.clientAddress ? ` — ${escapeHtml(input.clientAddress)}` : ''}`
+            : 'au studio'
+        }</p>
         <table style="border-collapse:collapse;width:100%;margin:12px 0;">
           <thead>
             <tr style="background:#F8F4EF;">
@@ -155,12 +162,17 @@ export class MailService {
       ? `<p style="margin-top:16px;"><a href="${config.PUBLIC_ORIGIN}/mon-rendez-vous/${input.groupId}" style="color:#9A5F4B;">Voir ou annuler mon rendez-vous</a></p>`
       : '';
 
+    const locationLine = input.atClientHome
+      ? `<p style="margin:0 0 4px;"><strong>Lieu :</strong> à votre domicile${input.clientAddress ? ` — ${escapeHtml(input.clientAddress)}` : ''}</p>`
+      : `<p style="margin:0 0 4px;"><strong>Lieu :</strong> chez ${escapeHtml(siteConfig.siteName)} — ${escapeHtml(siteConfig.siteAddress)}</p>`;
+
     return `
       <div style="font-family: Segoe UI, Arial, sans-serif; color:#3A2E27; max-width:560px; margin:0 auto;">
         <img src="${config.PUBLIC_ORIGIN}/logo-email.png" alt="${escapeHtml(siteConfig.siteName)}" width="140" style="display:block;margin:0 0 16px;" />
         <p>Bonjour ${escapeHtml(input.clientName)},</p>
         <p>${introHtml}</p>
         <p style="margin:16px 0 4px;"><strong>Date :</strong> ${formatDateFr(input.date)}</p>
+        ${locationLine}
         ${statusLabel ? `<p style="margin:0 0 16px;"><strong>Statut :</strong> ${escapeHtml(statusLabel)}</p>` : ''}
         <table style="border-collapse:collapse;width:100%;margin:12px 0;">
           <thead>

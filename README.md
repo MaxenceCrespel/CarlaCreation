@@ -121,6 +121,13 @@ client/
 - **Le client n'a pas à retaper ses coordonnées** : nom, email et téléphone
   sont mémorisés dans le navigateur après un envoi réussi et pré-remplis à la
   visite suivante (sur `/booking` et `/contact`).
+- **Rendez-vous sur place ou à domicile** : Carla étant une auto-entrepreneuse
+  sans salon fixe, chaque réservation précise si le client vient sur place ou
+  si elle se déplace (adresse alors demandée). Une réservation à domicile
+  bloque automatiquement `travelBufferMinutes` (30 min par défaut,
+  `api/src/site-config.ts`) avant et après le rendez-vous dans le calcul des
+  créneaux disponibles, pour ne jamais enchaîner deux rendez-vous sans compter
+  le trajet.
 - **Avis clients dynamiques** : n'importe quel·le visiteur·se peut laisser un
   avis noté (1 à 5 étoiles) depuis la page d'accueil. Chaque avis reste « en
   attente » et invisible du public tant qu'il n'a pas été approuvé dans

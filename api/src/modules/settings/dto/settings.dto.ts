@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsBoolean, IsOptional, Matches, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsInt, IsOptional, Matches, Max, Min, ValidateNested } from 'class-validator';
 
 export class TimeRangeDto {
   @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
@@ -21,4 +21,11 @@ export class UpdateDailyHoursDto {
   @ValidateNested({ each: true })
   @Type(() => TimeRangeDto)
   ranges?: TimeRangeDto[];
+}
+
+export class UpdateTravelBufferDto {
+  @IsInt()
+  @Min(0)
+  @Max(240)
+  minutes!: number;
 }

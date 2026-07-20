@@ -3,11 +3,16 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { DailyHours } from '../../database/entities/daily-hours.entity';
 import { DailyHoursRange } from '../../database/entities/daily-hours-range.entity';
+import { AppSettings } from '../../database/entities/app-settings.entity';
 import { isValidDateString } from '../reservations/slots.util';
 import { getEffectiveHoursForDate, EffectiveDayHours } from './daily-hours.util';
 import { UpdateDailyHoursDto } from './dto/settings.dto';
 
 const WINDOW_DAYS = 60;
+// Fallback only used if the singleton row is somehow missing (it's always
+// seeded by init.sql / the AddAppSettings migration) — keeps this read
+// from ever hard-failing the booking flow.
+const DEFAULT_TRAVEL_BUFFER_MINUTES = 30;
 
 @Injectable()
 export class SettingsService {
@@ -82,5 +87,23 @@ export class SettingsService {
     if (result.affected === 0) {
       throw new NotFoundException("Ce jour n'a pas de personnalisation à supprimer.");
     }
+  }
+
+  async getTravelBufferMinutes(): Promise<number> {
+    const row = await this.dataSource.getRepository(AppSettings).findOne({ where: { id: 1 } });
+    return row?.travel_buffer_minutes ?? DEFAULT_TRAVEL_BUFFER_MINUTES;
+  }
+
+  async setTravelBufferMinutes(minutes: number): Promise<void> {
+    if (!Number.isInteger(minutes) || minutes < 0 || minutes > 240) {
+      throw new BadRequestException('Le temps de trajet doit être un entier entre 0 et 240 minutes.');
+    }
+    await this.dataSource
+      .createQueryBuilder()
+      .insert()
+      .into(AppSettings)
+      .values({ id: 1, travel_buffer_minutes: minutes })
+      .orUpdate(['travel_buffer_minutes'], ['id'])
+      .execute();
   }
 }

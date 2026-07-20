@@ -151,6 +151,70 @@ function DayEditor({ day, onSave, onReset }) {
   );
 }
 
+// Carla is a solo auto-entrepreneuse: when a booking is à domicile, this
+// many minutes get blocked before/after it (and at the edges of the day's
+// open hours) so back-to-back bookings never ignore travel time.
+function TravelBufferCard() {
+  const showToast = useToast();
+  const [minutes, setMinutes] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  function load() {
+    apiFetch('/admin/settings/travel-buffer')
+      .then((data) => setMinutes(data.minutes))
+      .catch(() => showToast('Impossible de charger le temps de trajet.', 'error'));
+  }
+
+  useEffect(load, []);
+
+  async function save(e) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await apiFetch('/admin/settings/travel-buffer', { method: 'PUT', body: { minutes: Number(minutes) } });
+      showToast('Temps de trajet mis à jour.', 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form className="card travel-buffer-card" onSubmit={save}>
+      <h2>Temps de trajet (rendez-vous à domicile)</h2>
+      <p className="section-lead">
+        Lorsqu'un rendez-vous est à domicile, ce temps est bloqué avant et après (y compris au tout début ou à la
+        toute fin d'une journée ouverte) pour ne jamais enchaîner un trajet sans marge.
+      </p>
+      {minutes === null ? (
+        <p className="loading-text">Chargement…</p>
+      ) : (
+        <div className="form-row two-col">
+          <div>
+            <label htmlFor="travel-buffer-minutes">Minutes bloquées avant/après</label>
+            <input
+              type="number"
+              id="travel-buffer-minutes"
+              min={0}
+              max={240}
+              step={5}
+              required
+              value={minutes}
+              onChange={(e) => setMinutes(e.target.value)}
+            />
+          </div>
+          <div className="travel-buffer-save">
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving ? 'Enregistrement…' : 'Enregistrer'}
+            </button>
+          </div>
+        </div>
+      )}
+    </form>
+  );
+}
+
 export default function HoursTab() {
   const showToast = useToast();
   const [days, setDays] = useState(null);
@@ -184,19 +248,22 @@ export default function HoursTab() {
   const selectedDay = days?.find((d) => d.date === selectedDate) || null;
 
   return (
-    <div className="card hours-editor">
-      <h2>Horaires jour par jour</h2>
-      <p className="section-lead">
-        Il n'y a pas d'horaire récurrent : chaque jour est <strong>fermé tant qu'il n'a pas été ouvert
-        explicitement</strong>. Un jour peut avoir plusieurs créneaux (par exemple 10h–13h et 16h–19h pour une
-        pause déjeuner) — une réservation ne pourra jamais chevaucher la coupure. Faites défiler le calendrier
-        pour choisir une date, puis réglez ses horaires ci-dessous.
-      </p>
+    <>
+      <TravelBufferCard />
 
-      {error && <p className="loading-text">Erreur : {error}</p>}
-      {!error && days === null && <p className="loading-text">Chargement…</p>}
+      <div className="card hours-editor">
+        <h2>Horaires jour par jour</h2>
+        <p className="section-lead">
+          Il n'y a pas d'horaire récurrent : chaque jour est <strong>fermé tant qu'il n'a pas été ouvert
+          explicitement</strong>. Un jour peut avoir plusieurs créneaux (par exemple 10h–13h et 16h–19h pour une
+          pause déjeuner) — une réservation ne pourra jamais chevaucher la coupure. Faites défiler le calendrier
+          pour choisir une date, puis réglez ses horaires ci-dessous.
+        </p>
 
-      {!error && days && (
+        {error && <p className="loading-text">Erreur : {error}</p>}
+        {!error && days === null && <p className="loading-text">Chargement…</p>}
+
+        {!error && days && (
         <>
           <div className="day-picker-scroll admin-day-picker" role="listbox" aria-label="Choisir une date à modifier">
             {days.map((day) => {
@@ -224,6 +291,7 @@ export default function HoursTab() {
           {selectedDay && <DayEditor key={selectedDay.date} day={selectedDay} onSave={saveDay} onReset={resetDay} />}
         </>
       )}
-    </div>
+      </div>
+    </>
   );
 }

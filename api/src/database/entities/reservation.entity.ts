@@ -47,6 +47,14 @@ export class Reservation {
   @Column({ default: false })
   reminder_sent: boolean;
 
+  // Carla is a solo auto-entrepreneuse, not a fixed salon: false means the
+  // client comes to her, true means she travels to client_address instead.
+  @Column({ default: false })
+  at_client_home: boolean;
+
+  @Column({ type: 'text', nullable: true })
+  client_address: string | null;
+
   @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;
 }

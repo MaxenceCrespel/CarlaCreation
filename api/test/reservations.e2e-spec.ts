@@ -19,6 +19,7 @@ const DAY_CYCLE_DATE = dateOffset(105);
 const MULTI_RANGE_DATE = dateOffset(106);
 const MANUAL_RESERVATION_DATE = dateOffset(107);
 const GROUP_BOOKING_DATE = dateOffset(108);
+const TRAVEL_BUFFER_DATE = dateOffset(109);
 
 describeIfAdmin('Reservations (day-by-day hours, multi-range, manual, group)', () => {
   let app: INestApplication;
@@ -226,6 +227,92 @@ describeIfAdmin('Reservations (day-by-day hours, multi-range, manual, group)', (
     it('bulk-deletes the whole group', async () => {
       const token = await getCsrfToken(agent);
       await agent.delete(`/api/reservations/group/${groupId}`).set('x-csrf-token', token).expect(200);
+    });
+  });
+
+  // Regression coverage for a real bug: `?atClientHome=...` arrives as a
+  // query STRING, and NestJS's global ValidationPipe (enableImplicitConversion)
+  // coerces any non-empty string — including the literal "false" — to
+  // boolean `true` before a naive `@Transform` can tell the difference. A
+  // unit test on the service layer alone (already-parsed booleans) can't
+  // catch this; it only shows up over real HTTP with real query strings.
+  describe('À-domicile travel buffer (query string parsing + day-boundary clipping)', () => {
+    it('opens a 09:00–19:00 day', async () => {
+      const token = await getCsrfToken(agent);
+      await agent
+        .put(`/api/admin/settings/daily-hours/${TRAVEL_BUFFER_DATE}`)
+        .set('x-csrf-token', token)
+        .send({ isClosed: false, ranges: [{ openTime: '09:00', closeTime: '19:00' }] })
+        .expect(200);
+    });
+
+    it('atClientHome=true blocks the first 30 minutes of the day (travel buffer default is 30min)', async () => {
+      // service id 7 = Manucure Classique, 30 minutes.
+      const res = await request(app.getHttpServer())
+        .get(`/api/reservations/availability?date=${TRAVEL_BUFFER_DATE}&serviceIds=7&atClientHome=true`)
+        .expect(200);
+      expect(res.body.slots).not.toContain('09:00');
+      expect(res.body.slots).not.toContain('09:15');
+      expect(res.body.slots).toContain('09:30');
+    });
+
+    it('atClientHome=false (explicit string) still allows 09:00 — the exact bug that was found', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/reservations/availability?date=${TRAVEL_BUFFER_DATE}&serviceIds=7&atClientHome=false`)
+        .expect(200);
+      expect(res.body.slots).toContain('09:00');
+    });
+
+    it('omitting atClientHome defaults to studio (09:00 available)', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/reservations/availability?date=${TRAVEL_BUFFER_DATE}&serviceIds=7`)
+        .expect(200);
+      expect(res.body.slots).toContain('09:00');
+    });
+
+    it('a confirmed home visit is rejected without an address', async () => {
+      const token = await getCsrfToken(agent);
+      await agent
+        .post('/api/reservations/manual')
+        .set('x-csrf-token', token)
+        .send({
+          serviceId: 7,
+          date: TRAVEL_BUFFER_DATE,
+          startTime: '11:00',
+          clientName: 'No Address',
+          clientEmail: 'noaddress@example.com',
+          clientPhone: '0600000020',
+          status: 'confirmed',
+          atClientHome: true,
+        })
+        .expect(400);
+    });
+
+    it('books a home visit with an address, and it shows up with its location on the public/admin lookups', async () => {
+      const token = await getCsrfToken(agent);
+      const res = await agent
+        .post('/api/reservations/manual')
+        .set('x-csrf-token', token)
+        .send({
+          serviceId: 7,
+          date: TRAVEL_BUFFER_DATE,
+          startTime: '11:00',
+          clientName: 'Home Visit',
+          clientEmail: 'homevisit@example.com',
+          clientPhone: '0600000021',
+          status: 'confirmed',
+          atClientHome: true,
+          clientAddress: '5 rue de Test, 59000 Lille',
+        })
+        .expect(201);
+      expect(res.body.reservation.atClientHome).toBe(true);
+      expect(res.body.reservation.clientAddress).toBe('5 rue de Test, 59000 Lille');
+
+      const lookup = await request(app.getHttpServer())
+        .get(`/api/reservations/lookup/${res.body.reservation.groupId}`)
+        .expect(200);
+      expect(lookup.body.atClientHome).toBe(true);
+      expect(lookup.body.clientAddress).toBe('5 rue de Test, 59000 Lille');
     });
   });
 });

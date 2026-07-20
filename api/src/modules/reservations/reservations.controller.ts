@@ -10,12 +10,12 @@ export class ReservationsController {
 
   @Get('availability')
   availability(@Query() query: AvailabilityQueryDto) {
-    return this.reservationsService.getAvailability(query.date, query.serviceIds);
+    return this.reservationsService.getAvailability(query.date, query.serviceIds, query.atClientHome ?? false);
   }
 
   @Get('next-available')
   nextAvailable(@Query() query: NextAvailableQueryDto) {
-    return this.reservationsService.findNextAvailable(query.serviceIds);
+    return this.reservationsService.findNextAvailable(query.serviceIds, query.atClientHome ?? false);
   }
 
   // Tighter limit specifically on booking creation to deter spam.

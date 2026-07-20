@@ -95,6 +95,10 @@ export default function Booking() {
   // herself and her daughter): each has their own name, category and service.
   const [guests, setGuests] = useState([]);
 
+  // Carla is a solo auto-entrepreneuse: the client either comes to her
+  // (default) or she travels to the client's address instead.
+  const [atClientHome, setAtClientHome] = useState(false);
+
   const [date, setDate] = useState('');
   const [slots, setSlots] = useState([]);
   const [slotsState, setSlotsState] = useState('idle'); // idle | loading | ready | empty | error
@@ -108,6 +112,7 @@ export default function Booking() {
     clientName: '',
     clientEmail: '',
     clientPhone: '',
+    clientAddress: '',
     notes: '',
     website: '',
     ...getSavedContact(),
@@ -140,6 +145,13 @@ export default function Booking() {
   function pickCategory(key) {
     setCategory(key);
     setSelectedServiceId(null);
+    setSlots([]);
+    setSlotsState('idle');
+    setSelectedSlot('');
+  }
+
+  function pickLocation(home) {
+    setAtClientHome(home);
     setSlots([]);
     setSlotsState('idle');
     setSelectedSlot('');
@@ -191,7 +203,7 @@ export default function Booking() {
     }
     let cancelled = false;
     setNextAvailable('loading');
-    apiFetch(`/reservations/next-available?serviceIds=${serviceIds.join(',')}`)
+    apiFetch(`/reservations/next-available?serviceIds=${serviceIds.join(',')}&atClientHome=${atClientHome}`)
       .then((result) => {
         if (cancelled) return;
         setNextAvailable(result || 'none');
@@ -203,7 +215,7 @@ export default function Booking() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serviceIds.join(','), allGuestsHaveService]);
+  }, [serviceIds.join(','), allGuestsHaveService, atClientHome]);
 
   function applySuggestion(suggestion) {
     setDate(suggestion.date);
@@ -217,7 +229,7 @@ export default function Booking() {
     }
     let cancelled = false;
     setSlotsState('loading');
-    apiFetch(`/reservations/availability?date=${encodeURIComponent(date)}&serviceIds=${serviceIds.join(',')}`)
+    apiFetch(`/reservations/availability?date=${encodeURIComponent(date)}&serviceIds=${serviceIds.join(',')}&atClientHome=${atClientHome}`)
       .then((result) => {
         if (cancelled) return;
         setSlots(result.slots);
@@ -233,7 +245,7 @@ export default function Booking() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, serviceIds.join(','), allGuestsHaveService]);
+  }, [date, serviceIds.join(','), allGuestsHaveService, atClientHome]);
 
   function updateField(field) {
     return (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
@@ -252,6 +264,10 @@ export default function Booking() {
       setFeedback({ type: 'error', text: 'Complétez le nom et la prestation de chaque personne ajoutée, ou retirez-la.' });
       return;
     }
+    if (atClientHome && !form.clientAddress.trim()) {
+      setFeedback({ type: 'error', text: 'Indiquez votre adresse pour un rendez-vous à domicile.' });
+      return;
+    }
     if (!e.target.checkValidity()) {
       e.target.reportValidity();
       return;
@@ -267,6 +283,8 @@ export default function Booking() {
           startTime: selectedSlot,
           additionalGuests: guests.map((g) => ({ name: g.name.trim(), serviceId: g.serviceId })),
           ...form,
+          atClientHome,
+          clientAddress: atClientHome ? form.clientAddress.trim() : undefined,
         },
       });
       const totalPeople = guests.length + 1;
@@ -338,6 +356,47 @@ export default function Booking() {
                 onSelectService={pickService}
               />
             </div>
+
+            <div className="form-row">
+              <label>Lieu du rendez-vous</label>
+              <div className="location-toggle" role="radiogroup" aria-label="Lieu du rendez-vous">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={!atClientHome}
+                  className={`location-option ${!atClientHome ? 'is-selected' : ''}`}
+                  onClick={() => pickLocation(false)}
+                >
+                  Je viens sur place
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={atClientHome}
+                  className={`location-option ${atClientHome ? 'is-selected' : ''}`}
+                  onClick={() => pickLocation(true)}
+                >
+                  À domicile (elle se déplace)
+                </button>
+              </div>
+            </div>
+
+            {atClientHome && (
+              <div className="form-row">
+                <label htmlFor="clientAddress">Votre adresse</label>
+                <input
+                  type="text"
+                  id="clientAddress"
+                  autoComplete="street-address"
+                  required
+                  minLength={5}
+                  maxLength={300}
+                  placeholder="Numéro, rue, code postal, ville"
+                  value={form.clientAddress}
+                  onChange={updateField('clientAddress')}
+                />
+              </div>
+            )}
 
             {guests.map((guest, i) => (
               <div className="guest-block" key={guest.key}>

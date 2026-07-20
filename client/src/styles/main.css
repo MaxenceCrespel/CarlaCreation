@@ -253,6 +253,22 @@ img { max-width: 100%; display: block; }
   transition: all 0.15s ease;
 }
 .category-tab.is-active { background: var(--color-accent); border-color: var(--color-accent); color: #fff; }
+
+/* Location toggle (booking: on-site vs à domicile) */
+.location-toggle { display: flex; gap: 12px; flex-wrap: wrap; }
+.location-option {
+  padding: 12px 20px;
+  border-radius: 999px;
+  border: 2px solid var(--color-bg-alt);
+  background: var(--color-white);
+  color: var(--color-text);
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.location-option.is-selected { background: var(--color-accent); border-color: var(--color-accent); color: #fff; }
+.location-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; background: var(--color-bg-alt); color: var(--color-accent-dark); }
 .category-tab:hover:not(.is-active) { border-color: var(--color-accent); }
 
 .service-pick-grid {
@@ -504,12 +520,15 @@ img { max-width: 100%; display: block; }
 .card { background: var(--color-white); border-radius: var(--radius-lg); padding: 32px; box-shadow: var(--shadow-md); }
 
 .form-row { margin-bottom: 18px; display: flex; flex-direction: column; gap: 6px; }
+.checkbox-row label { display: flex; flex-direction: row; align-items: center; gap: 8px; font-weight: 600; }
 .form-row.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 /* A bare `1fr` grid track won't shrink below its content's min-content size
    (same trap as flex's default min-width: auto) — without this, a wide
    child (e.g. a number input) can push its column, and the whole card,
    wider than intended instead of the two columns splitting evenly. */
 .form-row.two-col > div { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.travel-buffer-card { margin-bottom: 24px; }
+.travel-buffer-save { display: flex; align-items: flex-end; }
 
 label { font-size: 0.88rem; font-weight: 600; color: var(--color-text); }
 

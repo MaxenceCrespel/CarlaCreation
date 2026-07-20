@@ -10,6 +10,7 @@
 -- one-command bootstrap path for a brand new database (Docker, or a local
 -- Postgres you're setting up by hand).
 
+DROP TABLE IF EXISTS app_settings;
 DROP TABLE IF EXISTS daily_hours_ranges;
 DROP TABLE IF EXISTS daily_hours;
 DROP TABLE IF EXISTS reviews;
@@ -52,6 +53,8 @@ CREATE TABLE
         notes TEXT NOT NULL DEFAULT '',
         status TEXT NOT NULL DEFAULT 'pending',
         reminder_sent BOOLEAN NOT NULL DEFAULT false,
+        at_client_home BOOLEAN NOT NULL DEFAULT false,
+        client_address TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
@@ -107,6 +110,14 @@ CREATE TABLE
 
 CREATE INDEX IF NOT EXISTS "IDX_daily_hours_ranges_date" ON daily_hours_ranges (date);
 
+CREATE TABLE
+    IF NOT EXISTS app_settings (
+        id INTEGER PRIMARY KEY DEFAULT 1,
+        travel_buffer_minutes INTEGER NOT NULL DEFAULT 30
+    );
+
+INSERT INTO app_settings (id, travel_buffer_minutes) VALUES (1, 30);
+
 -- Records this bootstrap as already-applied so `npm run migration:run`
 -- doesn't try to re-run the (already-executed-via-this-file) InitSchema
 -- migration against this database later.
@@ -122,7 +133,9 @@ INSERT INTO
 VALUES
     (1784301498502, 'InitSchema1784301498502'),
     (1784321118308, 'AddGalleryBeforeAfter1784321118308'),
-    (1784394804417, 'AddReservationReminderSent1784394804417');
+    (1784394804417, 'AddReservationReminderSent1784394804417'),
+    (1784529892155, 'AddReservationLocation1784529892155'),
+    (1784531313161, 'AddAppSettings1784531313161');
 
 -- Admin account — username "carla", password "Carla0303!" (bcrypt, cost 12).
 -- Change this password after first login in a real deployment.

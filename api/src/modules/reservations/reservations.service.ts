@@ -6,9 +6,10 @@ import { DataSource, Repository } from 'typeorm';
 import { Reservation } from '../../database/entities/reservation.entity';
 import type { ReservationStatus } from '../../database/entities/reservation.entity';
 import { Service } from '../../database/entities/service.entity';
-import { getAvailableSlots, isValidDateString, toHHMM, toMinutes } from './slots.util';
+import { effectiveInterval, getAvailableSlots, intervalsOverlap, isValidDateString, toHHMM, toMinutes } from './slots.util';
 import { AdditionalGuestDto, AdminCreateReservationDto, CreateReservationDto } from './dto/reservation.dto';
 import { MailService } from '../mail/mail.service';
+import { SettingsService } from '../settings/settings.service';
 
 interface Guest {
   name: string;
@@ -38,6 +39,8 @@ interface ReservationWithServiceRow {
   created_at: Date;
   service_id: number;
   service_name: string;
+  at_client_home: boolean;
+  client_address: string | null;
 }
 
 interface ReminderCandidateRow {
@@ -49,6 +52,8 @@ interface ReminderCandidateRow {
   start_time: string;
   end_time: string;
   service_name: string;
+  at_client_home: boolean;
+  client_address: string | null;
 }
 
 @Injectable()
@@ -60,12 +65,18 @@ export class ReservationsService {
     @InjectRepository(Reservation) private readonly reservationRepo: Repository<Reservation>,
     @InjectRepository(Service) private readonly serviceRepo: Repository<Service>,
     private readonly mailService: MailService,
+    private readonly settingsService: SettingsService,
   ) {}
 
-  async getAvailability(date: string, serviceIds: number[]): Promise<{ date: string; serviceIds: number[]; slots: string[] }> {
+  async getAvailability(
+    date: string,
+    serviceIds: number[],
+    atClientHome = false,
+  ): Promise<{ date: string; serviceIds: number[]; slots: string[] }> {
     const services = await this.resolveServices(serviceIds, { activeOnly: true });
     const totalDuration = services.reduce((sum, s) => sum + s.duration_minutes, 0);
-    const slots = await getAvailableSlots(this.dataSource, date, totalDuration);
+    const travelBufferMinutes = await this.settingsService.getTravelBufferMinutes();
+    const slots = await getAvailableSlots(this.dataSource, date, totalDuration, atClientHome, travelBufferMinutes);
     return { date, serviceIds, slots };
   }
 
@@ -74,15 +85,16 @@ export class ReservationsService {
   // returns the very first open slot for the combined duration of the given
   // services — powers the "next available slot" suggestion on the booking
   // page so clients don't have to hunt through the day picker themselves.
-  async findNextAvailable(serviceIds: number[]): Promise<{ date: string; startTime: string } | null> {
+  async findNextAvailable(serviceIds: number[], atClientHome = false): Promise<{ date: string; startTime: string } | null> {
     const services = await this.resolveServices(serviceIds, { activeOnly: true });
     const totalDuration = services.reduce((sum, s) => sum + s.duration_minutes, 0);
+    const travelBufferMinutes = await this.settingsService.getTravelBufferMinutes();
 
     const HORIZON_DAYS = 60;
     const cursor = new Date();
     for (let i = 0; i < HORIZON_DAYS; i += 1) {
       const dateStr = cursor.toISOString().slice(0, 10);
-      const slots = await getAvailableSlots(this.dataSource, dateStr, totalDuration);
+      const slots = await getAvailableSlots(this.dataSource, dateStr, totalDuration, atClientHome, travelBufferMinutes);
       if (slots.length > 0) {
         return { date: dateStr, startTime: slots[0] };
       }
@@ -107,8 +119,10 @@ export class ReservationsService {
       { activeOnly: true },
     );
     const totalDuration = services.reduce((sum, s) => sum + s.duration_minutes, 0);
+    const atClientHome = dto.atClientHome ?? false;
 
-    const available = await getAvailableSlots(this.dataSource, dto.date, totalDuration);
+    const travelBufferMinutes = await this.settingsService.getTravelBufferMinutes();
+    const available = await getAvailableSlots(this.dataSource, dto.date, totalDuration, atClientHome, travelBufferMinutes);
     if (!available.includes(dto.startTime)) {
       throw new ConflictException("Ce créneau n'est plus disponible. Merci d'en choisir un autre.");
     }
@@ -120,6 +134,8 @@ export class ReservationsService {
       clientPhone: dto.clientPhone,
       notes: dto.notes || '',
       status: 'pending',
+      atClientHome,
+      clientAddress: atClientHome ? dto.clientAddress ?? null : null,
     });
 
     await this.mailService.sendBookingReceived({
@@ -128,6 +144,8 @@ export class ReservationsService {
       date: result.date,
       guests: result.guests,
       groupId: result.groupId,
+      atClientHome,
+      clientAddress: result.clientAddress,
     });
     await this.mailService.sendAdminNewBookingNotification({
       clientName: dto.clientName,
@@ -135,6 +153,8 @@ export class ReservationsService {
       clientPhone: dto.clientPhone,
       date: result.date,
       guests: result.guests,
+      atClientHome,
+      clientAddress: result.clientAddress,
     });
 
     return result;
@@ -160,24 +180,26 @@ export class ReservationsService {
       { activeOnly: false },
     );
     const totalDuration = services.reduce((sum, s) => sum + s.duration_minutes, 0);
+    const atClientHome = dto.atClientHome ?? false;
 
+    const travelBufferMinutes = await this.settingsService.getTravelBufferMinutes();
     const startMin = toMinutes(dto.startTime);
     const endMin = startMin + totalDuration;
+    const candidate = effectiveInterval(startMin, endMin, atClientHome, travelBufferMinutes);
 
     const existing = await this.reservationRepo
       .createQueryBuilder('r')
-      .select(['r.start_time', 'r.end_time'])
+      .select(['r.start_time', 'r.end_time', 'r.at_client_home'])
       .where('r.reservation_date = :date', { date: dto.date })
       .andWhere('r.status NOT IN (:...excluded)', { excluded: ['cancelled', 'refused'] })
       .getMany();
 
     const overlaps = existing.some((r) => {
-      const busyStart = toMinutes(r.start_time);
-      const busyEnd = toMinutes(r.end_time);
-      return startMin < busyEnd && endMin > busyStart;
+      const busy = effectiveInterval(toMinutes(r.start_time), toMinutes(r.end_time), r.at_client_home, travelBufferMinutes);
+      return intervalsOverlap(candidate, busy);
     });
     if (overlaps) {
-      throw new ConflictException('Ce créneau chevauche une réservation existante.');
+      throw new ConflictException('Ce créneau chevauche une réservation existante (ou son temps de trajet).');
     }
 
     const status = dto.status || 'confirmed';
@@ -188,6 +210,8 @@ export class ReservationsService {
       clientPhone: dto.clientPhone,
       notes: dto.notes || '',
       status,
+      atClientHome,
+      clientAddress: atClientHome ? dto.clientAddress ?? null : null,
     });
 
     // A manual booking is usually entered as already-confirmed, so send the
@@ -200,6 +224,8 @@ export class ReservationsService {
         guests: result.guests,
         groupId: result.groupId,
         status,
+        atClientHome,
+        clientAddress: result.clientAddress,
       });
     } else {
       await this.mailService.sendBookingReceived({
@@ -208,6 +234,8 @@ export class ReservationsService {
         date: result.date,
         guests: result.guests,
         groupId: result.groupId,
+        atClientHome,
+        clientAddress: result.clientAddress,
       });
     }
 
@@ -234,8 +262,17 @@ export class ReservationsService {
   private async insertGroup(
     guests: Guest[],
     services: Service[],
-    common: { date: string; startTime: string; clientEmail: string; clientPhone: string; notes: string; status: ReservationStatus },
-  ): Promise<{ groupId: string; date: string; startTime: string; endTime: string; guests: BookedGuest[] }> {
+    common: {
+      date: string;
+      startTime: string;
+      clientEmail: string;
+      clientPhone: string;
+      notes: string;
+      status: ReservationStatus;
+      atClientHome: boolean;
+      clientAddress: string | null;
+    },
+  ): Promise<{ groupId: string; date: string; startTime: string; endTime: string; guests: BookedGuest[]; atClientHome: boolean; clientAddress: string | null }> {
     const groupId = crypto.randomUUID();
     const bookedGuests: BookedGuest[] = [];
     let cursor = toMinutes(common.startTime);
@@ -258,6 +295,8 @@ export class ReservationsService {
           end_time: endTime,
           notes: common.notes,
           status: common.status,
+          at_client_home: common.atClientHome,
+          client_address: common.clientAddress,
         });
 
         bookedGuests.push({
@@ -278,6 +317,8 @@ export class ReservationsService {
       startTime: common.startTime,
       endTime: toHHMM(cursor),
       guests: bookedGuests,
+      atClientHome: common.atClientHome,
+      clientAddress: common.clientAddress,
     };
   }
 
@@ -285,6 +326,7 @@ export class ReservationsService {
     return this.dataSource.query(
       `SELECT r.id, r.group_id, r.client_name, r.client_email, r.client_phone, r.reservation_date,
               r.start_time, r.end_time, r.notes, r.status, r.created_at, r.service_id,
+              r.at_client_home, r.client_address,
               s.name AS service_name
        FROM reservations r
        JOIN services s ON s.id = r.service_id
@@ -298,12 +340,22 @@ export class ReservationsService {
       throw new NotFoundException('Réservation introuvable.');
     }
 
-    const rows: { group_id: string | null; client_name: string; client_email: string; reservation_date: string; start_time: string; end_time: string; service_name: string }[] =
-      await this.dataSource.query(
-        `SELECT r.group_id, r.client_name, r.client_email, r.reservation_date, r.start_time, r.end_time, s.name AS service_name
-         FROM reservations r JOIN services s ON s.id = r.service_id WHERE r.id = $1`,
-        [id],
-      );
+    const rows: {
+      group_id: string | null;
+      client_name: string;
+      client_email: string;
+      reservation_date: string;
+      start_time: string;
+      end_time: string;
+      service_name: string;
+      at_client_home: boolean;
+      client_address: string | null;
+    }[] = await this.dataSource.query(
+      `SELECT r.group_id, r.client_name, r.client_email, r.reservation_date, r.start_time, r.end_time,
+              r.at_client_home, r.client_address, s.name AS service_name
+       FROM reservations r JOIN services s ON s.id = r.service_id WHERE r.id = $1`,
+      [id],
+    );
     const row = rows[0];
     if (row) {
       await this.mailService.sendStatusUpdate({
@@ -312,6 +364,8 @@ export class ReservationsService {
         date: row.reservation_date,
         status,
         groupId: row.group_id ?? undefined,
+        atClientHome: row.at_client_home,
+        clientAddress: row.client_address,
         guests: [{ name: row.client_name, serviceName: row.service_name, startTime: row.start_time, endTime: row.end_time }],
       });
     }
@@ -332,12 +386,21 @@ export class ReservationsService {
       throw new NotFoundException('Groupe de réservations introuvable.');
     }
 
-    const rows: { client_name: string; client_email: string; reservation_date: string; start_time: string; end_time: string; service_name: string }[] =
-      await this.dataSource.query(
-        `SELECT r.client_name, r.client_email, r.reservation_date, r.start_time, r.end_time, s.name AS service_name
-         FROM reservations r JOIN services s ON s.id = r.service_id WHERE r.group_id = $1 ORDER BY r.start_time ASC`,
-        [groupId],
-      );
+    const rows: {
+      client_name: string;
+      client_email: string;
+      reservation_date: string;
+      start_time: string;
+      end_time: string;
+      service_name: string;
+      at_client_home: boolean;
+      client_address: string | null;
+    }[] = await this.dataSource.query(
+      `SELECT r.client_name, r.client_email, r.reservation_date, r.start_time, r.end_time,
+              r.at_client_home, r.client_address, s.name AS service_name
+       FROM reservations r JOIN services s ON s.id = r.service_id WHERE r.group_id = $1 ORDER BY r.start_time ASC`,
+      [groupId],
+    );
 
     if (rows.length > 0) {
       const [primary] = rows;
@@ -347,6 +410,8 @@ export class ReservationsService {
         date: primary.reservation_date,
         status,
         groupId,
+        atClientHome: primary.at_client_home,
+        clientAddress: primary.client_address,
         guests: rows.map((r) => ({ name: r.client_name, serviceName: r.service_name, startTime: r.start_time, endTime: r.end_time })),
       });
     }
@@ -372,8 +437,11 @@ export class ReservationsService {
       end_time: string;
       status: ReservationStatus;
       service_name: string;
+      at_client_home: boolean;
+      client_address: string | null;
     }[] = await this.dataSource.query(
-      `SELECT r.client_name, r.client_email, r.reservation_date, r.start_time, r.end_time, r.status, s.name AS service_name
+      `SELECT r.client_name, r.client_email, r.reservation_date, r.start_time, r.end_time, r.status,
+              r.at_client_home, r.client_address, s.name AS service_name
        FROM reservations r JOIN services s ON s.id = r.service_id WHERE r.group_id = $1 ORDER BY r.start_time ASC`,
       [groupId],
     );
@@ -388,6 +456,8 @@ export class ReservationsService {
       clientEmail: primary.client_email,
       date: primary.reservation_date,
       status: primary.status,
+      atClientHome: primary.at_client_home,
+      clientAddress: primary.client_address,
       guests: rows.map((r) => ({ name: r.client_name, serviceName: r.service_name, startTime: r.start_time, endTime: r.end_time })),
     };
   }
@@ -428,7 +498,7 @@ export class ReservationsService {
 
     const rows: ReminderCandidateRow[] = await this.dataSource.query(
       `SELECT r.id, r.group_id, r.client_name, r.client_email, r.reservation_date, r.start_time, r.end_time,
-              s.name AS service_name
+              r.at_client_home, r.client_address, s.name AS service_name
        FROM reservations r
        JOIN services s ON s.id = r.service_id
        WHERE r.status = 'confirmed' AND r.reminder_sent = false`,
@@ -455,6 +525,8 @@ export class ReservationsService {
         clientEmail: primary.client_email,
         date: primary.reservation_date,
         groupId: primary.group_id ?? undefined,
+        atClientHome: primary.at_client_home,
+        clientAddress: primary.client_address,
         guests: groupRows.map((r) => ({ name: r.client_name, serviceName: r.service_name, startTime: r.start_time, endTime: r.end_time })),
       });
       await this.reservationRepo.update(

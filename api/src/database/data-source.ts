@@ -10,6 +10,7 @@ import { ContactMessage } from './entities/contact-message.entity';
 import { Review } from './entities/review.entity';
 import { DailyHours } from './entities/daily-hours.entity';
 import { DailyHoursRange } from './entities/daily-hours-range.entity';
+import { AppSettings } from './entities/app-settings.entity';
 
 // Standalone DataSource used by the TypeORM CLI (migrations) and by
 // standalone scripts (seedAdmin.ts, seed.ts) that run outside the Nest DI
@@ -18,7 +19,7 @@ import { DailyHoursRange } from './entities/daily-hours-range.entity';
 export const AppDataSource = new DataSource({
   type: 'postgres',
   url: config.DATABASE_URL,
-  entities: [Admin, Service, Reservation, Gallery, ContactMessage, Review, DailyHours, DailyHoursRange],
+  entities: [Admin, Service, Reservation, Gallery, ContactMessage, Review, DailyHours, DailyHoursRange, AppSettings],
   migrations: [__dirname + '/migrations/*.{ts,js}'],
   synchronize: false,
 });

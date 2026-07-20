@@ -84,6 +84,10 @@ export default function ManageReservation() {
               </span>
             </p>
             <p><strong>Date :</strong> {formatDateFr(reservation.date)}</p>
+            <p>
+              <strong>Lieu :</strong>{' '}
+              {reservation.atClientHome ? `À votre domicile${reservation.clientAddress ? ` — ${reservation.clientAddress}` : ''}` : 'Sur place'}
+            </p>
 
             <table style={{ width: '100%', borderCollapse: 'collapse', margin: '16px 0' }}>
               <thead>

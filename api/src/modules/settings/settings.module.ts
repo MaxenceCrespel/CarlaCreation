@@ -8,5 +8,6 @@ import { SettingsService } from './settings.service';
   imports: [AuthModule],
   controllers: [HoursController, AdminSettingsController],
   providers: [SettingsService],
+  exports: [SettingsService],
 })
 export class SettingsModule {}

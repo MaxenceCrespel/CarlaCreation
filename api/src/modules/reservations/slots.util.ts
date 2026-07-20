@@ -4,6 +4,20 @@ import { getEffectiveHoursForDate } from '../settings/daily-hours.util';
 
 const SLOT_STEP_MINUTES = 15;
 
+// A booking "à domicile" (Carla travels to the client) blocks extra time on
+// both sides for travel — expand its busy interval before comparing it
+// against anything else. Studio bookings are unaffected. bufferMinutes is
+// the admin-configurable setting (app_settings.travel_buffer_minutes), not
+// a constant — passed in explicitly rather than read from anywhere here.
+export function effectiveInterval(start: number, end: number, atClientHome: boolean, bufferMinutes: number): { start: number; end: number } {
+  if (!atClientHome) return { start, end };
+  return { start: start - bufferMinutes, end: end + bufferMinutes };
+}
+
+export function intervalsOverlap(a: { start: number; end: number }, b: { start: number; end: number }): boolean {
+  return a.start < b.end && a.end > b.start;
+}
+
 export function toMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(':').map(Number);
   return h * 60 + m;
@@ -27,7 +41,13 @@ export function isValidDateString(dateStr: string): boolean {
 // override if set, otherwise closed) — see getEffectiveHoursForDate. A day
 // can have several open ranges (e.g. a lunch break); a booking must fit
 // entirely inside one range, it never spans the gap between two.
-export async function getAvailableSlots(dataSource: DataSource, dateStr: string, durationMinutes: number): Promise<string[]> {
+export async function getAvailableSlots(
+  dataSource: DataSource,
+  dateStr: string,
+  durationMinutes: number,
+  atClientHome = false,
+  travelBufferMinutes = 0,
+): Promise<string[]> {
   if (!isValidDateString(dateStr)) return [];
 
   const hours = await getEffectiveHoursForDate(dataSource, dateStr);
@@ -36,12 +56,12 @@ export async function getAvailableSlots(dataSource: DataSource, dateStr: string,
   const existing = await dataSource
     .getRepository(Reservation)
     .createQueryBuilder('r')
-    .select(['r.start_time', 'r.end_time'])
+    .select(['r.start_time', 'r.end_time', 'r.at_client_home'])
     .where('r.reservation_date = :dateStr', { dateStr })
     .andWhere('r.status NOT IN (:...excluded)', { excluded: ['cancelled', 'refused'] })
     .getMany();
 
-  const busy = existing.map((r) => ({ start: toMinutes(r.start_time), end: toMinutes(r.end_time) }));
+  const busy = existing.map((r) => effectiveInterval(toMinutes(r.start_time), toMinutes(r.end_time), r.at_client_home, travelBufferMinutes));
 
   const now = new Date();
   const isToday = dateStr === now.toISOString().slice(0, 10);
@@ -51,12 +71,18 @@ export async function getAvailableSlots(dataSource: DataSource, dateStr: string,
   for (const range of hours.ranges) {
     const openMin = toMinutes(range.openTime);
     const closeMin = toMinutes(range.closeTime);
+    // À-domicile also needs travel time to/from the edges of the open
+    // window itself, not just around other bookings — otherwise the very
+    // first slot of the day would ignore the trip to get there at all.
+    const rangeStart = atClientHome ? openMin + travelBufferMinutes : openMin;
+    const rangeEnd = atClientHome ? closeMin - travelBufferMinutes : closeMin;
 
-    for (let start = openMin; start + durationMinutes <= closeMin; start += SLOT_STEP_MINUTES) {
+    for (let start = rangeStart; start + durationMinutes <= rangeEnd; start += SLOT_STEP_MINUTES) {
       const end = start + durationMinutes;
       if (isToday && start <= nowMinutes) continue;
 
-      const overlaps = busy.some((b) => start < b.end && end > b.start);
+      const candidate = effectiveInterval(start, end, atClientHome, travelBufferMinutes);
+      const overlaps = busy.some((b) => intervalsOverlap(candidate, b));
       if (!overlaps) {
         slots.push(toHHMM(start));
       }

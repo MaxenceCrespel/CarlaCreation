@@ -5,6 +5,7 @@ import { ReservationsService } from './reservations.service';
 import { Reservation } from '../../database/entities/reservation.entity';
 import { Service } from '../../database/entities/service.entity';
 import { MailService } from '../mail/mail.service';
+import { SettingsService } from '../settings/settings.service';
 
 describe('ReservationsService', () => {
   let service: ReservationsService;
@@ -17,6 +18,7 @@ describe('ReservationsService', () => {
     sendAdminNewBookingNotification: jest.Mock;
     sendReminder: jest.Mock;
   };
+  let settingsService: { getTravelBufferMinutes: jest.Mock };
 
   const HAIRCUT = { id: 1, name: 'Coupe Femme', duration_minutes: 45, active: true };
   const MANICURE = { id: 7, name: 'Manucure Classique', duration_minutes: 30, active: true };
@@ -44,6 +46,9 @@ describe('ReservationsService', () => {
       sendAdminNewBookingNotification: jest.fn(),
       sendReminder: jest.fn(),
     };
+    // 30 minutes, matching the app_settings default — kept in sync with the
+    // "travelBufferMinutes is 30" assumption in the tests below.
+    settingsService = { getTravelBufferMinutes: jest.fn().mockResolvedValue(30) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -52,6 +57,7 @@ describe('ReservationsService', () => {
         { provide: getRepositoryToken(Reservation), useValue: reservationRepo },
         { provide: getRepositoryToken(Service), useValue: serviceRepo },
         { provide: MailService, useValue: mailService },
+        { provide: SettingsService, useValue: settingsService },
       ],
     }).compile();
 
@@ -102,6 +108,61 @@ describe('ReservationsService', () => {
         status: 'confirmed',
       } as any),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('createManual rejects a slot that only overlaps the travel buffer of an existing home visit', async () => {
+    // travelBufferMinutes is 30 — an existing 10:15–11:00 à-domicile visit
+    // busies 09:45–11:30, so a studio booking starting at 11:00 collides.
+    serviceRepo.findOne.mockResolvedValue(HAIRCUT);
+    reservationRepo.createQueryBuilder.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getMany: jest.fn().mockResolvedValue([{ start_time: '10:15', end_time: '11:00', at_client_home: true }]),
+    });
+
+    await expect(
+      service.createManual({
+        serviceId: 1,
+        clientName: 'Test',
+        clientEmail: 'test@example.com',
+        clientPhone: '0600000000',
+        date: '2099-01-01',
+        startTime: '11:00',
+        status: 'confirmed',
+      } as any),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('createManual stores atClientHome and clientAddress on every guest row', async () => {
+    serviceRepo.findOne.mockResolvedValue(HAIRCUT);
+    noOverlap();
+
+    const insertCalls: Record<string, unknown>[] = [];
+    dataSource.transaction.mockImplementationOnce(async (fn) => {
+      const manager = {
+        insert: jest.fn(async (_entity: unknown, payload: Record<string, unknown>) => {
+          insertCalls.push(payload);
+          return { identifiers: [{ id: 100 + insertCalls.length }] };
+        }),
+      };
+      return fn(manager);
+    });
+
+    await service.createManual({
+      serviceId: 1,
+      clientName: 'Test',
+      clientEmail: 'test@example.com',
+      clientPhone: '0600000000',
+      date: '2099-01-01',
+      startTime: '10:00',
+      status: 'confirmed',
+      atClientHome: true,
+      clientAddress: '12 rue du Test, 59000 Lille',
+    } as any);
+
+    expect(insertCalls).toHaveLength(1);
+    expect(insertCalls[0]).toMatchObject({ at_client_home: true, client_address: '12 rue du Test, 59000 Lille' });
   });
 
   it('createManual books consecutive guests back-to-back, in order', async () => {
