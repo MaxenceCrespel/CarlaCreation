@@ -4,7 +4,7 @@ import { DataSource } from 'typeorm';
 import { DailyHours } from '../../database/entities/daily-hours.entity';
 import { DailyHoursRange } from '../../database/entities/daily-hours-range.entity';
 import { AppSettings } from '../../database/entities/app-settings.entity';
-import { isValidDateString } from '../reservations/slots.util';
+import { isValidDateString, localDateString } from '../reservations/slots.util';
 import { getEffectiveHoursForDate, EffectiveDayHours } from './daily-hours.util';
 import { UpdateDailyHoursDto } from './dto/settings.dto';
 
@@ -26,7 +26,7 @@ export class SettingsService {
     for (let i = 0; i < days; i += 1) {
       const d = new Date(start);
       d.setDate(d.getDate() + i);
-      const dateStr = d.toISOString().slice(0, 10);
+      const dateStr = localDateString(d);
       result.push(await getEffectiveHoursForDate(this.dataSource, dateStr));
     }
     return result;

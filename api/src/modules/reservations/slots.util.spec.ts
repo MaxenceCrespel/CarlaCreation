@@ -1,4 +1,4 @@
-import { getAvailableSlots, isValidDateString, toHHMM, toMinutes } from './slots.util';
+import { getAvailableSlots, isValidDateString, localDateString, toHHMM, toMinutes } from './slots.util';
 import { DailyHours } from '../../database/entities/daily-hours.entity';
 import { DailyHoursRange } from '../../database/entities/daily-hours-range.entity';
 import { Reservation } from '../../database/entities/reservation.entity';
@@ -27,6 +27,24 @@ describe('toMinutes / toHHMM', () => {
   it('round-trip correctly', () => {
     expect(toMinutes('09:15')).toBe(555);
     expect(toHHMM(555)).toBe('09:15');
+  });
+});
+
+describe('localDateString', () => {
+  const originalTZ = process.env.TZ;
+  afterEach(() => {
+    process.env.TZ = originalTZ;
+  });
+
+  it("uses the process's local time, not UTC — the actual bug this fixes", () => {
+    process.env.TZ = 'Europe/Paris';
+    // 2026-01-15T23:30:00Z is still Jan 15 in UTC, but already Jan 16 00:30
+    // in Paris (UTC+1 in January) — a plain toISOString().slice(0, 10)
+    // would say "today" is still the 15th for over an hour after Paris
+    // midnight, which is exactly the bug the admin ran into.
+    const d = new Date('2026-01-15T23:30:00Z');
+    expect(localDateString(d)).toBe('2026-01-16');
+    expect(d.toISOString().slice(0, 10)).toBe('2026-01-15');
   });
 });
 
@@ -152,6 +170,21 @@ describe('getAvailableSlots', () => {
     expect(slots).not.toContain('09:00');
     expect(slots).not.toContain('10:15');
     expect(slots).toContain('10:45');
+
+    jest.useRealTimers();
+  });
+
+  it('à-domicile also needs the travel buffer counted from right now, not just "not yet past"', async () => {
+    // 11:32 now — a home visit can't start at 11:45 (only 13 min notice for
+    // a 30-min trip); the first honest slot is 12:15.
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-01T11:32:00'));
+    const dataSource = fakeDataSource({ isClosed: false, ranges: [{ open_time: '09:00', close_time: '19:00' }] });
+
+    const slots = await getAvailableSlots(dataSource, '2026-08-01', 15, true, 30);
+
+    expect(slots).not.toContain('11:45');
+    expect(slots).not.toContain('12:00');
+    expect(slots).toContain('12:15');
 
     jest.useRealTimers();
   });

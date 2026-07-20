@@ -69,7 +69,8 @@ export class MailService {
       input.guests.length > 1
         ? `Nous avons bien reçu votre demande de rendez-vous pour ${input.guests.length} personnes. Elle est actuellement <strong>en attente de confirmation</strong>.`
         : `Nous avons bien reçu votre demande de rendez-vous. Elle est actuellement <strong>en attente de confirmation</strong>.`;
-    await this.send(input.clientEmail, subject, this.renderBookingEmail(input, intro));
+    // Not confirmed yet — the studio's exact address stays private until it is.
+    await this.send(input.clientEmail, subject, this.renderBookingEmail(input, intro, undefined, false));
   }
 
   // Sent to the studio's own inbox (SMTP_USER) so the absence of an admin
@@ -122,7 +123,9 @@ export class MailService {
       input.guests.length > 1
         ? `Petit rappel : vous avez rendez-vous demain pour ${input.guests.length} personnes.`
         : `Petit rappel : vous avez rendez-vous demain.`;
-    await this.send(input.clientEmail, subject, this.renderBookingEmail(input, intro));
+    // Reminders only ever go out for already-confirmed bookings (see
+    // ReservationsService.dispatchDueReminders), so the address is safe to show.
+    await this.send(input.clientEmail, subject, this.renderBookingEmail(input, intro, undefined, true));
   }
 
   async sendStatusUpdate(input: BookingEmailInput & { status: string }): Promise<void> {
@@ -143,10 +146,12 @@ export class MailService {
       intro = `Votre rendez-vous a été <strong>annulé</strong>.`;
     }
 
-    await this.send(input.clientEmail, subject, this.renderBookingEmail(input, intro, label));
+    // Only reveal the studio's exact address once the appointment is
+    // actually confirmed — not on a refusal/cancellation notice.
+    await this.send(input.clientEmail, subject, this.renderBookingEmail(input, intro, label, input.status === 'confirmed'));
   }
 
-  private renderBookingEmail(input: BookingEmailInput, introHtml: string, statusLabel?: string): string {
+  private renderBookingEmail(input: BookingEmailInput, introHtml: string, statusLabel?: string, revealAddress = false): string {
     const rows = input.guests
       .map(
         (g) => `
@@ -162,9 +167,14 @@ export class MailService {
       ? `<p style="margin-top:16px;"><a href="${config.PUBLIC_ORIGIN}/mon-rendez-vous/${input.groupId}" style="color:#9A5F4B;">Voir ou annuler mon rendez-vous</a></p>`
       : '';
 
+    // The client's own home address (à-domicile) isn't sensitive — they typed
+    // it in themselves. The studio's address is different: it's not shown
+    // until the appointment is actually confirmed (see revealAddress).
     const locationLine = input.atClientHome
       ? `<p style="margin:0 0 4px;"><strong>Lieu :</strong> à votre domicile${input.clientAddress ? ` — ${escapeHtml(input.clientAddress)}` : ''}</p>`
-      : `<p style="margin:0 0 4px;"><strong>Lieu :</strong> chez ${escapeHtml(siteConfig.siteName)} — ${escapeHtml(siteConfig.siteAddress)}</p>`;
+      : `<p style="margin:0 0 4px;"><strong>Lieu :</strong> chez ${escapeHtml(siteConfig.siteName)}${
+          revealAddress ? ` — ${escapeHtml(siteConfig.siteAddress)}` : " — l'adresse exacte vous sera communiquée à la confirmation"
+        }</p>`;
 
     return `
       <div style="font-family: Segoe UI, Arial, sans-serif; color:#3A2E27; max-width:560px; margin:0 auto;">
@@ -186,7 +196,7 @@ export class MailService {
         </table>
         ${manageLink}
         <p style="margin-top:24px;">Une question ? Appelez-nous au ${escapeHtml(siteConfig.sitePhone)} ou répondez à cet email.</p>
-        <p style="color:#6B5C51;font-size:0.85em;margin-top:32px;">${escapeHtml(siteConfig.siteName)} — ${escapeHtml(siteConfig.siteAddress)}</p>
+        <p style="color:#6B5C51;font-size:0.85em;margin-top:32px;">${escapeHtml(siteConfig.siteName)}${revealAddress ? ` — ${escapeHtml(siteConfig.siteAddress)}` : ''}</p>
       </div>
     `;
   }

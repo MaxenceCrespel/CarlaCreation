@@ -29,6 +29,17 @@ export function toHHMM(mins: number): string {
   return `${h}:${m}`;
 }
 
+// 'YYYY-MM-DD' for a given Date, in the process's local timezone (set to
+// Europe/Paris in config.ts). Deliberately NOT `date.toISOString().slice(0,
+// 10)` — toISOString() is always UTC regardless of TZ, so around
+// midnight-2am Paris time it silently returns the previous day.
+export function localDateString(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 export function isValidDateString(dateStr: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
   const d = new Date(`${dateStr}T00:00:00`);
@@ -64,8 +75,12 @@ export async function getAvailableSlots(
   const busy = existing.map((r) => effectiveInterval(toMinutes(r.start_time), toMinutes(r.end_time), r.at_client_home, travelBufferMinutes));
 
   const now = new Date();
-  const isToday = dateStr === now.toISOString().slice(0, 10);
+  const isToday = dateStr === localDateString(now);
+  // À-domicile also can't start immediately from right now — she needs the
+  // travel buffer just to physically get there, same as at the edges of the
+  // open window (see rangeStart below).
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const pastCutoff = atClientHome ? nowMinutes + travelBufferMinutes : nowMinutes;
 
   const slots: string[] = [];
   for (const range of hours.ranges) {
@@ -79,7 +94,7 @@ export async function getAvailableSlots(
 
     for (let start = rangeStart; start + durationMinutes <= rangeEnd; start += SLOT_STEP_MINUTES) {
       const end = start + durationMinutes;
-      if (isToday && start <= nowMinutes) continue;
+      if (isToday && start <= pastCutoff) continue;
 
       const candidate = effectiveInterval(start, end, atClientHome, travelBufferMinutes);
       const overlaps = busy.some((b) => intervalsOverlap(candidate, b));

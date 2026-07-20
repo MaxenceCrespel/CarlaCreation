@@ -16,13 +16,22 @@ const HOURS_PREVIEW_DAYS = 14;
 const DAY_PICKER_DAYS = 30;
 const MAX_ADDITIONAL_GUESTS = 5;
 
+// 'YYYY-MM-DD' in the visitor's own local time — not toISOString() (always
+// UTC), which would show yesterday's date for the first couple hours after
+// midnight local time.
+function localDateString(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
 function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+  return localDateString(new Date());
 }
 function maxDateISO() {
   const d = new Date();
   d.setMonth(d.getMonth() + 3);
-  return d.toISOString().slice(0, 10);
+  return localDateString(d);
 }
 function formatShortDate(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -120,6 +129,7 @@ export default function Booking() {
   const [feedback, setFeedback] = useState(null);
   const [manageGroupId, setManageGroupId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [showRecap, setShowRecap] = useState(false);
 
   const dateSectionRef = useRef(null);
 
@@ -140,6 +150,17 @@ export default function Booking() {
   const totalDuration = useMemo(
     () => serviceIds.reduce((sum, id) => sum + (services.find((s) => s.id === id)?.duration_minutes ?? 0), 0),
     [serviceIds, services],
+  );
+  const totalPrice = useMemo(
+    () => serviceIds.reduce((sum, id) => sum + (services.find((s) => s.id === id)?.price_cents ?? 0), 0),
+    [serviceIds, services],
+  );
+  const recapGuests = useMemo(
+    () => [
+      { name: form.clientName, service: selectedService },
+      ...guests.map((g) => ({ name: g.name, service: services.find((s) => s.id === g.serviceId) || null })),
+    ],
+    [form.clientName, selectedService, guests, services],
   );
 
   function pickCategory(key) {
@@ -247,11 +268,23 @@ export default function Booking() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, serviceIds.join(','), allGuestsHaveService, atClientHome]);
 
+  useEffect(() => {
+    if (!showRecap) return undefined;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape' && !submitting) setShowRecap(false);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [showRecap, submitting]);
+
   function updateField(field) {
     return (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
   }
 
-  async function handleSubmit(e) {
+  // Validates the form and, if everything checks out, opens the recap
+  // modal instead of submitting immediately — the actual API call happens
+  // in confirmBooking, once the client has reviewed and confirmed it.
+  function handleSubmit(e) {
     e.preventDefault();
     setFeedback(null);
     setManageGroupId(null);
@@ -273,6 +306,10 @@ export default function Booking() {
       return;
     }
 
+    setShowRecap(true);
+  }
+
+  async function confirmBooking() {
     setSubmitting(true);
     try {
       const { reservation } = await apiFetch('/reservations', {
@@ -309,6 +346,7 @@ export default function Booking() {
       showToast(err.message, 'error');
     } finally {
       setSubmitting(false);
+      setShowRecap(false);
     }
   }
 
@@ -564,12 +602,67 @@ export default function Booking() {
               </div>
             )}
 
-            <button type="submit" className="btn btn-primary btn-block form-actions" disabled={submitting}>
-              {submitting ? 'Envoi en cours…' : 'Confirmer ma demande de rendez-vous'}
+            <button type="submit" className="btn btn-primary btn-block form-actions">
+              Vérifier et confirmer ma demande
             </button>
           </form>
         </div>
       </section>
+
+      {showRecap && (
+        <div className="modal-overlay" onClick={() => !submitting && setShowRecap(false)}>
+          <div className="modal-card" role="dialog" aria-modal="true" aria-label="Récapitulatif du rendez-vous" onClick={(e) => e.stopPropagation()}>
+            <h2>Récapitulatif de votre rendez-vous</h2>
+
+            <dl className="recap-list">
+              <div>
+                <dt>Date</dt>
+                <dd>{DAY_NAMES[dayOfWeekFor(date)]} {formatShortDate(date)} à {selectedSlot}</dd>
+              </div>
+              <div>
+                <dt>Lieu</dt>
+                <dd>{atClientHome ? `À votre domicile — ${form.clientAddress.trim()}` : 'Sur place'}</dd>
+              </div>
+              <div>
+                <dt>{recapGuests.length > 1 ? 'Personnes' : 'Prestation'}</dt>
+                <dd>
+                  <ul className="recap-guests">
+                    {recapGuests.map((g, i) => (
+                      <li key={i}>
+                        {recapGuests.length > 1 && <strong>{g.name} — </strong>}
+                        {g.service ? `${g.service.name} (${formatDuration(g.service.duration_minutes)})` : '—'}
+                      </li>
+                    ))}
+                  </ul>
+                </dd>
+              </div>
+              <div>
+                <dt>Durée / prix total</dt>
+                <dd>{formatDuration(totalDuration)} — {formatPrice(totalPrice)}</dd>
+              </div>
+              <div>
+                <dt>Contact</dt>
+                <dd>{form.clientEmail}<br />{form.clientPhone}</dd>
+              </div>
+              {form.notes.trim() && (
+                <div>
+                  <dt>Message</dt>
+                  <dd>{form.notes.trim()}</dd>
+                </div>
+              )}
+            </dl>
+
+            <div className="modal-actions">
+              <button type="button" className="btn btn-outline" onClick={() => setShowRecap(false)} disabled={submitting}>
+                Modifier
+              </button>
+              <button type="button" className="btn btn-primary" onClick={confirmBooking} disabled={submitting}>
+                {submitting ? 'Envoi en cours…' : 'Confirmer le rendez-vous'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

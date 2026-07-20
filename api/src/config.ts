@@ -1,5 +1,12 @@
 import 'dotenv/config';
 
+// The business (opening hours, "is this slot in the past", the 24h reminder
+// job) all reason in Carla's local time, not the server's. Docker/most hosts
+// default to UTC, which silently shifted every "now" comparison by 1-2h —
+// set this before anything else touches Date. Overridable via env for other
+// deployments, but Europe/Paris is the only real target for this project.
+process.env.TZ = process.env.TZ || 'Europe/Paris';
+
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const isProd = NODE_ENV === 'production';
 

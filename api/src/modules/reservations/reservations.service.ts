@@ -6,7 +6,7 @@ import { DataSource, Repository } from 'typeorm';
 import { Reservation } from '../../database/entities/reservation.entity';
 import type { ReservationStatus } from '../../database/entities/reservation.entity';
 import { Service } from '../../database/entities/service.entity';
-import { effectiveInterval, getAvailableSlots, intervalsOverlap, isValidDateString, toHHMM, toMinutes } from './slots.util';
+import { effectiveInterval, getAvailableSlots, intervalsOverlap, isValidDateString, localDateString, toHHMM, toMinutes } from './slots.util';
 import { AdditionalGuestDto, AdminCreateReservationDto, CreateReservationDto } from './dto/reservation.dto';
 import { MailService } from '../mail/mail.service';
 import { SettingsService } from '../settings/settings.service';
@@ -93,7 +93,7 @@ export class ReservationsService {
     const HORIZON_DAYS = 60;
     const cursor = new Date();
     for (let i = 0; i < HORIZON_DAYS; i += 1) {
-      const dateStr = cursor.toISOString().slice(0, 10);
+      const dateStr = localDateString(cursor);
       const slots = await getAvailableSlots(this.dataSource, dateStr, totalDuration, atClientHome, travelBufferMinutes);
       if (slots.length > 0) {
         return { date: dateStr, startTime: slots[0] };
