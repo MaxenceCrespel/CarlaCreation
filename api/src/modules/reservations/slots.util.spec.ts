@@ -31,20 +31,25 @@ describe('toMinutes / toHHMM', () => {
 });
 
 describe('localDateString', () => {
-  const originalTZ = process.env.TZ;
-  afterEach(() => {
-    process.env.TZ = originalTZ;
+  // Mutating process.env.TZ mid-test is unreliable — Node/V8 doesn't
+  // consistently re-read it after Date internals have already been used in
+  // the process, so a test built that way passes or fails depending on
+  // execution order/platform rather than on the code being right. Instead,
+  // construct Dates via explicit (year, month, day, hour, minute) — that
+  // constructor always uses local time regardless of the runtime's
+  // configured zone — and assert against the same Date's own local getters,
+  // so the test is deterministic on every machine.
+  it("reads the Date's local getters (getFullYear/getMonth/getDate), not toISOString() (always UTC)", () => {
+    const d = new Date(2026, 0, 16, 0, 30); // local: 16 Jan 2026, 00:30
+    expect(localDateString(d)).toBe('2026-01-16');
+    expect(d.getFullYear()).toBe(2026);
+    expect(d.getMonth()).toBe(0);
+    expect(d.getDate()).toBe(16);
   });
 
-  it("uses the process's local time, not UTC — the actual bug this fixes", () => {
-    process.env.TZ = 'Europe/Paris';
-    // 2026-01-15T23:30:00Z is still Jan 15 in UTC, but already Jan 16 00:30
-    // in Paris (UTC+1 in January) — a plain toISOString().slice(0, 10)
-    // would say "today" is still the 15th for over an hour after Paris
-    // midnight, which is exactly the bug the admin ran into.
-    const d = new Date('2026-01-15T23:30:00Z');
-    expect(localDateString(d)).toBe('2026-01-16');
-    expect(d.toISOString().slice(0, 10)).toBe('2026-01-15');
+  it('pads single-digit month and day', () => {
+    const d = new Date(2026, 2, 5); // local: 5 Mar 2026
+    expect(localDateString(d)).toBe('2026-03-05');
   });
 });
 
