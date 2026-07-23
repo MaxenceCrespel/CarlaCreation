@@ -20,7 +20,7 @@ function ServiceCard({ service }) {
 const FAQ_ITEMS = [
   {
     q: 'Puis-je annuler ou modifier mon rendez-vous ?',
-    a: "Oui, contactez-nous par téléphone ou email au moins 24h à l'avance pour annuler ou déplacer votre créneau.",
+    a: 'Oui : chaque email de confirmation contient un lien "Voir ou annuler mon rendez-vous", sans avoir besoin de créer de compte. Pour un changement de créneau, annulez puis reprenez rendez-vous à un autre horaire.',
   },
   {
     q: 'Dois-je créer un compte pour réserver ?',
@@ -28,11 +28,11 @@ const FAQ_ITEMS = [
   },
   {
     q: 'Comment est confirmée ma réservation ?',
-    a: 'Votre demande est transmise instantanément au studio. Vous serez contacté·e pour confirmation si nécessaire.',
+    a: "Vous recevez un email dès l'envoi de votre demande, puis un second dès qu'elle est confirmée (ou refusée) par le studio, ainsi qu'un rappel automatique la veille de votre rendez-vous.",
   },
   {
-    q: 'Le studio est-il accessible aux personnes à mobilité réduite ?',
-    a: 'Oui, notre studio est entièrement accessible PMR, avec un accès de plain-pied.',
+    q: 'Le rendez-vous a-t-il obligatoirement lieu au studio ?',
+    a: "Non : lors de la réservation, choisissez si vous venez sur place ou si vous préférez que ce soit Carla qui se déplace chez vous (une adresse vous sera alors demandée).",
   },
 ];
 

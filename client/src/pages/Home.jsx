@@ -168,7 +168,7 @@ export default function Home() {
             <ul className="checklist">
               <li>Produits professionnels et soins de qualité</li>
               <li>Conseils personnalisés selon vos envies</li>
-              <li>Studio accessible PMR, ambiance calme et conviviale</li>
+              <li>Rendez-vous sur place ou à domicile, selon votre préférence</li>
               <li>Réservation en ligne sécurisée, disponible 24h/24</li>
             </ul>
             <Link to="/services" className="btn btn-outline">Découvrir nos prestations</Link>
