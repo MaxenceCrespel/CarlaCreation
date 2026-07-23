@@ -390,10 +390,13 @@ exposé directement — seul Caddy écoute sur 80/443.
 4. Dans `/opt/carla-creation`, créer le `.env` **racine** (`cp .env.example
    .env`, à ne jamais commiter) avec un `JWT_SECRET` généré
    (`openssl rand -hex 64`) et `DOMAIN=<votre domaine>`.
-5. Démarrer Caddy une fois pour toutes :
+5. Démarrer Caddy une fois pour toutes (depuis la racine du repo, avec
+   `--env-file` explicite — Compose résout `.env` par rapport au dossier du
+   fichier passé à `-f`, pas au répertoire courant, donc lancer ça depuis
+   `deploy/` laisserait `DOMAIN` vide) :
    ```bash
-   cd /opt/carla-creation/deploy
-   docker compose -f docker-compose.caddy.yml up -d
+   cd /opt/carla-creation
+   docker compose --env-file .env -f deploy/docker-compose.caddy.yml up -d
    ```
 6. Dans les secrets GitHub Actions du repo (Settings → Secrets and
    variables → Actions), ajouter `STAGING_SSH_HOST`, `STAGING_SSH_USER`,

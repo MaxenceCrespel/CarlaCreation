@@ -1,7 +1,10 @@
 # Stack Caddy autonome, séparée des stacks applicatives (docker-compose.yml
 # / docker-compose.staging.yml). Démarrée une fois sur le VPS et laissée
-# tourner ; à redéployer seulement si Caddyfile change:
-#   cd deploy && docker compose -f docker-compose.caddy.yml up -d
+# tourner ; à redéployer seulement si Caddyfile change. Se lance depuis la
+# RACINE du repo (pas depuis deploy/) avec --env-file explicite — Compose
+# résout .env par rapport au dossier du fichier compose donné à -f, pas au
+# répertoire courant, donc sans ça DOMAIN resterait vide et Caddy planterait:
+#   docker compose --env-file .env -f deploy/docker-compose.caddy.yml up -d
 #
 # network_mode: host pour que `reverse_proxy 127.0.0.1:3001` dans le
 # Caddyfile atteigne directement le port publié par le service `web` de la
