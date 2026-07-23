@@ -58,7 +58,10 @@ describe('Booking flow', () => {
         cy.get('#clientEmail').type('cypress-visitor@example.com');
         cy.get('#clientPhone').type('0600000099');
 
-        cy.contains('button', 'Confirmer ma demande de rendez-vous').click();
+        // Submitting opens a recap modal first (date/lieu/prestations/prix)
+        // instead of sending the request straight away — confirm there too.
+        cy.contains('button', 'Vérifier et confirmer ma demande').click();
+        cy.get('.modal-card').contains('button', 'Confirmer le rendez-vous').click();
         cy.contains('bien été envoyée').should('be.visible');
       });
     });
