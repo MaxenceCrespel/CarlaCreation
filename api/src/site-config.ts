@@ -6,7 +6,7 @@ export const siteConfig = {
   siteTagline: 'Coiffure & Ongles — Révéler votre beauté, sublimer votre confiance',
   sitePhone: '06 19 64 07 66',
   sitePhoneHref: '+33619640766',
-  siteEmail: 'contact@carlacreation.example',
+  siteEmail: 'carlacreation59@gmail.com',
   siteAddress: '1 rue Georges Clemenceau, 59120 Loos',
   navLinks: [
     { href: '/', label: 'Accueil', key: 'home' },
