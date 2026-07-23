@@ -16,14 +16,20 @@ jobs:
       - name: Checkout du code
         uses: actions/checkout@v4
 
-      # No .env, no migration/seed step needed: docker-compose.yml ships
-      # working defaults (JWT_SECRET, COOKIE_SECURE) and api/init.sql
-      # bootstraps the schema + seed data + the admin account above
-      # automatically on first boot.
+      # No .env, no migration step needed: docker-compose.yml ships working
+      # defaults (JWT_SECRET, COOKIE_SECURE) and api/init.sql bootstraps the
+      # schema + the admin account above automatically on first boot.
       - name: Démarrage de l'infrastructure Docker (DB + API + Front)
         run: |
           docker compose up -d --build
           sleep 15
+
+      # init.sql deliberately no longer seeds demo prestations/galerie/avis
+      # (real site, not a local dev demo) — but services.cy.js/booking.cy.js
+      # need at least a couple of real prestations to pick from, so seed
+      # those as CI-only test fixtures.
+      - name: Données de test pour Cypress (prestations/galerie)
+        run: docker compose exec -T web npm run seed:data
 
       - name: Exécution des tests Cypress
         uses: cypress-io/github-action@v6
