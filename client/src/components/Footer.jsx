@@ -16,7 +16,6 @@ export default function Footer() {
           <li><Link to="/">Accueil</Link></li>
           <li><Link to="/booking">Réserver</Link></li>
           <li><Link to="/contact">Contact</Link></li>
-          <li><Link to="/admin">Espace administrateur</Link></li>
         </ul>
         <ul className="social-links" aria-label="Réseaux sociaux">
           <li><a href="#" aria-label="Instagram">Instagram</a></li>

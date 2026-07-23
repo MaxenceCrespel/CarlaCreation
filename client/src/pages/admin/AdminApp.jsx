@@ -6,6 +6,7 @@ import GalleryTab from './GalleryTab';
 import HoursTab from './HoursTab';
 import ServicesTab from './ServicesTab';
 import AvisTab from './AvisTab';
+import AccountTab from './AccountTab';
 
 const TABS = [
   { key: 'reservations', label: 'Réservations', Component: ReservationsTab },
@@ -13,6 +14,7 @@ const TABS = [
   { key: 'services', label: 'Prestations', Component: ServicesTab },
   { key: 'hours', label: 'Horaires', Component: HoursTab },
   { key: 'reviews', label: 'Avis', Component: AvisTab },
+  { key: 'account', label: 'Mon compte', Component: AccountTab },
 ];
 
 export default function AdminApp() {
@@ -76,7 +78,7 @@ export default function AdminApp() {
       </div>
 
       <main className="container admin-main">
-        <ActiveComponent />
+        <ActiveComponent username={session.username} onCredentialsUpdated={(newUsername) => setSession({ username: newUsername })} />
       </main>
     </div>
   );
