@@ -6,10 +6,10 @@ import { useSeo } from '../hooks/useSeo';
 import { getSavedContact, saveContact } from '../utils/contactStorage';
 
 export default function Contact() {
-  const { sitePhone, sitePhoneHref, siteEmail, siteAddress } = useSiteConfig();
+  const { sitePhone, sitePhoneHref, siteEmail } = useSiteConfig();
   useSeo({
     title: 'Contact — Studio à Lille',
-    description: 'Adresse, téléphone, email et formulaire de contact de notre studio coiffure et ongles à Lille (Hauts-de-France).',
+    description: 'Téléphone, email et formulaire de contact de notre studio coiffure et ongles à Lille (Hauts-de-France).',
     path: '/contact',
   });
   const showToast = useToast();
@@ -64,13 +64,9 @@ export default function Contact() {
         <div className="container contact-grid">
           <div className="contact-info">
             <ul className="contact-list">
-              <li><strong>Adresse</strong><span>{siteAddress}</span></li>
               <li><strong>Téléphone</strong><span><a href={`tel:${sitePhoneHref}`}>{sitePhone}</a></span></li>
               <li><strong>Email</strong><span><a href={`mailto:${siteEmail}`}>{siteEmail}</a></span></li>
             </ul>
-            <div className="map-placeholder" aria-hidden="true">
-              <span>Carte / itinéraire à intégrer</span>
-            </div>
           </div>
 
           <form className="card contact-form" noValidate onSubmit={handleSubmit}>

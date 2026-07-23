@@ -13,6 +13,10 @@ export class MiscController {
 
   @Get('site-config')
   getSiteConfig() {
-    return { ...siteConfig, siteUrl: config.PUBLIC_ORIGIN };
+    // siteAddress is deliberately excluded: it must only ever appear in the
+    // confirmation email (see MailService), never on the public site or its
+    // public API — Carla works from home, not a public storefront.
+    const { siteAddress: _siteAddress, ...publicConfig } = siteConfig;
+    return { ...publicConfig, siteUrl: config.PUBLIC_ORIGIN };
   }
 }

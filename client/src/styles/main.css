@@ -612,17 +612,6 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
 .contact-list { list-style: none; padding: 0; margin: 24px 0; }
 .contact-list li { margin-bottom: 16px; display: flex; flex-direction: column; gap: 2px; }
 .contact-list a { text-decoration: none; }
-.map-placeholder {
-  height: 220px;
-  border-radius: var(--radius-md);
-  background: var(--color-bg-alt);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text-soft);
-  font-size: 0.9rem;
-  border: 1px dashed var(--color-muted);
-}
 
 /* Footer */
 .site-footer { background: var(--color-text); color: var(--color-bg); padding: 40px 0; }
