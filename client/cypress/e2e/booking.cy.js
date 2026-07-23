@@ -9,7 +9,10 @@ describe('Booking flow', () => {
     // Pick an unset day slightly in the future (index 3) to avoid "today" expiring slots 
     cy.get('.day-chip.is-unset').eq(3).click();
     cy.get('.day-editor-closed input[type="checkbox"]').uncheck();
-    cy.contains('button', 'Enregistrer').click();
+    // Scoped to .day-editor: the Horaires tab also has a "Temps de trajet"
+    // card with its own "Enregistrer" button rendered above this one — an
+    // unscoped cy.contains('button', 'Enregistrer') would hit that one first.
+    cy.get('.day-editor').contains('button', 'Enregistrer').click();
 
     cy.wait('@saveDay').then(({ request, response }) => {
       expect(response.statusCode, 'PUT daily-hours status').to.eq(200);
