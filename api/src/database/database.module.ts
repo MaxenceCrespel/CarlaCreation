@@ -12,6 +12,7 @@ import { DailyHoursRange } from './entities/daily-hours-range.entity';
 import { AppSettings } from './entities/app-settings.entity';
 import { ServiceAddon } from './entities/service-addon.entity';
 import { ReservationAddon } from './entities/reservation-addon.entity';
+import { ServiceCategory } from './entities/service-category.entity';
 
 // `synchronize: false` permanently — even in dev. Migrations
 // (database/migrations/*.ts, run via `npm run migration:run`) are the only
@@ -23,11 +24,11 @@ import { ReservationAddon } from './entities/reservation-addon.entity';
     TypeOrmModule.forRoot({
       type: 'postgres',
       url: config.DATABASE_URL,
-      entities: [Admin, Service, Reservation, Gallery, ContactMessage, Review, DailyHours, DailyHoursRange, AppSettings, ServiceAddon, ReservationAddon],
+      entities: [Admin, Service, Reservation, Gallery, ContactMessage, Review, DailyHours, DailyHoursRange, AppSettings, ServiceAddon, ReservationAddon, ServiceCategory],
       synchronize: false,
       migrationsRun: false,
     }),
-    TypeOrmModule.forFeature([Admin, Service, Reservation, Gallery, ContactMessage, Review, DailyHours, DailyHoursRange, AppSettings, ServiceAddon, ReservationAddon]),
+    TypeOrmModule.forFeature([Admin, Service, Reservation, Gallery, ContactMessage, Review, DailyHours, DailyHoursRange, AppSettings, ServiceAddon, ReservationAddon, ServiceCategory]),
   ],
   exports: [TypeOrmModule],
 })

@@ -11,17 +11,18 @@ async function seedServices(): Promise<void> {
   const repo = AppDataSource.getRepository(Service);
   if ((await repo.count()) > 0) return;
 
+  // category_id 1 = Coiffure, 2 = Ongles — seeded by the AddServiceCategories migration.
   const defaults = [
-    { name: 'Coupe Femme', description: 'Coupe, brushing et coiffage personnalisés.', category: 'coiffure', duration_minutes: 45, price_cents: 4500 },
-    { name: 'Coupe Homme', description: 'Coupe précise avec finitions à la tondeuse.', category: 'coiffure', duration_minutes: 30, price_cents: 2500 },
-    { name: 'Coloration', description: 'Coloration complète avec soin protecteur.', category: 'coiffure', duration_minutes: 90, price_cents: 7500 },
-    { name: 'Balayage', description: 'Balayage main levée pour un effet naturel.', category: 'coiffure', duration_minutes: 120, price_cents: 9500 },
-    { name: 'Brushing', description: 'Mise en forme et brillance longue durée.', category: 'coiffure', duration_minutes: 30, price_cents: 3000 },
-    { name: 'Soin Capillaire', description: 'Soin profond réparateur et hydratant.', category: 'coiffure', duration_minutes: 30, price_cents: 3500 },
-    { name: 'Manucure Classique', description: 'Soin des mains, limage et pose de vernis classique.', category: 'ongles', duration_minutes: 30, price_cents: 2500 },
-    { name: 'Pose Semi-Permanent', description: 'Pose vernis semi-permanent longue tenue, large choix de teintes.', category: 'ongles', duration_minutes: 45, price_cents: 3500 },
-    { name: 'Nail Art', description: 'Décorations et motifs personnalisés sur mesure.', category: 'ongles', duration_minutes: 60, price_cents: 4500 },
-    { name: 'Beauté des Pieds', description: 'Soin complet des pieds avec pose de vernis.', category: 'ongles', duration_minutes: 45, price_cents: 4000 },
+    { name: 'Coupe Femme', description: 'Coupe, brushing et coiffage personnalisés.', category_id: 1, duration_minutes: 45, price_cents: 4500 },
+    { name: 'Coupe Homme', description: 'Coupe précise avec finitions à la tondeuse.', category_id: 1, duration_minutes: 30, price_cents: 2500 },
+    { name: 'Coloration', description: 'Coloration complète avec soin protecteur.', category_id: 1, duration_minutes: 90, price_cents: 7500 },
+    { name: 'Balayage', description: 'Balayage main levée pour un effet naturel.', category_id: 1, duration_minutes: 120, price_cents: 9500 },
+    { name: 'Brushing', description: 'Mise en forme et brillance longue durée.', category_id: 1, duration_minutes: 30, price_cents: 3000 },
+    { name: 'Soin Capillaire', description: 'Soin profond réparateur et hydratant.', category_id: 1, duration_minutes: 30, price_cents: 3500 },
+    { name: 'Manucure Classique', description: 'Soin des mains, limage et pose de vernis classique.', category_id: 2, duration_minutes: 30, price_cents: 2500 },
+    { name: 'Pose Semi-Permanent', description: 'Pose vernis semi-permanent longue tenue, large choix de teintes.', category_id: 2, duration_minutes: 45, price_cents: 3500 },
+    { name: 'Nail Art', description: 'Décorations et motifs personnalisés sur mesure.', category_id: 2, duration_minutes: 60, price_cents: 4500 },
+    { name: 'Beauté des Pieds', description: 'Soin complet des pieds avec pose de vernis.', category_id: 2, duration_minutes: 45, price_cents: 4000 },
   ] as const;
 
   await repo.save(repo.create(defaults.map((d) => ({ ...d, active: true }))));

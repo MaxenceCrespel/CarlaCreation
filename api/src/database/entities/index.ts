@@ -1,6 +1,6 @@
 export { Admin } from './admin.entity';
 export { Service } from './service.entity';
-export type { ServiceCategory } from './service.entity';
+export { ServiceCategory } from './service-category.entity';
 export { Reservation } from './reservation.entity';
 export type { ReservationStatus } from './reservation.entity';
 export { Gallery } from './gallery.entity';

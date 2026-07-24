@@ -20,6 +20,7 @@ DROP TABLE IF EXISTS reservation_addons;
 DROP TABLE IF EXISTS reservations;
 DROP TABLE IF EXISTS service_addons;
 DROP TABLE IF EXISTS services;
+DROP TABLE IF EXISTS service_categories;
 DROP TABLE IF EXISTS admins;
 
 CREATE TABLE
@@ -31,15 +32,31 @@ CREATE TABLE
     );
 
 CREATE TABLE
+    IF NOT EXISTS service_categories (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        parent_id INTEGER REFERENCES service_categories (id)
+    );
+
+CREATE INDEX IF NOT EXISTS "IDX_service_categories_parent_id" ON service_categories (parent_id);
+
+INSERT INTO service_categories (id, name, sort_order) VALUES (1, 'Coiffure', 0), (2, 'Ongles', 1);
+
+SELECT setval('service_categories_id_seq', 2);
+
+CREATE TABLE
     IF NOT EXISTS services (
         id SERIAL PRIMARY KEY,
         name TEXT NOT NULL,
         description TEXT NOT NULL DEFAULT '',
-        category TEXT NOT NULL DEFAULT 'coiffure',
+        category_id INTEGER NOT NULL REFERENCES service_categories (id),
         duration_minutes INTEGER NOT NULL,
         price_cents INTEGER NOT NULL,
         active BOOLEAN NOT NULL DEFAULT true
     );
+
+CREATE INDEX IF NOT EXISTS "IDX_services_category_id" ON services (category_id);
 
 CREATE TABLE
     IF NOT EXISTS service_addons (
@@ -138,10 +155,11 @@ CREATE INDEX IF NOT EXISTS "IDX_daily_hours_ranges_date" ON daily_hours_ranges (
 CREATE TABLE
     IF NOT EXISTS app_settings (
         id INTEGER PRIMARY KEY DEFAULT 1,
-        travel_buffer_minutes INTEGER NOT NULL DEFAULT 30
+        travel_buffer_minutes INTEGER NOT NULL DEFAULT 30,
+        travel_fee_cents INTEGER NOT NULL DEFAULT 200
     );
 
-INSERT INTO app_settings (id, travel_buffer_minutes) VALUES (1, 30);
+INSERT INTO app_settings (id, travel_buffer_minutes, travel_fee_cents) VALUES (1, 30, 200);
 
 -- Records this bootstrap as already-applied so `npm run migration:run`
 -- doesn't try to re-run the (already-executed-via-this-file) InitSchema
@@ -161,7 +179,10 @@ VALUES
     (1784394804417, 'AddReservationReminderSent1784394804417'),
     (1784529892155, 'AddReservationLocation1784529892155'),
     (1784531313161, 'AddAppSettings1784531313161'),
-    (1784887549892, 'AddServiceAddons1784887549892');
+    (1784887549892, 'AddServiceAddons1784887549892'),
+    (1784973912847, 'AddTravelFee1784973912847'),
+    (1784974821563, 'AddServiceCategories1784974821563'),
+    (1784978234901, 'AddServiceCategoryParent1784978234901');
 
 -- Admin account — username "carla", password "Carla0303!" (bcrypt, cost 12).
 -- Change this password after first login in a real deployment.

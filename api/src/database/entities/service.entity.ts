@@ -1,7 +1,5 @@
 import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
 
-export type ServiceCategory = 'coiffure' | 'ongles';
-
 // Column/property names deliberately stay snake_case (not idiomatic
 // TypeORM/TS camelCase) so JSON responses stay byte-identical to the
 // previous raw-SQL implementation — the frontend reads fields like
@@ -18,8 +16,11 @@ export class Service {
   @Column({ default: '' })
   description: string;
 
-  @Column({ default: 'coiffure' })
-  category: ServiceCategory;
+  // References ServiceCategory — no @ManyToOne relation is declared since
+  // every consumer already works with plain ids/joins (same pattern as the
+  // rest of this codebase, which favours explicit queries over ORM graphs).
+  @Column()
+  category_id: number;
 
   @Column()
   duration_minutes: number;

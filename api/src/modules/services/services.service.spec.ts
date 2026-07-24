@@ -47,7 +47,7 @@ describe('ServicesService', () => {
   it('findAllActive only queries active services, ordered by category then id', async () => {
     repo.find.mockResolvedValue([]);
     await service.findAllActive();
-    expect(repo.find).toHaveBeenCalledWith({ where: { active: true }, order: { category: 'ASC', id: 'ASC' } });
+    expect(repo.find).toHaveBeenCalledWith({ where: { active: true }, order: { category_id: 'ASC', id: 'ASC' } });
   });
 
   it('findAllActive attaches each active addon to its own service, in the same request', async () => {
@@ -68,7 +68,7 @@ describe('ServicesService', () => {
       id: 1,
       name: 'Coupe Femme',
       description: 'desc',
-      category: 'coiffure',
+      category_id: 1,
       duration_minutes: 45,
       price_cents: 4500,
       active: true,

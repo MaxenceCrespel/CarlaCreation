@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Length, Max, Min, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsInt, IsOptional, IsString, Length, Max, Min, ValidateNested } from 'class-validator';
 
 // A supplement is always scoped to the service it's being saved on (e.g.
 // "Nail art" only makes sense attached to "Manucure Classique") — the whole
@@ -30,8 +30,9 @@ export class CreateServiceDto {
   @Length(0, 500)
   description!: string;
 
-  @IsIn(['coiffure', 'ongles'])
-  category!: 'coiffure' | 'ongles';
+  @IsInt()
+  @Min(1)
+  categoryId!: number;
 
   @IsInt()
   @Min(5)
@@ -63,8 +64,9 @@ export class UpdateServiceDto {
   description?: string;
 
   @IsOptional()
-  @IsIn(['coiffure', 'ongles'])
-  category?: 'coiffure' | 'ongles';
+  @IsInt()
+  @Min(1)
+  categoryId?: number;
 
   @IsOptional()
   @IsInt()

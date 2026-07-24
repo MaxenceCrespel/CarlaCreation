@@ -12,7 +12,7 @@ export class ServicesController {
       id: s.id,
       name: s.name,
       description: s.description,
-      category: s.category,
+      category_id: s.category_id,
       duration_minutes: s.duration_minutes,
       price_cents: s.price_cents,
       addons: s.addons.map((a) => ({

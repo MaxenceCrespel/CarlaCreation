@@ -4,6 +4,22 @@ import { apiFetch } from '../api/client';
 import { useSeo } from '../hooks/useSeo';
 import { formatDuration, formatPrice } from '../utils/format';
 
+// Flattens the (max one level deep) category tree into a single ordered
+// list — each top-level category immediately followed by its
+// subcategories — so this page can render them as nested sections.
+function orderedCategoryTree(categories) {
+  const topLevel = categories.filter((c) => !c.parent_id).sort((a, b) => a.sort_order - b.sort_order);
+  const result = [];
+  for (const top of topLevel) {
+    result.push({ ...top, depth: 0 });
+    categories
+      .filter((c) => c.parent_id === top.id)
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .forEach((child) => result.push({ ...child, depth: 1 }));
+  }
+  return result;
+}
+
 function ServiceCard({ service }) {
   return (
     <article className="service-card">
@@ -44,16 +60,17 @@ export default function Services() {
     path: '/services',
   });
   const [services, setServices] = useState(null);
+  const [categories, setCategories] = useState([]);
   const [error, setError] = useState(false);
 
   useEffect(() => {
     apiFetch('/services')
       .then(setServices)
       .catch(() => setError(true));
+    apiFetch('/service-categories')
+      .then(setCategories)
+      .catch(() => {});
   }, []);
-
-  const coiffure = services?.filter((s) => s.category === 'coiffure') ?? [];
-  const ongles = services?.filter((s) => s.category === 'ongles') ?? [];
 
   return (
     <>
@@ -69,18 +86,22 @@ export default function Services() {
 
       <section className="section section-alt">
         <div className="container">
-          <h2 className="category-title">Coiffure</h2>
-          <div className="services-grid">
-            {error && <p className="loading-text">Impossible de charger les prestations pour le moment.</p>}
-            {!error && !services && <p className="loading-text">Chargement des prestations…</p>}
-            {!error && services && coiffure.map((s) => <ServiceCard key={s.id} service={s} />)}
-          </div>
+          {error && <p className="loading-text">Impossible de charger les prestations pour le moment.</p>}
+          {!error && !services && <p className="loading-text">Chargement des prestations…</p>}
 
-          <h2 className="category-title" style={{ marginTop: 56 }}>Ongles</h2>
-          <div className="services-grid">
-            {!error && !services && <p className="loading-text">Chargement des prestations…</p>}
-            {!error && services && ongles.map((s) => <ServiceCard key={s.id} service={s} />)}
-          </div>
+          {!error && services && orderedCategoryTree(categories).map((cat, i) => (
+            <div key={cat.id}>
+              <h2
+                className={`category-title ${cat.depth > 0 ? 'category-title-sub' : ''}`}
+                style={{ marginTop: i === 0 ? 0 : cat.depth > 0 ? 32 : 56 }}
+              >
+                {cat.name}
+              </h2>
+              <div className="services-grid">
+                {services.filter((s) => s.category_id === cat.id).map((s) => <ServiceCard key={s.id} service={s} />)}
+              </div>
+            </div>
+          ))}
 
           <p className="center" style={{ marginTop: 48 }}>
             <Link to="/booking" className="btn btn-primary">Réserver une prestation</Link>

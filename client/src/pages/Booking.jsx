@@ -8,10 +8,6 @@ import { formatDuration, formatPrice } from '../utils/format';
 import { getSavedContact, saveContact } from '../utils/contactStorage';
 
 const DAY_NAMES = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
-const CATEGORIES = [
-  { key: 'coiffure', label: 'Coiffure' },
-  { key: 'ongles', label: 'Ongles' },
-];
 const HOURS_PREVIEW_DAYS = 14;
 const DAY_PICKER_DAYS = 30;
 const MAX_ADDITIONAL_GUESTS = 5;
@@ -41,6 +37,9 @@ function dayOfWeekFor(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
   return new Date(y, m - 1, d).getDay();
 }
+function firstTopLevelCategoryId(categories) {
+  return categories.filter((c) => !c.parent_id).sort((a, b) => a.sort_order - b.sort_order)[0]?.id ?? null;
+}
 
 // Optional extras for the currently selected service (e.g. "Nail Art" on a
 // manicure) — only rendered when that service actually has any.
@@ -68,23 +67,33 @@ function AddonCheckboxes({ service, selectedIds, onToggle }) {
 }
 
 // Category tabs + clickable service cards, shared by the primary booker and
-// each additional guest so picking a service always looks the same.
-function ServicePicker({ services, category, onCategoryChange, selectedServiceId, onSelectService }) {
-  const inCategory = useMemo(() => services.filter((s) => s.category === category), [services, category]);
+// each additional guest so picking a service always looks the same. Tabs
+// are always top-level categories (e.g. "Coiffure") — a service attached to
+// one of that category's subcategories (e.g. "Hommes" under "Coiffure")
+// still shows up under its parent's tab, since the public booking flow
+// doesn't expose the subcategory split, only the admin/catalogue pages do.
+function ServicePicker({ services, categories, category, onCategoryChange, selectedServiceId, onSelectService }) {
+  const topLevelCategories = useMemo(() => categories.filter((c) => !c.parent_id).sort((a, b) => a.sort_order - b.sort_order), [categories]);
+  const inCategory = useMemo(() => {
+    const matchingCategoryIds = new Set(
+      categories.filter((c) => c.id === category || c.parent_id === category).map((c) => c.id),
+    );
+    return services.filter((s) => matchingCategoryIds.has(s.category_id));
+  }, [services, categories, category]);
 
   return (
     <>
       <div className="category-tabs" role="tablist" aria-label="Choisir une catégorie">
-        {CATEGORIES.map((c) => (
+        {topLevelCategories.map((c) => (
           <button
-            key={c.key}
+            key={c.id}
             type="button"
             role="tab"
-            aria-selected={category === c.key}
-            className={`category-tab ${category === c.key ? 'is-active' : ''}`}
-            onClick={() => onCategoryChange(c.key)}
+            aria-selected={category === c.id}
+            className={`category-tab ${category === c.id ? 'is-active' : ''}`}
+            onClick={() => onCategoryChange(c.id)}
           >
-            {c.label}
+            {c.name}
           </button>
         ))}
       </div>
@@ -112,7 +121,7 @@ function ServicePicker({ services, category, onCategoryChange, selectedServiceId
 let guestKeySeq = 0;
 
 export default function Booking() {
-  const { sitePhone, sitePhoneHref } = useSiteConfig();
+  const { sitePhone, sitePhoneHref, travelFeeCents } = useSiteConfig();
   useSeo({
     title: 'Réserver un rendez-vous à Lille',
     description:
@@ -122,7 +131,8 @@ export default function Booking() {
   const showToast = useToast();
 
   const [services, setServices] = useState([]);
-  const [category, setCategory] = useState('coiffure');
+  const [categories, setCategories] = useState([]);
+  const [category, setCategory] = useState(null);
   const [selectedServiceId, setSelectedServiceId] = useState(null);
   const [selectedAddonIds, setSelectedAddonIds] = useState([]);
 
@@ -162,6 +172,12 @@ export default function Booking() {
 
   useEffect(() => {
     apiFetch('/services').then(setServices).catch(() => showToast('Impossible de charger les prestations.', 'error'));
+    apiFetch('/service-categories')
+      .then((cats) => {
+        setCategories(cats);
+        setCategory((current) => current ?? firstTopLevelCategoryId(cats));
+      })
+      .catch(() => showToast('Impossible de charger les catégories.', 'error'));
     apiFetch('/hours')
       .then((data) => setHours(data.days))
       .catch(() => {});
@@ -188,8 +204,11 @@ export default function Booking() {
     [serviceIds, services, totalAddonMinutes],
   );
   const totalPrice = useMemo(
-    () => serviceIds.reduce((sum, id) => sum + (services.find((s) => s.id === id)?.price_cents ?? 0), 0) + totalAddonPrice,
-    [serviceIds, services, totalAddonPrice],
+    () =>
+      serviceIds.reduce((sum, id) => sum + (services.find((s) => s.id === id)?.price_cents ?? 0), 0) +
+      totalAddonPrice +
+      (atClientHome ? travelFeeCents : 0),
+    [serviceIds, services, totalAddonPrice, atClientHome, travelFeeCents],
   );
   const recapGuests = useMemo(
     () => [
@@ -255,7 +274,7 @@ export default function Booking() {
   function addGuest() {
     if (guests.length >= MAX_ADDITIONAL_GUESTS) return;
     guestKeySeq += 1;
-    setGuests((g) => [...g, { key: guestKeySeq, name: '', category: 'coiffure', serviceId: null, addonIds: [] }]);
+    setGuests((g) => [...g, { key: guestKeySeq, name: '', category: firstTopLevelCategoryId(categories), serviceId: null, addonIds: [] }]);
     setSlots([]);
     setSlotsState('idle');
     setSelectedSlot('');
@@ -453,6 +472,7 @@ export default function Booking() {
               <label>Type de prestation</label>
               <ServicePicker
                 services={services}
+                categories={categories}
                 category={category}
                 onCategoryChange={pickCategory}
                 selectedServiceId={selectedServiceId}
@@ -522,6 +542,7 @@ export default function Booking() {
                 />
                 <ServicePicker
                   services={services}
+                  categories={categories}
                   category={guest.category}
                   onCategoryChange={(c) => updateGuest(guest.key, { category: c, serviceId: null })}
                   selectedServiceId={guest.serviceId}
@@ -710,7 +731,15 @@ export default function Booking() {
               </div>
               <div>
                 <dt>Durée / prix total</dt>
-                <dd>{formatDuration(totalDuration)} — {formatPrice(totalPrice)}</dd>
+                <dd>
+                  {formatDuration(totalDuration)} — {formatPrice(totalPrice)}
+                  {atClientHome && travelFeeCents > 0 && (
+                    <>
+                      <br />
+                      <span className="recap-note">dont {formatPrice(travelFeeCents)} de frais de déplacement</span>
+                    </>
+                  )}
+                </dd>
               </div>
               <div>
                 <dt>Contact</dt>

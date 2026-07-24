@@ -31,12 +31,12 @@ export class ServicesService {
   }
 
   async findAllActive(): Promise<ServiceWithAddons[]> {
-    const services = await this.serviceRepo.find({ where: { active: true }, order: { category: 'ASC', id: 'ASC' } });
+    const services = await this.serviceRepo.find({ where: { active: true }, order: { category_id: 'ASC', id: 'ASC' } });
     return this.withAddons(services, { activeOnly: true });
   }
 
   async findAllForAdmin(): Promise<ServiceWithAddons[]> {
-    const services = await this.serviceRepo.find({ order: { category: 'ASC', id: 'ASC' } });
+    const services = await this.serviceRepo.find({ order: { category_id: 'ASC', id: 'ASC' } });
     return this.withAddons(services, { activeOnly: false });
   }
 
@@ -68,7 +68,7 @@ export class ServicesService {
       const service = manager.create(Service, {
         name: dto.name,
         description: dto.description,
-        category: dto.category,
+        category_id: dto.categoryId,
         duration_minutes: dto.durationMinutes,
         price_cents: dto.priceCents,
         active: true,
@@ -92,7 +92,7 @@ export class ServicesService {
 
     existing.name = dto.name ?? existing.name;
     existing.description = dto.description ?? existing.description;
-    existing.category = dto.category ?? existing.category;
+    existing.category_id = dto.categoryId ?? existing.category_id;
     existing.duration_minutes = dto.durationMinutes ?? existing.duration_minutes;
     existing.price_cents = dto.priceCents ?? existing.price_cents;
     existing.active = dto.active === undefined ? existing.active : dto.active;
