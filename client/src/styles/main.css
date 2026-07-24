@@ -255,6 +255,25 @@ img { max-width: 100%; display: block; }
   transition: all 0.15s ease;
 }
 .category-tab.is-active { background: var(--color-accent); border-color: var(--color-accent); color: #fff; }
+.category-tabs.center, .subcategory-tabs.center { justify-content: center; }
+
+/* Subcategory pills, shown under the category tabs when the picked
+   category has any (e.g. "Hommes" under "Coiffure") — visually smaller/
+   secondary so the hierarchy (category -> subcategory) stays obvious. */
+.subcategory-tabs { display: flex; gap: 8px; margin: -12px 0 24px; flex-wrap: wrap; }
+.subcategory-tab {
+  padding: 7px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--color-bg-alt);
+  background: transparent;
+  color: var(--color-text-soft);
+  font-weight: 600;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.subcategory-tab.is-active { background: var(--color-text); border-color: var(--color-text); color: #fff; }
+.subcategory-tab:hover:not(.is-active) { border-color: var(--color-accent); color: var(--color-accent-dark); }
 
 /* Location toggle (booking: on-site vs à domicile) */
 .location-toggle { display: flex; gap: 12px; flex-wrap: wrap; }
@@ -695,6 +714,21 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
 .admin-filters label { font-weight: 600; }
 .admin-filters select { max-width: 220px; }
 .admin-filters .btn { margin-left: auto; }
+
+/* Dashboard tab KPI cards */
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr)); gap: 16px; }
+.kpi-card {
+  background: var(--color-white);
+  border-radius: var(--radius-md);
+  padding: 18px 20px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.kpi-label { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-muted); }
+.kpi-value { font-size: 1.6rem; font-weight: 700; color: var(--color-text); }
+.kpi-hint { font-size: 0.8rem; color: var(--color-text-soft); }
 
 .manual-reservation-form { max-width: 640px; margin-bottom: 28px; }
 .manual-reservation-form h2 { font-size: 1.1rem; }

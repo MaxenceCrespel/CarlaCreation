@@ -66,20 +66,24 @@ function AddonCheckboxes({ service, selectedIds, onToggle }) {
   );
 }
 
-// Category tabs + clickable service cards, shared by the primary booker and
-// each additional guest so picking a service always looks the same. Tabs
-// are always top-level categories (e.g. "Coiffure") — a service attached to
-// one of that category's subcategories (e.g. "Hommes" under "Coiffure")
-// still shows up under its parent's tab, since the public booking flow
-// doesn't expose the subcategory split, only the admin/catalogue pages do.
-function ServicePicker({ services, categories, category, onCategoryChange, selectedServiceId, onSelectService }) {
+// Category buttons + (when the picked category has any) subcategory
+// buttons underneath, then clickable service cards — shared by the primary
+// booker and each additional guest so picking a service always looks the
+// same. Two levels only, e.g. "Coiffure" then "Hommes", like a
+// category/subcategory nav on an e-commerce site rather than one long list.
+function ServicePicker({ services, categories, category, onCategoryChange, subcategory, onSubcategoryChange, selectedServiceId, onSelectService }) {
   const topLevelCategories = useMemo(() => categories.filter((c) => !c.parent_id).sort((a, b) => a.sort_order - b.sort_order), [categories]);
+  const subcategories = useMemo(
+    () => categories.filter((c) => c.parent_id === category).sort((a, b) => a.sort_order - b.sort_order),
+    [categories, category],
+  );
   const inCategory = useMemo(() => {
-    const matchingCategoryIds = new Set(
-      categories.filter((c) => c.id === category || c.parent_id === category).map((c) => c.id),
-    );
-    return services.filter((s) => matchingCategoryIds.has(s.category_id));
-  }, [services, categories, category]);
+    const matchingCategoryIds = subcategory
+      ? [subcategory]
+      : categories.filter((c) => c.id === category || c.parent_id === category).map((c) => c.id);
+    const idSet = new Set(matchingCategoryIds);
+    return services.filter((s) => idSet.has(s.category_id));
+  }, [services, categories, category, subcategory]);
 
   return (
     <>
@@ -97,6 +101,31 @@ function ServicePicker({ services, categories, category, onCategoryChange, selec
           </button>
         ))}
       </div>
+      {subcategories.length > 0 && (
+        <div className="subcategory-tabs" role="tablist" aria-label="Affiner par sous-catégorie">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={!subcategory}
+            className={`subcategory-tab ${!subcategory ? 'is-active' : ''}`}
+            onClick={() => onSubcategoryChange(null)}
+          >
+            Tout
+          </button>
+          {subcategories.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              role="tab"
+              aria-selected={subcategory === c.id}
+              className={`subcategory-tab ${subcategory === c.id ? 'is-active' : ''}`}
+              onClick={() => onSubcategoryChange(c.id)}
+            >
+              {c.name}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="service-pick-grid">
         {inCategory.length === 0 && <p className="loading-text">Chargement des prestations…</p>}
         {inCategory.map((s) => (
@@ -133,6 +162,7 @@ export default function Booking() {
   const [services, setServices] = useState([]);
   const [categories, setCategories] = useState([]);
   const [category, setCategory] = useState(null);
+  const [subcategory, setSubcategory] = useState(null);
   const [selectedServiceId, setSelectedServiceId] = useState(null);
   const [selectedAddonIds, setSelectedAddonIds] = useState([]);
 
@@ -223,6 +253,16 @@ export default function Booking() {
 
   function pickCategory(key) {
     setCategory(key);
+    setSubcategory(null);
+    setSelectedServiceId(null);
+    setSelectedAddonIds([]);
+    setSlots([]);
+    setSlotsState('idle');
+    setSelectedSlot('');
+  }
+
+  function pickSubcategory(id) {
+    setSubcategory(id);
     setSelectedServiceId(null);
     setSelectedAddonIds([]);
     setSlots([]);
@@ -274,7 +314,7 @@ export default function Booking() {
   function addGuest() {
     if (guests.length >= MAX_ADDITIONAL_GUESTS) return;
     guestKeySeq += 1;
-    setGuests((g) => [...g, { key: guestKeySeq, name: '', category: firstTopLevelCategoryId(categories), serviceId: null, addonIds: [] }]);
+    setGuests((g) => [...g, { key: guestKeySeq, name: '', category: firstTopLevelCategoryId(categories), subcategory: null, serviceId: null, addonIds: [] }]);
     setSlots([]);
     setSlotsState('idle');
     setSelectedSlot('');
@@ -475,6 +515,8 @@ export default function Booking() {
                 categories={categories}
                 category={category}
                 onCategoryChange={pickCategory}
+                subcategory={subcategory}
+                onSubcategoryChange={pickSubcategory}
                 selectedServiceId={selectedServiceId}
                 onSelectService={pickService}
               />
@@ -544,7 +586,9 @@ export default function Booking() {
                   services={services}
                   categories={categories}
                   category={guest.category}
-                  onCategoryChange={(c) => updateGuest(guest.key, { category: c, serviceId: null })}
+                  onCategoryChange={(c) => updateGuest(guest.key, { category: c, subcategory: null, serviceId: null })}
+                  subcategory={guest.subcategory}
+                  onSubcategoryChange={(s) => updateGuest(guest.key, { subcategory: s, serviceId: null })}
                   selectedServiceId={guest.serviceId}
                   onSelectService={(id) => updateGuest(guest.key, { serviceId: id })}
                 />

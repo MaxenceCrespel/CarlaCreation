@@ -1,23 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import { useSeo } from '../hooks/useSeo';
 import { formatDuration, formatPrice } from '../utils/format';
 
-// Flattens the (max one level deep) category tree into a single ordered
-// list — each top-level category immediately followed by its
-// subcategories — so this page can render them as nested sections.
-function orderedCategoryTree(categories) {
-  const topLevel = categories.filter((c) => !c.parent_id).sort((a, b) => a.sort_order - b.sort_order);
-  const result = [];
-  for (const top of topLevel) {
-    result.push({ ...top, depth: 0 });
-    categories
-      .filter((c) => c.parent_id === top.id)
-      .sort((a, b) => a.sort_order - b.sort_order)
-      .forEach((child) => result.push({ ...child, depth: 1 }));
-  }
-  return result;
+function firstTopLevelCategoryId(categories) {
+  return categories.filter((c) => !c.parent_id).sort((a, b) => a.sort_order - b.sort_order)[0]?.id ?? null;
 }
 
 function ServiceCard({ service }) {
@@ -61,6 +49,8 @@ export default function Services() {
   });
   const [services, setServices] = useState(null);
   const [categories, setCategories] = useState([]);
+  const [category, setCategory] = useState(null);
+  const [subcategory, setSubcategory] = useState(null);
   const [error, setError] = useState(false);
 
   useEffect(() => {
@@ -68,9 +58,31 @@ export default function Services() {
       .then(setServices)
       .catch(() => setError(true));
     apiFetch('/service-categories')
-      .then(setCategories)
+      .then((cats) => {
+        setCategories(cats);
+        setCategory((current) => current ?? firstTopLevelCategoryId(cats));
+      })
       .catch(() => {});
   }, []);
+
+  const topLevelCategories = useMemo(() => categories.filter((c) => !c.parent_id).sort((a, b) => a.sort_order - b.sort_order), [categories]);
+  const subcategories = useMemo(
+    () => categories.filter((c) => c.parent_id === category).sort((a, b) => a.sort_order - b.sort_order),
+    [categories, category],
+  );
+  const visibleServices = useMemo(() => {
+    if (!services) return [];
+    const matchingCategoryIds = subcategory
+      ? [subcategory]
+      : categories.filter((c) => c.id === category || c.parent_id === category).map((c) => c.id);
+    const idSet = new Set(matchingCategoryIds);
+    return services.filter((s) => idSet.has(s.category_id));
+  }, [services, categories, category, subcategory]);
+
+  function pickCategory(id) {
+    setCategory(id);
+    setSubcategory(null);
+  }
 
   return (
     <>
@@ -89,19 +101,52 @@ export default function Services() {
           {error && <p className="loading-text">Impossible de charger les prestations pour le moment.</p>}
           {!error && !services && <p className="loading-text">Chargement des prestations…</p>}
 
-          {!error && services && orderedCategoryTree(categories).map((cat, i) => (
-            <div key={cat.id}>
-              <h2
-                className={`category-title ${cat.depth > 0 ? 'category-title-sub' : ''}`}
-                style={{ marginTop: i === 0 ? 0 : cat.depth > 0 ? 32 : 56 }}
-              >
-                {cat.name}
-              </h2>
-              <div className="services-grid">
-                {services.filter((s) => s.category_id === cat.id).map((s) => <ServiceCard key={s.id} service={s} />)}
+          {!error && services && (
+            <>
+              <div className="category-tabs center" role="tablist" aria-label="Choisir une catégorie">
+                {topLevelCategories.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={category === c.id}
+                    className={`category-tab ${category === c.id ? 'is-active' : ''}`}
+                    onClick={() => pickCategory(c.id)}
+                  >
+                    {c.name}
+                  </button>
+                ))}
               </div>
-            </div>
-          ))}
+              {subcategories.length > 0 && (
+                <div className="subcategory-tabs center" role="tablist" aria-label="Affiner par sous-catégorie">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={!subcategory}
+                    className={`subcategory-tab ${!subcategory ? 'is-active' : ''}`}
+                    onClick={() => setSubcategory(null)}
+                  >
+                    Tout
+                  </button>
+                  {subcategories.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={subcategory === c.id}
+                      className={`subcategory-tab ${subcategory === c.id ? 'is-active' : ''}`}
+                      onClick={() => setSubcategory(c.id)}
+                    >
+                      {c.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="services-grid">
+                {visibleServices.map((s) => <ServiceCard key={s.id} service={s} />)}
+              </div>
+            </>
+          )}
 
           <p className="center" style={{ marginTop: 48 }}>
             <Link to="/booking" className="btn btn-primary">Réserver une prestation</Link>
