@@ -60,7 +60,7 @@ function ReviewForm() {
       await apiFetch('/reviews', { method: 'POST', body: form });
       setFeedback({
         type: 'success',
-        text: "Merci pour votre avis ! Il sera visible après validation par l'équipe.",
+        text: 'Merci pour votre avis ! Il sera visible après validation.',
       });
       showToast('Avis envoyé, merci !', 'success');
       setForm({ clientName: '', rating: 5, comment: '', website: '' });
@@ -139,7 +139,7 @@ export default function Home() {
           </p>
           <div className="hero-actions">
             <Link to="/booking" className="btn btn-primary">Réserver un créneau</Link>
-            <Link to="/gallery" className="btn btn-outline">Voir nos réalisations</Link>
+            <Link to="/gallery" className="btn btn-outline">Voir mes réalisations</Link>
           </div>
           <ul className="hero-stats">
             <li><strong>8+</strong><span>ans d'expérience</span></li>
@@ -171,15 +171,15 @@ export default function Home() {
               <li>Rendez-vous sur place ou à domicile, selon votre préférence</li>
               <li>Réservation en ligne sécurisée, disponible 24h/24</li>
             </ul>
-            <Link to="/services" className="btn btn-outline">Découvrir nos prestations</Link>
+            <Link to="/services" className="btn btn-outline">Découvrir mes prestations</Link>
           </div>
         </div>
       </section>
 
       <section className="section section-alt">
         <div className="container">
-          <p className="eyebrow center">Nos réalisations</p>
-          <h2 className="center">Un aperçu de notre travail</h2>
+          <p className="eyebrow center">Mes réalisations</p>
+          <h2 className="center">Un aperçu de mon travail</h2>
           <p className="section-lead center">Coupes, colorations, manucures et nail art réalisés en studio.</p>
           {galleryError ? (
             <p className="loading-text">Impossible de charger la galerie pour le moment.</p>
@@ -195,7 +195,7 @@ export default function Home() {
       <section className="section" id="testimonials">
         <div className="container">
           <p className="eyebrow center">Avis clients</p>
-          <h2 className="center">Ce qu'en pensent nos client·e·s</h2>
+          <h2 className="center">Ce qu'en pensent mes client·e·s</h2>
           {reviewSummary?.count > 0 && (
             <p className="section-lead center">
               <Stars value={Math.round(reviewSummary.average)} size="lg" /> {reviewSummary.average}/5 sur {reviewSummary.count} avis

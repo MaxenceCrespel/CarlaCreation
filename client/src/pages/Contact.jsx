@@ -9,7 +9,7 @@ export default function Contact() {
   const { sitePhone, sitePhoneHref, siteEmail } = useSiteConfig();
   useSeo({
     title: 'Contact — Studio à Lille',
-    description: 'Téléphone, email et formulaire de contact de notre studio coiffure et ongles à Lille (Hauts-de-France).',
+    description: 'Téléphone, email et formulaire de contact de mon studio coiffure et ongles à Lille (Hauts-de-France).',
     path: '/contact',
   });
   const showToast = useToast();
@@ -39,7 +39,7 @@ export default function Contact() {
     setSubmitting(true);
     try {
       await apiFetch('/contact', { method: 'POST', body: form });
-      setFeedback({ type: 'success', text: 'Message envoyé, merci ! Nous vous répondrons rapidement.' });
+      setFeedback({ type: 'success', text: 'Message envoyé, merci ! Je vous répondrai rapidement.' });
       showToast('Message envoyé !', 'success');
       saveContact({ clientName: form.name, clientEmail: form.email, clientPhone: getSavedContact()?.clientPhone || '' });
       setForm((f) => ({ ...f, message: '', website: '' }));
@@ -56,7 +56,7 @@ export default function Contact() {
       <section className="section page-hero">
         <div className="container">
           <p className="eyebrow center">Contact</p>
-          <h1 className="center">Venez nous rencontrer</h1>
+          <h1 className="center">Venez me rencontrer</h1>
         </div>
       </section>
 

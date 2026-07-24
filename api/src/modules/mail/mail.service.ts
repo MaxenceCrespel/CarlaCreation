@@ -67,8 +67,8 @@ export class MailService {
     const subject = `Demande de rendez-vous reçue — ${siteConfig.siteName}`;
     const intro =
       input.guests.length > 1
-        ? `Nous avons bien reçu votre demande de rendez-vous pour ${input.guests.length} personnes. Elle est actuellement <strong>en attente de confirmation</strong>.`
-        : `Nous avons bien reçu votre demande de rendez-vous. Elle est actuellement <strong>en attente de confirmation</strong>.`;
+        ? `J'ai bien reçu votre demande de rendez-vous pour ${input.guests.length} personnes. Elle est actuellement <strong>en attente de confirmation</strong>.`
+        : `J'ai bien reçu votre demande de rendez-vous. Elle est actuellement <strong>en attente de confirmation</strong>.`;
     // Not confirmed yet — the studio's exact address stays private until it is.
     await this.send(input.clientEmail, subject, this.renderBookingEmail(input, intro, undefined, false));
   }
@@ -141,7 +141,7 @@ export class MailService {
     if (input.status === 'confirmed') {
       intro = `Bonne nouvelle : votre rendez-vous est <strong>confirmé</strong> !`;
     } else if (input.status === 'refused') {
-      intro = `Nous sommes désolés, votre demande de rendez-vous a été <strong>refusée</strong>. N'hésitez pas à nous contacter pour trouver un autre créneau.`;
+      intro = `Je suis désolée, votre demande de rendez-vous a été <strong>refusée</strong>. N'hésitez pas à me contacter pour trouver un autre créneau.`;
     } else {
       intro = `Votre rendez-vous a été <strong>annulé</strong>.`;
     }
@@ -195,7 +195,7 @@ export class MailService {
           <tbody>${rows}</tbody>
         </table>
         ${manageLink}
-        <p style="margin-top:24px;">Une question ? Appelez-nous au ${escapeHtml(siteConfig.sitePhone)} ou répondez à cet email.</p>
+        <p style="margin-top:24px;">Une question ? Appelez-moi au ${escapeHtml(siteConfig.sitePhone)} ou répondez à cet email.</p>
         <p style="color:#6B5C51;font-size:0.85em;margin-top:32px;">${escapeHtml(siteConfig.siteName)}${revealAddress ? ` — ${escapeHtml(siteConfig.siteAddress)}` : ''}</p>
       </div>
     `;

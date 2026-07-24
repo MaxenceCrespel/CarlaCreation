@@ -40,7 +40,7 @@ export default function Services() {
   useSeo({
     title: 'Prestations coiffure & ongles à Lille',
     description:
-      'Tous nos tarifs et durées à Lille : coupe, coloration, balayage, brushing, manucure, pose semi-permanent et nail art.',
+      'Tous mes tarifs et durées à Lille : coupe, coloration, balayage, brushing, manucure, pose semi-permanent et nail art.',
     path: '/services',
   });
   const [services, setServices] = useState(null);
@@ -59,7 +59,7 @@ export default function Services() {
     <>
       <section className="section page-hero">
         <div className="container">
-          <p className="eyebrow center">Nos prestations</p>
+          <p className="eyebrow center">Mes prestations</p>
           <h1 className="center">Des soins pour chaque style</h1>
           <p className="section-lead center">
             Tarifs indicatifs — un devis précis pourra être établi lors de votre diagnostic en studio.

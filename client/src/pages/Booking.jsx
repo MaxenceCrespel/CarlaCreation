@@ -379,7 +379,7 @@ export default function Booking() {
               </ul>
             </div>
             <p className="booking-contact-note">
-              Une question avant de réserver ? Appelez-nous au <a href={`tel:${sitePhoneHref}`}>{sitePhone}</a>.
+              Une question avant de réserver ? Appelez-moi au <a href={`tel:${sitePhoneHref}`}>{sitePhone}</a>.
             </p>
           </div>
 

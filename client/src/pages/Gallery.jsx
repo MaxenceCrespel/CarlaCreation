@@ -7,7 +7,7 @@ import GalleryGrid from '../components/GalleryGrid';
 export default function Gallery() {
   useSeo({
     title: 'Galerie de réalisations à Lille',
-    description: 'Coupes, colorations, balayages, manucures et nail art réalisés dans notre studio de Lille — découvrez nos réalisations en photos.',
+    description: 'Coupes, colorations, balayages, manucures et nail art réalisés dans mon studio de Lille — découvrez mes réalisations en photos.',
     path: '/gallery',
   });
   const [items, setItems] = useState(null);
@@ -23,9 +23,9 @@ export default function Gallery() {
     <>
       <section className="section page-hero">
         <div className="container">
-          <p className="eyebrow center">Nos réalisations</p>
-          <h1 className="center">Quelques-uns de nos travaux</h1>
-          <p className="section-lead center">Un aperçu de nos coupes, colorations, manucures et nail art réalisés en studio.</p>
+          <p className="eyebrow center">Mes réalisations</p>
+          <h1 className="center">Quelques-uns de mes travaux</h1>
+          <p className="section-lead center">Un aperçu de mes coupes, colorations, manucures et nail art réalisés en studio.</p>
         </div>
       </section>
 
