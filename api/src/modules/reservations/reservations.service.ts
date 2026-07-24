@@ -9,7 +9,7 @@ import { Service } from '../../database/entities/service.entity';
 import { ServiceAddon } from '../../database/entities/service-addon.entity';
 import { ReservationAddon } from '../../database/entities/reservation-addon.entity';
 import { effectiveInterval, getAvailableSlots, intervalsOverlap, isValidDateString, localDateString, toHHMM, toMinutes } from './slots.util';
-import { AdditionalGuestDto, AdminCreateReservationDto, CreateReservationDto } from './dto/reservation.dto';
+import { AdditionalGuestDto, AdminCreateReservationDto, CreateReservationDto, UpdateReservationDto } from './dto/reservation.dto';
 import { MailService } from '../mail/mail.service';
 import { SettingsService } from '../settings/settings.service';
 
@@ -393,6 +393,96 @@ export class ReservationsService {
        JOIN services s ON s.id = r.service_id
        ORDER BY r.reservation_date DESC, r.start_time ASC`,
     );
+  }
+
+  // Editing a mistaken date/time/service/client detail after the fact — a
+  // different concern from updateStatus (which is a decision the client
+  // gets emailed about). Re-validates the slot (service/addon duration,
+  // travel buffer, overlap against every OTHER reservation that day) the
+  // same way createManual does, excluding this row's own id so saving it
+  // unchanged never self-conflicts.
+  async updateReservation(id: number, dto: UpdateReservationDto): Promise<void> {
+    const existing = await this.reservationRepo.findOne({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException('Réservation introuvable.');
+    }
+
+    const serviceId = dto.serviceId ?? existing.service_id;
+    const service = await this.serviceRepo.findOne({ where: { id: serviceId } });
+    if (!service) {
+      throw new NotFoundException('Prestation introuvable.');
+    }
+
+    const date = dto.date ?? existing.reservation_date;
+    if (!isValidDateString(date)) {
+      throw new BadRequestException('Date invalide.');
+    }
+    const startTime = dto.startTime ?? existing.start_time;
+    const atClientHome = dto.atClientHome ?? existing.at_client_home;
+    const clientAddress = atClientHome ? dto.clientAddress ?? existing.client_address : null;
+
+    // reservation_addons only stores a name/price/duration snapshot, not an
+    // addon id — so when addonIds isn't provided, re-use the existing
+    // snapshot rows as-is instead of trying to resolve them back to ids.
+    let addonRows: { name: string; extra_price_cents: number; extra_duration_minutes: number }[];
+    if (dto.addonIds !== undefined) {
+      const [resolved] = await this.resolveAddons([{ name: existing.client_name, serviceId, addonIds: dto.addonIds }], { activeOnly: false });
+      addonRows = resolved.map((a) => ({ name: a.name, extra_price_cents: a.extra_price_cents, extra_duration_minutes: a.extra_duration_minutes }));
+    } else {
+      addonRows = await this.dataSource.query(
+        `SELECT name, extra_price_cents, extra_duration_minutes FROM reservation_addons WHERE reservation_id = $1`,
+        [id],
+      );
+    }
+    const addonDuration = addonRows.reduce((sum, a) => sum + a.extra_duration_minutes, 0);
+
+    const startMin = toMinutes(startTime);
+    const endMin = startMin + service.duration_minutes + addonDuration;
+    const endTime = toHHMM(endMin);
+
+    const travelBufferMinutes = await this.settingsService.getTravelBufferMinutes();
+    const candidate = effectiveInterval(startMin, endMin, atClientHome, travelBufferMinutes);
+
+    const others = await this.reservationRepo
+      .createQueryBuilder('r')
+      .select(['r.start_time', 'r.end_time', 'r.at_client_home'])
+      .where('r.reservation_date = :date', { date })
+      .andWhere('r.id != :id', { id })
+      .andWhere('r.status NOT IN (:...excluded)', { excluded: ['cancelled', 'refused'] })
+      .getMany();
+
+    const overlaps = others.some((r) => {
+      const busy = effectiveInterval(toMinutes(r.start_time), toMinutes(r.end_time), r.at_client_home, travelBufferMinutes);
+      return intervalsOverlap(candidate, busy);
+    });
+    if (overlaps) {
+      throw new ConflictException('Ce créneau chevauche une réservation existante (ou son temps de trajet).');
+    }
+
+    await this.dataSource.transaction(async (manager) => {
+      await manager.update(Reservation, id, {
+        service_id: serviceId,
+        client_name: dto.clientName ?? existing.client_name,
+        client_email: dto.clientEmail ?? existing.client_email,
+        client_phone: dto.clientPhone ?? existing.client_phone,
+        reservation_date: date,
+        start_time: startTime,
+        end_time: endTime,
+        notes: dto.notes ?? existing.notes,
+        at_client_home: atClientHome,
+        client_address: clientAddress,
+      });
+
+      if (dto.addonIds !== undefined) {
+        await manager.delete(ReservationAddon, { reservation_id: id });
+        if (addonRows.length > 0) {
+          await manager.insert(
+            ReservationAddon,
+            addonRows.map((a) => ({ reservation_id: id, ...a })),
+          );
+        }
+      }
+    });
   }
 
   async updateStatus(id: number, status: ReservationStatus): Promise<void> {

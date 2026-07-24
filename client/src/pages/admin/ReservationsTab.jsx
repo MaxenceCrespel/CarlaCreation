@@ -226,6 +226,156 @@ function AddReservationForm({ onCreated, onCancel }) {
   );
 }
 
+// Edits a single reservation row (service, date/time, client details,
+// location, notes) — not the guest list of a group, and not its addons
+// (leaving those untouched if this modal doesn't send addonIds at all).
+function EditReservationModal({ reservation, onClose, onSaved }) {
+  const showToast = useToast();
+  const [services, setServices] = useState([]);
+  const [form, setForm] = useState({
+    serviceId: reservation.service_id,
+    date: reservation.reservation_date,
+    startTime: reservation.start_time,
+    clientName: reservation.client_name,
+    clientEmail: reservation.client_email,
+    clientPhone: reservation.client_phone,
+    notes: reservation.notes || '',
+    atClientHome: reservation.at_client_home,
+    clientAddress: reservation.client_address || '',
+  });
+  const [feedback, setFeedback] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    apiFetch('/admin/services').then(setServices).catch(() => showToast('Impossible de charger les prestations.', 'error'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function update(field) {
+    return (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setFeedback(null);
+
+    if (form.atClientHome && !form.clientAddress.trim()) {
+      setFeedback('Indiquez une adresse pour un rendez-vous à domicile.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await apiFetch(`/reservations/${reservation.id}`, {
+        method: 'PATCH',
+        body: {
+          serviceId: Number(form.serviceId),
+          date: form.date,
+          startTime: form.startTime,
+          clientName: form.clientName.trim(),
+          clientEmail: form.clientEmail.trim(),
+          clientPhone: form.clientPhone.trim(),
+          notes: form.notes,
+          atClientHome: form.atClientHome,
+          clientAddress: form.atClientHome ? form.clientAddress.trim() : undefined,
+        },
+      });
+      showToast('Réservation modifiée.', 'success');
+      onSaved();
+    } catch (err) {
+      setFeedback(err.message);
+      showToast(err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={() => !saving && onClose()}>
+      <form className="modal-card" role="dialog" aria-modal="true" aria-label="Modifier la réservation" noValidate onSubmit={handleSubmit} onClick={(e) => e.stopPropagation()}>
+        <h2>Modifier la réservation</h2>
+        {reservation.group_id && (
+          <p className="loading-text">
+            Cette personne fait partie d'un rendez-vous groupé — modifier son créneau ne déplace pas les autres membres du groupe.
+          </p>
+        )}
+
+        <div className="form-row">
+          <label htmlFor="edit-service">Prestation</label>
+          <select id="edit-service" required value={form.serviceId} onChange={update('serviceId')}>
+            {services.map((s) => (
+              <option key={s.id} value={s.id}>
+                [{s.category === 'ongles' ? 'Ongles' : 'Coiffure'}] {s.name}
+                {!s.active ? ' (inactive)' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="form-row two-col">
+          <div>
+            <label htmlFor="edit-date">Date</label>
+            <input type="date" id="edit-date" required value={form.date} onChange={update('date')} />
+          </div>
+          <div>
+            <label htmlFor="edit-time">Heure de début</label>
+            <input type="time" id="edit-time" required value={form.startTime} onChange={update('startTime')} />
+          </div>
+        </div>
+
+        <div className="form-row">
+          <label htmlFor="edit-name">Nom</label>
+          <input type="text" id="edit-name" required minLength={2} maxLength={100} value={form.clientName} onChange={update('clientName')} />
+        </div>
+
+        <div className="form-row two-col">
+          <div>
+            <label htmlFor="edit-email">Email</label>
+            <input type="email" id="edit-email" required value={form.clientEmail} onChange={update('clientEmail')} />
+          </div>
+          <div>
+            <label htmlFor="edit-phone">Téléphone</label>
+            <input type="tel" id="edit-phone" required value={form.clientPhone} onChange={update('clientPhone')} />
+          </div>
+        </div>
+
+        <div className="form-row checkbox-row">
+          <label htmlFor="edit-at-home">
+            <input
+              type="checkbox"
+              id="edit-at-home"
+              checked={form.atClientHome}
+              onChange={(e) => setForm((f) => ({ ...f, atClientHome: e.target.checked }))}
+            />
+            Rendez-vous à domicile (Carla se déplace)
+          </label>
+        </div>
+
+        {form.atClientHome && (
+          <div className="form-row">
+            <label htmlFor="edit-address">Adresse du client·e</label>
+            <input type="text" id="edit-address" required minLength={5} maxLength={300} value={form.clientAddress} onChange={update('clientAddress')} />
+          </div>
+        )}
+
+        <div className="form-row">
+          <label htmlFor="edit-notes">Note (optionnel)</label>
+          <input type="text" id="edit-notes" maxLength={500} value={form.notes} onChange={update('notes')} />
+        </div>
+
+        {feedback && <div className="form-feedback error">{feedback}</div>}
+
+        <div className="modal-actions">
+          <button type="button" className="btn btn-outline" onClick={onClose} disabled={saving}>Annuler</button>
+          <button type="submit" className="btn btn-primary" disabled={saving}>
+            {saving ? 'Enregistrement…' : 'Enregistrer les modifications'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 // Consecutive rows sharing a group_id (e.g. mother + daughter booked
 // together) are shown as one visual group with bulk actions, while each
 // member keeps its own row and status control for granular changes.
@@ -257,6 +407,7 @@ export default function ReservationsTab() {
   // (deleting is the one destructive, unrecoverable action here).
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [editTarget, setEditTarget] = useState(null); // the reservation row being edited, or null
 
   function load() {
     setReservations(null);
@@ -431,6 +582,7 @@ export default function ReservationsTab() {
                       </div>
                     </td>
                     <td className="row-actions">
+                      <button type="button" onClick={() => setEditTarget(r)}>Modifier</button>
                       {r.status !== 'refused' && r.status !== 'cancelled' && (
                         <button type="button" onClick={() => refuse(r.id)}>Refuser</button>
                       )}
@@ -476,6 +628,17 @@ export default function ReservationsTab() {
             </div>
           </div>
         </div>
+      )}
+
+      {editTarget && (
+        <EditReservationModal
+          reservation={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSaved={() => {
+            setEditTarget(null);
+            load();
+          }}
+        />
       )}
     </>
   );

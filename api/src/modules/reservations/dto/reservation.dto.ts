@@ -164,6 +164,62 @@ export class UpdateReservationStatusDto {
   status!: 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'refused';
 }
 
+// Admin editing a single existing reservation row (not the status endpoint —
+// this is for fixing a mistaken date/time/service/client detail after the
+// fact). Every field optional: only what's provided gets changed. Does not
+// touch other rows in the same group, if any — editing a grouped booking's
+// individual member can desync it from its siblings' back-to-back timing,
+// which is an accepted limitation for now.
+export class UpdateReservationDto {
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  serviceId?: number;
+
+  @IsOptional()
+  @IsString()
+  @Length(2, 100)
+  clientName?: string;
+
+  @IsOptional()
+  @IsEmail()
+  clientEmail?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^[0-9+\s().-]{6,20}$/)
+  clientPhone?: string;
+
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  date?: string;
+
+  @IsOptional()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  startTime?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 500)
+  notes?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  addonIds?: number[];
+
+  @IsOptional()
+  @IsBoolean()
+  atClientHome?: boolean;
+
+  @ValidateIf((o) => o.atClientHome === true)
+  @IsString()
+  @Length(5, 300)
+  clientAddress?: string;
+}
+
 // Used by the admin to manually log a reservation (walk-in, phone booking…).
 // Unlike the public flow, this bypasses the honeypot and the "must be a
 // pre-computed available slot" constraint — the admin can book any date/time

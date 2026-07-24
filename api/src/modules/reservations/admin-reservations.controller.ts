@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, UseGua
 import { AdminAuthGuard } from '../../common/admin-auth.guard';
 import { CsrfGuard } from '../../common/csrf';
 import { ReservationsService } from './reservations.service';
-import { AdminCreateReservationDto, UpdateReservationStatusDto } from './dto/reservation.dto';
+import { AdminCreateReservationDto, UpdateReservationDto, UpdateReservationStatusDto } from './dto/reservation.dto';
 
 @UseGuards(AdminAuthGuard)
 @Controller('api/reservations')
@@ -35,6 +35,13 @@ export class AdminReservationsController {
   @Delete('group/:groupId')
   async removeGroup(@Param('groupId') groupId: string) {
     await this.reservationsService.removeGroup(groupId);
+    return { success: true };
+  }
+
+  @UseGuards(CsrfGuard)
+  @Patch(':id')
+  async update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateReservationDto) {
+    await this.reservationsService.updateReservation(id, dto);
     return { success: true };
   }
 

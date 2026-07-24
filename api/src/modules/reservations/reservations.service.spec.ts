@@ -11,7 +11,7 @@ import { SettingsService } from '../settings/settings.service';
 describe('ReservationsService', () => {
   let service: ReservationsService;
   let dataSource: { transaction: jest.Mock; query: jest.Mock };
-  let reservationRepo: { createQueryBuilder: jest.Mock; update: jest.Mock; delete: jest.Mock };
+  let reservationRepo: { createQueryBuilder: jest.Mock; findOne: jest.Mock; update: jest.Mock; delete: jest.Mock };
   let serviceRepo: { findOne: jest.Mock };
   let addonRepo: { find: jest.Mock };
   let mailService: {
@@ -31,6 +31,8 @@ describe('ReservationsService', () => {
         let nextId = 100;
         const manager = {
           insert: jest.fn(async () => ({ identifiers: [{ id: nextId++ }] })),
+          update: jest.fn(),
+          delete: jest.fn(),
         };
         return fn(manager);
       }),
@@ -38,6 +40,7 @@ describe('ReservationsService', () => {
     };
     reservationRepo = {
       createQueryBuilder: jest.fn(),
+      findOne: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
     };
@@ -485,6 +488,178 @@ describe('ReservationsService', () => {
 
     expect(reservationRepo.update).toHaveBeenCalledWith({ group_id: 'some-group' }, { status: 'cancelled' });
     expect(mailService.sendStatusUpdate).toHaveBeenCalledWith(expect.objectContaining({ status: 'cancelled' }));
+  });
+
+  describe('updateReservation', () => {
+    it('throws NotFoundException when the reservation does not exist', async () => {
+      reservationRepo.findOne.mockResolvedValue(null);
+      await expect(service.updateReservation(999, { notes: 'x' })).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('throws NotFoundException when moved to a service that does not exist', async () => {
+      reservationRepo.findOne.mockResolvedValue({
+        id: 1,
+        service_id: 1,
+        client_name: 'Alice',
+        client_email: 'a@example.com',
+        client_phone: '0600000000',
+        reservation_date: '2099-01-01',
+        start_time: '10:00',
+        end_time: '10:45',
+        notes: '',
+        at_client_home: false,
+        client_address: null,
+      });
+      serviceRepo.findOne.mockResolvedValue(null);
+
+      await expect(service.updateReservation(1, { serviceId: 999 })).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('updates simple fields and recomputes end_time from the (possibly new) service duration', async () => {
+      reservationRepo.findOne.mockResolvedValue({
+        id: 1,
+        service_id: 1,
+        client_name: 'Alice',
+        client_email: 'a@example.com',
+        client_phone: '0600000000',
+        reservation_date: '2099-01-01',
+        start_time: '10:00',
+        end_time: '10:45',
+        notes: '',
+        at_client_home: false,
+        client_address: null,
+      });
+      serviceRepo.findOne.mockResolvedValue(MANICURE); // 30 min, was Coupe Femme (45 min)
+      dataSource.query.mockResolvedValue([]);
+      noOverlap();
+
+      await service.updateReservation(1, { serviceId: 7, clientName: 'Alice Updated' });
+
+      expect(dataSource.transaction).toHaveBeenCalled();
+    });
+
+    it('does not conflict with itself when saved unchanged (same slot)', async () => {
+      reservationRepo.findOne.mockResolvedValue({
+        id: 1,
+        service_id: 1,
+        client_name: 'Alice',
+        client_email: 'a@example.com',
+        client_phone: '0600000000',
+        reservation_date: '2099-01-01',
+        start_time: '10:00',
+        end_time: '10:45',
+        notes: '',
+        at_client_home: false,
+        client_address: null,
+      });
+      serviceRepo.findOne.mockResolvedValue(HAIRCUT);
+      dataSource.query.mockResolvedValue([]);
+      // The overlap query excludes this row's own id — simulate that by
+      // returning no OTHER rows, same as noOverlap().
+      noOverlap();
+
+      await expect(service.updateReservation(1, {})).resolves.toBeUndefined();
+    });
+
+    it('throws ConflictException when the edited slot overlaps a different reservation', async () => {
+      reservationRepo.findOne.mockResolvedValue({
+        id: 1,
+        service_id: 1,
+        client_name: 'Alice',
+        client_email: 'a@example.com',
+        client_phone: '0600000000',
+        reservation_date: '2099-01-01',
+        start_time: '10:00',
+        end_time: '10:45',
+        notes: '',
+        at_client_home: false,
+        client_address: null,
+      });
+      serviceRepo.findOne.mockResolvedValue(HAIRCUT);
+      dataSource.query.mockResolvedValue([]);
+      reservationRepo.createQueryBuilder.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([{ start_time: '10:30', end_time: '11:15', at_client_home: false }]),
+      });
+
+      await expect(service.updateReservation(1, { startTime: '10:30' })).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('replaces reservation_addons when addonIds is provided', async () => {
+      reservationRepo.findOne.mockResolvedValue({
+        id: 1,
+        service_id: 7,
+        client_name: 'Alice',
+        client_email: 'a@example.com',
+        client_phone: '0600000000',
+        reservation_date: '2099-01-01',
+        start_time: '10:00',
+        end_time: '10:30',
+        notes: '',
+        at_client_home: false,
+        client_address: null,
+      });
+      serviceRepo.findOne.mockResolvedValue(MANICURE);
+      addonRepo.find.mockResolvedValue([{ id: 50, service_id: 7, name: 'Nail Art', extra_price_cents: 1000, extra_duration_minutes: 15, active: true }]);
+      noOverlap();
+
+      let deleteCall: unknown;
+      let insertCall: unknown;
+      dataSource.transaction.mockImplementationOnce(async (fn) => {
+        const manager = {
+          update: jest.fn(),
+          delete: jest.fn((...args) => {
+            deleteCall = args;
+          }),
+          insert: jest.fn((...args) => {
+            insertCall = args;
+          }),
+        };
+        return fn(manager);
+      });
+
+      await service.updateReservation(1, { addonIds: [50] });
+
+      expect(deleteCall).toBeTruthy();
+      expect(insertCall).toBeTruthy();
+    });
+
+    it('keeps the existing addon snapshot when addonIds is not provided', async () => {
+      reservationRepo.findOne.mockResolvedValue({
+        id: 1,
+        service_id: 7,
+        client_name: 'Alice',
+        client_email: 'a@example.com',
+        client_phone: '0600000000',
+        reservation_date: '2099-01-01',
+        start_time: '10:00',
+        end_time: '10:45',
+        notes: '',
+        at_client_home: false,
+        client_address: null,
+      });
+      serviceRepo.findOne.mockResolvedValue(MANICURE);
+      dataSource.query.mockResolvedValue([{ name: 'Nail Art', extra_price_cents: 1000, extra_duration_minutes: 15 }]);
+      noOverlap();
+
+      let deleteCalled = false;
+      dataSource.transaction.mockImplementationOnce(async (fn) => {
+        const manager = {
+          update: jest.fn(),
+          delete: jest.fn(() => {
+            deleteCalled = true;
+          }),
+          insert: jest.fn(),
+        };
+        return fn(manager);
+      });
+
+      await service.updateReservation(1, { clientName: 'Alice Updated' });
+
+      expect(deleteCalled).toBe(false);
+    });
   });
 
   describe('dispatchDueReminders', () => {
