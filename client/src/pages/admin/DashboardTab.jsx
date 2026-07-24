@@ -3,9 +3,24 @@ import { apiFetch } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { formatPrice } from '../../utils/format';
 
+const MONTH_LABEL_FORMATTER = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' });
+
+function toMonthKey(y, m) {
+  return `${y}-${String(m).padStart(2, '0')}`;
+}
 function currentMonth() {
   const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  return toMonthKey(now.getFullYear(), now.getMonth() + 1);
+}
+function shiftMonth(month, delta) {
+  const [y, m] = month.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return toMonthKey(d.getFullYear(), d.getMonth() + 1);
+}
+function monthLabel(month) {
+  const [y, m] = month.split('-').map(Number);
+  const label = MONTH_LABEL_FORMATTER.format(new Date(y, m - 1, 1));
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 // 'YYYY-MM' -> [firstDay, lastDay] as 'YYYY-MM-DD', in local time.
@@ -50,11 +65,25 @@ export default function DashboardTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month]);
 
+  const isCurrentMonth = month === currentMonth();
+
   return (
     <>
-      <div className="admin-filters">
-        <label htmlFor="dashboard-month">Période</label>
-        <input type="month" id="dashboard-month" value={month} onChange={(e) => setMonth(e.target.value)} />
+      <div className="calendar-nav">
+        <button type="button" className="btn btn-outline btn-sm" onClick={() => setMonth((m) => shiftMonth(m, -1))} aria-label="Mois précédent">
+          &larr;
+        </button>
+        <div className="calendar-nav-center">
+          <h3>{monthLabel(month)}</h3>
+          {!isCurrentMonth && (
+            <button type="button" className="btn btn-outline btn-sm" onClick={() => setMonth(currentMonth())}>
+              Mois en cours
+            </button>
+          )}
+        </div>
+        <button type="button" className="btn btn-outline btn-sm" onClick={() => setMonth((m) => shiftMonth(m, 1))} aria-label="Mois suivant">
+          &rarr;
+        </button>
       </div>
 
       {error && <p className="loading-text">Erreur : {error}</p>}
