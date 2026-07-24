@@ -2,10 +2,12 @@ import * as crypto from 'crypto';
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { Reservation } from '../../database/entities/reservation.entity';
 import type { ReservationStatus } from '../../database/entities/reservation.entity';
 import { Service } from '../../database/entities/service.entity';
+import { ServiceAddon } from '../../database/entities/service-addon.entity';
+import { ReservationAddon } from '../../database/entities/reservation-addon.entity';
 import { effectiveInterval, getAvailableSlots, intervalsOverlap, isValidDateString, localDateString, toHHMM, toMinutes } from './slots.util';
 import { AdditionalGuestDto, AdminCreateReservationDto, CreateReservationDto } from './dto/reservation.dto';
 import { MailService } from '../mail/mail.service';
@@ -14,6 +16,7 @@ import { SettingsService } from '../settings/settings.service';
 interface Guest {
   name: string;
   serviceId: number;
+  addonIds: number[];
 }
 
 interface BookedGuest {
@@ -64,6 +67,7 @@ export class ReservationsService {
     @InjectDataSource() private readonly dataSource: DataSource,
     @InjectRepository(Reservation) private readonly reservationRepo: Repository<Reservation>,
     @InjectRepository(Service) private readonly serviceRepo: Repository<Service>,
+    @InjectRepository(ServiceAddon) private readonly addonRepo: Repository<ServiceAddon>,
     private readonly mailService: MailService,
     private readonly settingsService: SettingsService,
   ) {}
@@ -72,9 +76,10 @@ export class ReservationsService {
     date: string,
     serviceIds: number[],
     atClientHome = false,
+    addonMinutes = 0,
   ): Promise<{ date: string; serviceIds: number[]; slots: string[] }> {
     const services = await this.resolveServices(serviceIds, { activeOnly: true });
-    const totalDuration = services.reduce((sum, s) => sum + s.duration_minutes, 0);
+    const totalDuration = services.reduce((sum, s) => sum + s.duration_minutes, 0) + addonMinutes;
     const travelBufferMinutes = await this.settingsService.getTravelBufferMinutes();
     const slots = await getAvailableSlots(this.dataSource, date, totalDuration, atClientHome, travelBufferMinutes);
     return { date, serviceIds, slots };
@@ -85,9 +90,13 @@ export class ReservationsService {
   // returns the very first open slot for the combined duration of the given
   // services — powers the "next available slot" suggestion on the booking
   // page so clients don't have to hunt through the day picker themselves.
-  async findNextAvailable(serviceIds: number[], atClientHome = false): Promise<{ date: string; startTime: string } | null> {
+  async findNextAvailable(
+    serviceIds: number[],
+    atClientHome = false,
+    addonMinutes = 0,
+  ): Promise<{ date: string; startTime: string } | null> {
     const services = await this.resolveServices(serviceIds, { activeOnly: true });
-    const totalDuration = services.reduce((sum, s) => sum + s.duration_minutes, 0);
+    const totalDuration = services.reduce((sum, s) => sum + s.duration_minutes, 0) + addonMinutes;
     const travelBufferMinutes = await this.settingsService.getTravelBufferMinutes();
 
     const HORIZON_DAYS = 60;
@@ -110,15 +119,19 @@ export class ReservationsService {
   // free, pre-computed slot — re-validated here to avoid race/tampering.
   async create(dto: CreateReservationDto) {
     const guests: Guest[] = [
-      { name: dto.clientName, serviceId: dto.serviceId },
-      ...(dto.additionalGuests ?? []).map((g: AdditionalGuestDto) => ({ name: g.name, serviceId: g.serviceId })),
+      { name: dto.clientName, serviceId: dto.serviceId, addonIds: dto.addonIds ?? [] },
+      ...(dto.additionalGuests ?? []).map((g: AdditionalGuestDto) => ({ name: g.name, serviceId: g.serviceId, addonIds: g.addonIds ?? [] })),
     ];
 
     const services = await this.resolveServices(
       guests.map((g) => g.serviceId),
       { activeOnly: true },
     );
-    const totalDuration = services.reduce((sum, s) => sum + s.duration_minutes, 0);
+    const addonsPerGuest = await this.resolveAddons(guests, { activeOnly: true });
+    const totalDuration = services.reduce(
+      (sum, s, i) => sum + s.duration_minutes + addonsPerGuest[i].reduce((a, addon) => a + addon.extra_duration_minutes, 0),
+      0,
+    );
     const atClientHome = dto.atClientHome ?? false;
 
     const travelBufferMinutes = await this.settingsService.getTravelBufferMinutes();
@@ -127,7 +140,7 @@ export class ReservationsService {
       throw new ConflictException("Ce créneau n'est plus disponible. Merci d'en choisir un autre.");
     }
 
-    const result = await this.insertGroup(guests, services, {
+    const result = await this.insertGroup(guests, services, addonsPerGuest, {
       date: dto.date,
       startTime: dto.startTime,
       clientEmail: dto.clientEmail,
@@ -171,15 +184,19 @@ export class ReservationsService {
     }
 
     const guests: Guest[] = [
-      { name: dto.clientName, serviceId: dto.serviceId },
-      ...(dto.additionalGuests ?? []).map((g: AdditionalGuestDto) => ({ name: g.name, serviceId: g.serviceId })),
+      { name: dto.clientName, serviceId: dto.serviceId, addonIds: dto.addonIds ?? [] },
+      ...(dto.additionalGuests ?? []).map((g: AdditionalGuestDto) => ({ name: g.name, serviceId: g.serviceId, addonIds: g.addonIds ?? [] })),
     ];
 
     const services = await this.resolveServices(
       guests.map((g) => g.serviceId),
       { activeOnly: false },
     );
-    const totalDuration = services.reduce((sum, s) => sum + s.duration_minutes, 0);
+    const addonsPerGuest = await this.resolveAddons(guests, { activeOnly: false });
+    const totalDuration = services.reduce(
+      (sum, s, i) => sum + s.duration_minutes + addonsPerGuest[i].reduce((a, addon) => a + addon.extra_duration_minutes, 0),
+      0,
+    );
     const atClientHome = dto.atClientHome ?? false;
 
     const travelBufferMinutes = await this.settingsService.getTravelBufferMinutes();
@@ -203,7 +220,7 @@ export class ReservationsService {
     }
 
     const status = dto.status || 'confirmed';
-    const result = await this.insertGroup(guests, services, {
+    const result = await this.insertGroup(guests, services, addonsPerGuest, {
       date: dto.date,
       startTime: dto.startTime,
       clientEmail: dto.clientEmail,
@@ -259,9 +276,35 @@ export class ReservationsService {
     return services;
   }
 
+  // Parallel to `guests` (same index per guest) — each guest's addonIds
+  // must belong to THEIR OWN service, not just exist somewhere.
+  private async resolveAddons(guests: Guest[], opts: { activeOnly: boolean }): Promise<ServiceAddon[][]> {
+    return Promise.all(
+      guests.map(async (guest) => {
+        const ids = guest.addonIds ?? [];
+        if (ids.length === 0) return [];
+
+        const addons = await this.addonRepo.find({ where: { id: In(ids) } });
+        if (addons.length !== ids.length) {
+          throw new NotFoundException('Supplément introuvable.');
+        }
+        for (const addon of addons) {
+          if (addon.service_id !== guest.serviceId) {
+            throw new BadRequestException('Un supplément ne correspond pas à la prestation sélectionnée.');
+          }
+          if (opts.activeOnly && !addon.active) {
+            throw new BadRequestException("Ce supplément n'est plus disponible.");
+          }
+        }
+        return addons;
+      }),
+    );
+  }
+
   private async insertGroup(
     guests: Guest[],
     services: Service[],
+    addonsPerGuest: ServiceAddon[][],
     common: {
       date: string;
       startTime: string;
@@ -281,8 +324,11 @@ export class ReservationsService {
       for (let i = 0; i < guests.length; i += 1) {
         const guest = guests[i];
         const service = services[i];
+        const addons = addonsPerGuest[i] ?? [];
+        const addonDuration = addons.reduce((sum, a) => sum + a.extra_duration_minutes, 0);
+        const duration = service.duration_minutes + addonDuration;
         const startTime = toHHMM(cursor);
-        const endTime = toHHMM(cursor + service.duration_minutes);
+        const endTime = toHHMM(cursor + duration);
 
         const inserted = await manager.insert(Reservation, {
           group_id: groupId,
@@ -298,16 +344,31 @@ export class ReservationsService {
           at_client_home: common.atClientHome,
           client_address: common.clientAddress,
         });
+        const reservationId = Number(inserted.identifiers[0].id);
+
+        if (addons.length > 0) {
+          await manager.insert(
+            ReservationAddon,
+            addons.map((a) => ({
+              reservation_id: reservationId,
+              name: a.name,
+              extra_price_cents: a.extra_price_cents,
+              extra_duration_minutes: a.extra_duration_minutes,
+            })),
+          );
+        }
+
+        const serviceName = addons.length > 0 ? `${service.name} + ${addons.map((a) => a.name).join(', ')}` : service.name;
 
         bookedGuests.push({
-          id: Number(inserted.identifiers[0].id),
+          id: reservationId,
           name: guest.name,
           serviceId: guest.serviceId,
-          serviceName: service.name,
+          serviceName,
           startTime,
           endTime,
         });
-        cursor += service.duration_minutes;
+        cursor += duration;
       }
     });
 

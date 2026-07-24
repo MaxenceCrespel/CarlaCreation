@@ -292,6 +292,20 @@ img { max-width: 100%; display: block; }
 .service-pick-card h4 { margin: 0 0 6px; font-size: 1rem; font-family: var(--font-body); font-weight: 700; }
 .service-pick-card .service-meta { margin-top: 10px; padding-top: 10px; }
 
+/* Addon checkboxes (booking: optional extras on the selected service) */
+.addon-checkboxes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: -8px 0 20px;
+  padding: 14px 16px;
+  background: var(--color-bg-alt);
+  border-radius: var(--radius-sm);
+}
+.addon-checkboxes-label { font-weight: 700; font-size: 0.82rem; color: var(--color-text-soft); }
+.addon-checkbox { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.92rem; }
+.addon-checkbox-meta { color: var(--color-text-soft); font-size: 0.82rem; margin-left: auto; }
+
 /* Day picker (booking date selection) */
 .day-picker-hint { text-align: left; padding: 12px 0; }
 .day-picker-scroll {
@@ -893,6 +907,13 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
   padding: 0;
 }
 .add-range-btn { align-self: flex-start; }
+
+/* Service addons (supplements) editor, both in the create form and each
+   ServiceEditCard */
+.addon-editor { display: flex; flex-direction: column; gap: 8px; }
+.addon-editor > label { font-weight: 600; font-size: 0.85rem; color: var(--color-text-soft); }
+.addon-row { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 8px; align-items: center; }
+.addon-row input { padding: 8px 10px; font-size: 0.85rem; }
 
 /* Services admin (add/edit prestations) */
 .admin-services-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); gap: 20px; margin-top: 24px; }

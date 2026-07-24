@@ -2,7 +2,75 @@ import { useEffect, useState } from 'react';
 import { apiFetch } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 
-const EMPTY_FORM = { name: '', description: '', category: 'coiffure', durationMinutes: 30, priceCents: 0 };
+const EMPTY_FORM = { name: '', description: '', category: 'coiffure', durationMinutes: 30, priceCents: 0, addons: [] };
+
+let addonKeySeq = 0;
+function emptyAddon() {
+  addonKeySeq += 1;
+  return { key: `new-${addonKeySeq}`, name: '', priceEuros: '0.00', durationMinutes: 0 };
+}
+
+// Suppléments optionnels d'une prestation (ex: "Nail Art" sur une manucure)
+// — ajoutent du prix ET de la durée. Édité en liste libre (add/remove),
+// comme les créneaux horaires dans l'onglet Horaires.
+function AddonEditor({ addons, onChange }) {
+  function addRow() {
+    onChange([...addons, emptyAddon()]);
+  }
+  function removeRow(key) {
+    onChange(addons.filter((a) => a.key !== key));
+  }
+  function updateRow(key, patch) {
+    onChange(addons.map((a) => (a.key === key ? { ...a, ...patch } : a)));
+  }
+
+  return (
+    <div className="addon-editor">
+      <label>Suppléments (optionnel)</label>
+      {addons.map((a) => (
+        <div className="addon-row" key={a.key}>
+          <input
+            type="text"
+            placeholder="Nom (ex : Nail Art)"
+            maxLength={100}
+            value={a.name}
+            onChange={(e) => updateRow(a.key, { name: e.target.value })}
+          />
+          <input
+            type="number"
+            min={0}
+            step="0.01"
+            placeholder="Prix (€)"
+            value={a.priceEuros}
+            onChange={(e) => updateRow(a.key, { priceEuros: e.target.value })}
+          />
+          <input
+            type="number"
+            min={0}
+            max={240}
+            placeholder="Durée (min)"
+            value={a.durationMinutes}
+            onChange={(e) => updateRow(a.key, { durationMinutes: e.target.value })}
+          />
+          <button type="button" className="range-remove-btn" onClick={() => removeRow(a.key)}>Retirer</button>
+        </div>
+      ))}
+      <button type="button" className="btn btn-outline btn-sm add-range-btn" onClick={addRow}>
+        + Ajouter un supplément
+      </button>
+    </div>
+  );
+}
+
+function addonsToPayload(addons) {
+  return addons
+    .filter((a) => a.name.trim())
+    .map((a) => ({
+      name: a.name.trim(),
+      extraPriceCents: Math.round(Number(a.priceEuros) * 100),
+      extraDurationMinutes: Number(a.durationMinutes) || 0,
+    }));
+}
 
 export default function ServicesTab() {
   const showToast = useToast();
@@ -40,6 +108,7 @@ export default function ServicesTab() {
           category: newService.category,
           durationMinutes: Number(newService.durationMinutes),
           priceCents: Math.round(Number(newService.priceCents) * 100),
+          addons: addonsToPayload(newService.addons),
         },
       });
       setServices((rows) => [...(rows ?? []), created]);
@@ -139,6 +208,7 @@ export default function ServicesTab() {
             />
           </div>
         </div>
+        <AddonEditor addons={newService.addons} onChange={(addons) => setNewService((f) => ({ ...f, addons }))} />
         {createFeedback && <div className="form-feedback error">{createFeedback}</div>}
         <button type="submit" className="btn btn-primary" disabled={creating}>
           {creating ? 'Ajout en cours…' : 'Ajouter la prestation'}
@@ -171,6 +241,14 @@ function ServiceEditCard({ service, onSave, onDelete }) {
   const [durationMinutes, setDurationMinutes] = useState(service.duration_minutes);
   const [priceEuros, setPriceEuros] = useState((service.price_cents / 100).toFixed(2));
   const [active, setActive] = useState(Boolean(service.active));
+  const [addons, setAddons] = useState(() =>
+    (service.addons ?? []).map((a) => ({
+      key: `existing-${a.id}`,
+      name: a.name,
+      priceEuros: (a.extra_price_cents / 100).toFixed(2),
+      durationMinutes: a.extra_duration_minutes,
+    })),
+  );
 
   function save() {
     onSave(service.id, {
@@ -179,6 +257,7 @@ function ServiceEditCard({ service, onSave, onDelete }) {
       durationMinutes: Number(durationMinutes),
       priceCents: Math.round(Number(priceEuros) * 100),
       active,
+      addons: addonsToPayload(addons),
     });
   }
 
@@ -203,6 +282,7 @@ function ServiceEditCard({ service, onSave, onDelete }) {
           <input type="number" min={0} step="0.01" value={priceEuros} onChange={(e) => setPriceEuros(e.target.value)} />
         </div>
       </div>
+      <AddonEditor addons={addons} onChange={setAddons} />
       <div className="admin-service-card-actions">
         <label className="admin-service-active-toggle">
           <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />

@@ -4,6 +4,7 @@ import { BadRequestException, ConflictException, NotFoundException } from '@nest
 import { ReservationsService } from './reservations.service';
 import { Reservation } from '../../database/entities/reservation.entity';
 import { Service } from '../../database/entities/service.entity';
+import { ServiceAddon } from '../../database/entities/service-addon.entity';
 import { MailService } from '../mail/mail.service';
 import { SettingsService } from '../settings/settings.service';
 
@@ -12,6 +13,7 @@ describe('ReservationsService', () => {
   let dataSource: { transaction: jest.Mock; query: jest.Mock };
   let reservationRepo: { createQueryBuilder: jest.Mock; update: jest.Mock; delete: jest.Mock };
   let serviceRepo: { findOne: jest.Mock };
+  let addonRepo: { find: jest.Mock };
   let mailService: {
     sendBookingReceived: jest.Mock;
     sendStatusUpdate: jest.Mock;
@@ -40,6 +42,7 @@ describe('ReservationsService', () => {
       delete: jest.fn(),
     };
     serviceRepo = { findOne: jest.fn() };
+    addonRepo = { find: jest.fn().mockResolvedValue([]) };
     mailService = {
       sendBookingReceived: jest.fn(),
       sendStatusUpdate: jest.fn(),
@@ -56,6 +59,7 @@ describe('ReservationsService', () => {
         { provide: getDataSourceToken(), useValue: dataSource },
         { provide: getRepositoryToken(Reservation), useValue: reservationRepo },
         { provide: getRepositoryToken(Service), useValue: serviceRepo },
+        { provide: getRepositoryToken(ServiceAddon), useValue: addonRepo },
         { provide: MailService, useValue: mailService },
         { provide: SettingsService, useValue: settingsService },
       ],
@@ -163,6 +167,102 @@ describe('ReservationsService', () => {
 
     expect(insertCalls).toHaveLength(1);
     expect(insertCalls[0]).toMatchObject({ at_client_home: true, client_address: '12 rue du Test, 59000 Lille' });
+  });
+
+  describe('addons', () => {
+    const NAIL_ART = { id: 50, service_id: 7, name: 'Nail Art', extra_price_cents: 1000, extra_duration_minutes: 15, active: true };
+
+    it('extends the reservation duration and records a reservation_addons row for a valid addon', async () => {
+      serviceRepo.findOne.mockResolvedValue(MANICURE);
+      addonRepo.find.mockResolvedValue([NAIL_ART]);
+      noOverlap();
+
+      const inserts: { entity: unknown; payload: unknown }[] = [];
+      dataSource.transaction.mockImplementationOnce(async (fn) => {
+        const manager = {
+          insert: jest.fn(async (entity: unknown, payload: unknown) => {
+            inserts.push({ entity, payload });
+            return { identifiers: [{ id: 200 }] };
+          }),
+        };
+        return fn(manager);
+      });
+
+      const result = await service.createManual({
+        serviceId: 7,
+        clientName: 'Test',
+        clientEmail: 'test@example.com',
+        clientPhone: '0600000000',
+        date: '2099-01-01',
+        startTime: '10:00',
+        status: 'confirmed',
+        addonIds: [50],
+      } as any);
+
+      // 30 min (Manucure Classique) + 15 min (Nail Art) = 45 min
+      expect(result.guests[0]).toMatchObject({ startTime: '10:00', endTime: '10:45' });
+      expect(result.guests[0].serviceName).toBe('Manucure Classique + Nail Art');
+
+      const addonInsert = inserts.find((i) => Array.isArray(i.payload));
+      expect(addonInsert).toBeTruthy();
+      expect((addonInsert!.payload as any[])[0]).toMatchObject({
+        reservation_id: 200,
+        name: 'Nail Art',
+        extra_price_cents: 1000,
+        extra_duration_minutes: 15,
+      });
+    });
+
+    it('rejects an addon id that does not exist', async () => {
+      serviceRepo.findOne.mockResolvedValue(MANICURE);
+      addonRepo.find.mockResolvedValue([]); // none found for the requested id
+
+      await expect(
+        service.createManual({
+          serviceId: 7,
+          clientName: 'Test',
+          clientEmail: 'test@example.com',
+          clientPhone: '0600000000',
+          date: '2099-01-01',
+          startTime: '10:00',
+          addonIds: [999],
+        } as any),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('rejects an addon that belongs to a different service', async () => {
+      serviceRepo.findOne.mockResolvedValue(HAIRCUT); // booking Coupe Femme (id 1)...
+      addonRepo.find.mockResolvedValue([NAIL_ART]); // ...but Nail Art belongs to service 7
+
+      await expect(
+        service.createManual({
+          serviceId: 1,
+          clientName: 'Test',
+          clientEmail: 'test@example.com',
+          clientPhone: '0600000000',
+          date: '2099-01-01',
+          startTime: '10:00',
+          addonIds: [50],
+        } as any),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('rejects an inactive addon on the public booking flow (create), which requires active addons', async () => {
+      serviceRepo.findOne.mockResolvedValue(MANICURE);
+      addonRepo.find.mockResolvedValue([{ ...NAIL_ART, active: false }]);
+
+      await expect(
+        service.create({
+          serviceId: 7,
+          clientName: 'Test',
+          clientEmail: 'test@example.com',
+          clientPhone: '0600000000',
+          date: '2099-01-01',
+          startTime: '10:00',
+          addonIds: [50],
+        } as any),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
   });
 
   it('createManual books consecutive guests back-to-back, in order', async () => {

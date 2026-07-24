@@ -16,7 +16,9 @@ DROP TABLE IF EXISTS daily_hours;
 DROP TABLE IF EXISTS reviews;
 DROP TABLE IF EXISTS contact_messages;
 DROP TABLE IF EXISTS gallery;
+DROP TABLE IF EXISTS reservation_addons;
 DROP TABLE IF EXISTS reservations;
+DROP TABLE IF EXISTS service_addons;
 DROP TABLE IF EXISTS services;
 DROP TABLE IF EXISTS admins;
 
@@ -40,6 +42,18 @@ CREATE TABLE
     );
 
 CREATE TABLE
+    IF NOT EXISTS service_addons (
+        id SERIAL PRIMARY KEY,
+        service_id INTEGER NOT NULL REFERENCES services (id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        extra_price_cents INTEGER NOT NULL DEFAULT 0,
+        extra_duration_minutes INTEGER NOT NULL DEFAULT 0,
+        active BOOLEAN NOT NULL DEFAULT true
+    );
+
+CREATE INDEX IF NOT EXISTS "IDX_service_addons_service_id" ON service_addons (service_id);
+
+CREATE TABLE
     IF NOT EXISTS reservations (
         id SERIAL PRIMARY KEY,
         group_id TEXT,
@@ -61,6 +75,17 @@ CREATE TABLE
 CREATE INDEX IF NOT EXISTS "IDX_reservations_reservation_date" ON reservations (reservation_date);
 
 CREATE INDEX IF NOT EXISTS "IDX_reservations_group_id" ON reservations (group_id);
+
+CREATE TABLE
+    IF NOT EXISTS reservation_addons (
+        id SERIAL PRIMARY KEY,
+        reservation_id INTEGER NOT NULL REFERENCES reservations (id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        extra_price_cents INTEGER NOT NULL DEFAULT 0,
+        extra_duration_minutes INTEGER NOT NULL DEFAULT 0
+    );
+
+CREATE INDEX IF NOT EXISTS "IDX_reservation_addons_reservation_id" ON reservation_addons (reservation_id);
 
 CREATE TABLE
     IF NOT EXISTS gallery (
@@ -135,7 +160,8 @@ VALUES
     (1784321118308, 'AddGalleryBeforeAfter1784321118308'),
     (1784394804417, 'AddReservationReminderSent1784394804417'),
     (1784529892155, 'AddReservationLocation1784529892155'),
-    (1784531313161, 'AddAppSettings1784531313161');
+    (1784531313161, 'AddAppSettings1784531313161'),
+    (1784887549892, 'AddServiceAddons1784887549892');
 
 -- Admin account — username "carla", password "Carla0303!" (bcrypt, cost 12).
 -- Change this password after first login in a real deployment.

@@ -15,6 +15,12 @@ export class ServicesController {
       category: s.category,
       duration_minutes: s.duration_minutes,
       price_cents: s.price_cents,
+      addons: s.addons.map((a) => ({
+        id: a.id,
+        name: a.name,
+        extra_price_cents: a.extra_price_cents,
+        extra_duration_minutes: a.extra_duration_minutes,
+      })),
     }));
   }
 }

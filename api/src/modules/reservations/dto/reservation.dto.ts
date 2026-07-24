@@ -40,6 +40,17 @@ export class AvailabilityQueryDto {
   @Transform(({ obj }) => obj.atClientHome === true || obj.atClientHome === 'true')
   @IsBoolean()
   atClientHome?: boolean;
+
+  // Total extra minutes from every addon selected across every guest (not
+  // per-guest/per-addon detail — duration is additive regardless of which
+  // addons, so a single total is enough to keep the query string simple).
+  // Actual addon validity is only re-checked where it matters, at booking
+  // creation time.
+  @IsOptional()
+  @Transform(({ value }) => (value === undefined ? undefined : Number(value)))
+  @IsInt()
+  @Min(0)
+  addonMinutes?: number;
 }
 
 export class NextAvailableQueryDto {
@@ -59,6 +70,12 @@ export class NextAvailableQueryDto {
   @Transform(({ obj }) => obj.atClientHome === true || obj.atClientHome === 'true')
   @IsBoolean()
   atClientHome?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }) => (value === undefined ? undefined : Number(value)))
+  @IsInt()
+  @Min(0)
+  addonMinutes?: number;
 }
 
 // A person booked alongside the primary contact (e.g. a mother booking for
@@ -72,6 +89,16 @@ export class AdditionalGuestDto {
   @IsInt()
   @Min(1)
   serviceId!: number;
+
+  // Ids of ServiceAddon rows for THIS guest's service (e.g. "Nail Art" on
+  // top of their "Manucure Classique") — validated against that specific
+  // service in ReservationsService, not just "any addon exists".
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  addonIds?: number[];
 }
 
 export class CreateReservationDto {
@@ -100,6 +127,14 @@ export class CreateReservationDto {
   @IsString()
   @Length(0, 500)
   notes?: string;
+
+  // Addons for the primary contact's own service (see AdditionalGuestDto).
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  addonIds?: number[];
 
   // Carla is a solo auto-entrepreneuse, not a fixed salon: the client
   // either comes to her (default) or she travels to clientAddress.
@@ -160,6 +195,13 @@ export class AdminCreateReservationDto {
   @IsString()
   @Length(0, 500)
   notes?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  addonIds?: number[];
 
   @IsOptional()
   @IsBoolean()

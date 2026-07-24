@@ -42,6 +42,31 @@ function dayOfWeekFor(dateStr) {
   return new Date(y, m - 1, d).getDay();
 }
 
+// Optional extras for the currently selected service (e.g. "Nail Art" on a
+// manicure) — only rendered when that service actually has any.
+function AddonCheckboxes({ service, selectedIds, onToggle }) {
+  if (!service || !service.addons || service.addons.length === 0) return null;
+
+  return (
+    <div className="addon-checkboxes">
+      <span className="addon-checkboxes-label">Suppléments (optionnel)</span>
+      {service.addons.map((addon) => (
+        <label key={addon.id} className="addon-checkbox">
+          <input
+            type="checkbox"
+            checked={selectedIds.includes(addon.id)}
+            onChange={(e) => onToggle(addon.id, e.target.checked)}
+          />
+          <span>{addon.name}</span>
+          <span className="addon-checkbox-meta">
+            +{formatPrice(addon.extra_price_cents)}{addon.extra_duration_minutes > 0 ? ` · +${addon.extra_duration_minutes} min` : ''}
+          </span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
 // Category tabs + clickable service cards, shared by the primary booker and
 // each additional guest so picking a service always looks the same.
 function ServicePicker({ services, category, onCategoryChange, selectedServiceId, onSelectService }) {
@@ -99,9 +124,11 @@ export default function Booking() {
   const [services, setServices] = useState([]);
   const [category, setCategory] = useState('coiffure');
   const [selectedServiceId, setSelectedServiceId] = useState(null);
+  const [selectedAddonIds, setSelectedAddonIds] = useState([]);
 
   // Additional people booked in the same visit (e.g. a mother booking for
-  // herself and her daughter): each has their own name, category and service.
+  // herself and her daughter): each has their own name, category, service
+  // and, if that service has any, selected addons.
   const [guests, setGuests] = useState([]);
 
   // Carla is a solo auto-entrepreneuse: the client either comes to her
@@ -147,25 +174,58 @@ export default function Booking() {
     () => (selectedServiceId ? [selectedServiceId, ...guests.map((g) => g.serviceId).filter(Boolean)] : []),
     [selectedServiceId, guests],
   );
+
+  const allSelectedAddons = useMemo(() => {
+    const primaryAddons = selectedService?.addons?.filter((a) => selectedAddonIds.includes(a.id)) ?? [];
+    const guestAddons = guests.flatMap((g) => services.find((s) => s.id === g.serviceId)?.addons?.filter((a) => g.addonIds.includes(a.id)) ?? []);
+    return [...primaryAddons, ...guestAddons];
+  }, [selectedService, selectedAddonIds, guests, services]);
+  const totalAddonMinutes = useMemo(() => allSelectedAddons.reduce((sum, a) => sum + a.extra_duration_minutes, 0), [allSelectedAddons]);
+  const totalAddonPrice = useMemo(() => allSelectedAddons.reduce((sum, a) => sum + a.extra_price_cents, 0), [allSelectedAddons]);
+
   const totalDuration = useMemo(
-    () => serviceIds.reduce((sum, id) => sum + (services.find((s) => s.id === id)?.duration_minutes ?? 0), 0),
-    [serviceIds, services],
+    () => serviceIds.reduce((sum, id) => sum + (services.find((s) => s.id === id)?.duration_minutes ?? 0), 0) + totalAddonMinutes,
+    [serviceIds, services, totalAddonMinutes],
   );
   const totalPrice = useMemo(
-    () => serviceIds.reduce((sum, id) => sum + (services.find((s) => s.id === id)?.price_cents ?? 0), 0),
-    [serviceIds, services],
+    () => serviceIds.reduce((sum, id) => sum + (services.find((s) => s.id === id)?.price_cents ?? 0), 0) + totalAddonPrice,
+    [serviceIds, services, totalAddonPrice],
   );
   const recapGuests = useMemo(
     () => [
-      { name: form.clientName, service: selectedService },
-      ...guests.map((g) => ({ name: g.name, service: services.find((s) => s.id === g.serviceId) || null })),
+      { name: form.clientName, service: selectedService, addons: selectedService?.addons?.filter((a) => selectedAddonIds.includes(a.id)) ?? [] },
+      ...guests.map((g) => {
+        const svc = services.find((s) => s.id === g.serviceId) || null;
+        return { name: g.name, service: svc, addons: svc?.addons?.filter((a) => g.addonIds.includes(a.id)) ?? [] };
+      }),
     ],
-    [form.clientName, selectedService, guests, services],
+    [form.clientName, selectedService, selectedAddonIds, guests, services],
   );
 
   function pickCategory(key) {
     setCategory(key);
     setSelectedServiceId(null);
+    setSelectedAddonIds([]);
+    setSlots([]);
+    setSlotsState('idle');
+    setSelectedSlot('');
+  }
+
+  function toggleAddon(addonId, checked) {
+    setSelectedAddonIds((ids) => (checked ? [...ids, addonId] : ids.filter((id) => id !== addonId)));
+    setSlots([]);
+    setSlotsState('idle');
+    setSelectedSlot('');
+  }
+
+  function toggleGuestAddon(key, addonId, checked) {
+    setGuests((g) =>
+      g.map((guest) =>
+        guest.key === key
+          ? { ...guest, addonIds: checked ? [...guest.addonIds, addonId] : guest.addonIds.filter((id) => id !== addonId) }
+          : guest,
+      ),
+    );
     setSlots([]);
     setSlotsState('idle');
     setSelectedSlot('');
@@ -180,6 +240,7 @@ export default function Booking() {
 
   function pickService(id) {
     setSelectedServiceId(id);
+    setSelectedAddonIds([]);
     setSlots([]);
     setSlotsState('idle');
     setSelectedSlot('');
@@ -194,7 +255,7 @@ export default function Booking() {
   function addGuest() {
     if (guests.length >= MAX_ADDITIONAL_GUESTS) return;
     guestKeySeq += 1;
-    setGuests((g) => [...g, { key: guestKeySeq, name: '', category: 'coiffure', serviceId: null }]);
+    setGuests((g) => [...g, { key: guestKeySeq, name: '', category: 'coiffure', serviceId: null, addonIds: [] }]);
     setSlots([]);
     setSlotsState('idle');
     setSelectedSlot('');
@@ -207,8 +268,10 @@ export default function Booking() {
     setSelectedSlot('');
   }
 
+  // Changing category/service resets that guest's addons — an addon only
+  // makes sense for the specific service it's attached to.
   function updateGuest(key, patch) {
-    setGuests((g) => g.map((guest) => (guest.key === key ? { ...guest, ...patch } : guest)));
+    setGuests((g) => g.map((guest) => (guest.key === key ? { ...guest, ...patch, addonIds: [] } : guest)));
     setSlots([]);
     setSlotsState('idle');
     setSelectedSlot('');
@@ -224,7 +287,7 @@ export default function Booking() {
     }
     let cancelled = false;
     setNextAvailable('loading');
-    apiFetch(`/reservations/next-available?serviceIds=${serviceIds.join(',')}&atClientHome=${atClientHome}`)
+    apiFetch(`/reservations/next-available?serviceIds=${serviceIds.join(',')}&atClientHome=${atClientHome}&addonMinutes=${totalAddonMinutes}`)
       .then((result) => {
         if (cancelled) return;
         setNextAvailable(result || 'none');
@@ -236,7 +299,7 @@ export default function Booking() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serviceIds.join(','), allGuestsHaveService, atClientHome]);
+  }, [serviceIds.join(','), allGuestsHaveService, atClientHome, totalAddonMinutes]);
 
   function applySuggestion(suggestion) {
     setDate(suggestion.date);
@@ -250,7 +313,7 @@ export default function Booking() {
     }
     let cancelled = false;
     setSlotsState('loading');
-    apiFetch(`/reservations/availability?date=${encodeURIComponent(date)}&serviceIds=${serviceIds.join(',')}&atClientHome=${atClientHome}`)
+    apiFetch(`/reservations/availability?date=${encodeURIComponent(date)}&serviceIds=${serviceIds.join(',')}&atClientHome=${atClientHome}&addonMinutes=${totalAddonMinutes}`)
       .then((result) => {
         if (cancelled) return;
         setSlots(result.slots);
@@ -266,7 +329,7 @@ export default function Booking() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, serviceIds.join(','), allGuestsHaveService, atClientHome]);
+  }, [date, serviceIds.join(','), allGuestsHaveService, atClientHome, totalAddonMinutes]);
 
   useEffect(() => {
     if (!showRecap) return undefined;
@@ -316,9 +379,10 @@ export default function Booking() {
         method: 'POST',
         body: {
           serviceId: selectedServiceId,
+          addonIds: selectedAddonIds,
           date,
           startTime: selectedSlot,
-          additionalGuests: guests.map((g) => ({ name: g.name.trim(), serviceId: g.serviceId })),
+          additionalGuests: guests.map((g) => ({ name: g.name.trim(), serviceId: g.serviceId, addonIds: g.addonIds })),
           ...form,
           atClientHome,
           clientAddress: atClientHome ? form.clientAddress.trim() : undefined,
@@ -336,6 +400,7 @@ export default function Booking() {
       showToast('Réservation envoyée avec succès !', 'success');
       saveContact({ clientName: form.clientName, clientEmail: form.clientEmail, clientPhone: form.clientPhone });
       setForm((f) => ({ ...f, notes: '', website: '' }));
+      setSelectedAddonIds([]);
       setGuests([]);
       setSelectedSlot('');
       setSlots([]);
@@ -393,6 +458,7 @@ export default function Booking() {
                 selectedServiceId={selectedServiceId}
                 onSelectService={pickService}
               />
+              <AddonCheckboxes service={selectedService} selectedIds={selectedAddonIds} onToggle={toggleAddon} />
             </div>
 
             <div className="form-row">
@@ -460,6 +526,11 @@ export default function Booking() {
                   onCategoryChange={(c) => updateGuest(guest.key, { category: c, serviceId: null })}
                   selectedServiceId={guest.serviceId}
                   onSelectService={(id) => updateGuest(guest.key, { serviceId: id })}
+                />
+                <AddonCheckboxes
+                  service={services.find((s) => s.id === guest.serviceId) || null}
+                  selectedIds={guest.addonIds}
+                  onToggle={(addonId, checked) => toggleGuestAddon(guest.key, addonId, checked)}
                 />
               </div>
             ))}
@@ -631,6 +702,7 @@ export default function Booking() {
                       <li key={i}>
                         {recapGuests.length > 1 && <strong>{g.name} — </strong>}
                         {g.service ? `${g.service.name} (${formatDuration(g.service.duration_minutes)})` : '—'}
+                        {g.addons.length > 0 && ` + ${g.addons.map((a) => a.name).join(', ')}`}
                       </li>
                     ))}
                   </ul>
