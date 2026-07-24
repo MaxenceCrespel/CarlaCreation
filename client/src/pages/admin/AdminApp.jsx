@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../../api/client';
 import LoginForm from './LoginForm';
+import DashboardTab from './DashboardTab';
 import ReservationsTab from './ReservationsTab';
 import GalleryTab from './GalleryTab';
 import HoursTab from './HoursTab';
@@ -9,6 +10,7 @@ import AvisTab from './AvisTab';
 import AccountTab from './AccountTab';
 
 const TABS = [
+  { key: 'dashboard', label: 'Tableau de bord', Component: DashboardTab },
   { key: 'reservations', label: 'Réservations', Component: ReservationsTab },
   { key: 'gallery', label: 'Galerie', Component: GalleryTab },
   { key: 'services', label: 'Prestations', Component: ServicesTab },
@@ -19,7 +21,7 @@ const TABS = [
 
 export default function AdminApp() {
   const [session, setSession] = useState('checking'); // 'checking' | null | { username }
-  const [activeTab, setActiveTab] = useState('reservations');
+  const [activeTab, setActiveTab] = useState('dashboard');
 
   useEffect(() => {
     apiFetch('/auth/me')

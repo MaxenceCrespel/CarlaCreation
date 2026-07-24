@@ -17,6 +17,7 @@ import { ReviewsModule } from './modules/reviews/reviews.module';
 import { SeoModule } from './modules/seo/seo.module';
 import { HealthModule } from './modules/health/health.module';
 import { MiscModule } from './modules/misc/misc.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 
 // Rate limiting (global + the tighter per-route @Throttle overrides on
 // login/booking/contact/reviews) would make the integration test suite
@@ -60,6 +61,7 @@ class NoopThrottlerGuard implements CanActivate {
     SeoModule,
     HealthModule,
     MiscModule,
+    DashboardModule,
   ],
   providers: [
     {
