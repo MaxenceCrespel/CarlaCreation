@@ -7,8 +7,11 @@ describe('Admin login', () => {
     cy.get('.form-feedback.error').should('be.visible');
   });
 
-  it('logs in with valid credentials and shows the reservations tab', () => {
+  it('logs in with valid credentials and shows the dashboard tab, then can switch tabs', () => {
     cy.adminLogin();
+    cy.contains('button.admin-tab', 'Tableau de bord').should('have.class', 'is-active');
+
+    cy.contains('button.admin-tab', 'Réservations').click();
     cy.contains('button.admin-tab', 'Réservations').should('have.class', 'is-active');
   });
 });
