@@ -752,9 +752,15 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
 .status-cancelled { background: #f6dad7; color: #b3413a; }
 .status-refused { background: #ecdada; color: #8a2f2f; }
 
+.row-addons { font-size: 0.78rem; color: var(--color-text-soft); margin-top: 2px; }
 .status-cell { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .admin-table select { padding: 6px 8px; font-size: 0.85rem; }
-.row-actions { display: flex; gap: 12px; align-items: center; }
+/* align-items must match the rest of the table's vertical-align: top — a
+   flex td ignores vertical-align entirely, so align-items: center here
+   would visually offset these buttons downward on any row taller than one
+   line (wrapped contact/notes/status), while every other cell stays
+   pinned to the top. */
+.row-actions { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
 
 /* Reservations: list/calendar toggle */
 .view-toggle { display: flex; gap: 4px; background: var(--color-bg-alt); border-radius: 999px; padding: 4px; }

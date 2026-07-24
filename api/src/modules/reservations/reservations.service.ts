@@ -44,6 +44,7 @@ interface ReservationWithServiceRow {
   service_name: string;
   at_client_home: boolean;
   client_address: string | null;
+  addons: { name: string; extra_price_cents: number; extra_duration_minutes: number }[];
 }
 
 interface ReminderCandidateRow {
@@ -383,8 +384,8 @@ export class ReservationsService {
     };
   }
 
-  findAllForAdmin(): Promise<ReservationWithServiceRow[]> {
-    return this.dataSource.query(
+  async findAllForAdmin(): Promise<ReservationWithServiceRow[]> {
+    const rows: Omit<ReservationWithServiceRow, 'addons'>[] = await this.dataSource.query(
       `SELECT r.id, r.group_id, r.client_name, r.client_email, r.client_phone, r.reservation_date,
               r.start_time, r.end_time, r.notes, r.status, r.created_at, r.service_id,
               r.at_client_home, r.client_address,
@@ -393,6 +394,21 @@ export class ReservationsService {
        JOIN services s ON s.id = r.service_id
        ORDER BY r.reservation_date DESC, r.start_time ASC`,
     );
+    if (rows.length === 0) return [];
+
+    const addonRows: { reservation_id: number; name: string; extra_price_cents: number; extra_duration_minutes: number }[] =
+      await this.dataSource.query(
+        `SELECT reservation_id, name, extra_price_cents, extra_duration_minutes FROM reservation_addons WHERE reservation_id = ANY($1)`,
+        [rows.map((r) => r.id)],
+      );
+    const addonsByReservation = new Map<number, { name: string; extra_price_cents: number; extra_duration_minutes: number }[]>();
+    for (const a of addonRows) {
+      const list = addonsByReservation.get(a.reservation_id) ?? [];
+      list.push({ name: a.name, extra_price_cents: a.extra_price_cents, extra_duration_minutes: a.extra_duration_minutes });
+      addonsByReservation.set(a.reservation_id, list);
+    }
+
+    return rows.map((r) => ({ ...r, addons: addonsByReservation.get(r.id) ?? [] }));
   }
 
   // Editing a mistaken date/time/service/client detail after the fact — a

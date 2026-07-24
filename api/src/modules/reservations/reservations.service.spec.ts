@@ -216,6 +216,52 @@ describe('ReservationsService', () => {
       });
     });
 
+    it('extends the duration correctly with TWO addons selected at once', async () => {
+      const POLISH = { id: 51, service_id: 7, name: 'Pose Vernis', extra_price_cents: 500, extra_duration_minutes: 10, active: true };
+      serviceRepo.findOne.mockResolvedValue(MANICURE);
+      addonRepo.find.mockResolvedValue([NAIL_ART, POLISH]);
+      noOverlap();
+
+      dataSource.transaction.mockImplementationOnce(async (fn) => {
+        const manager = { insert: jest.fn(async () => ({ identifiers: [{ id: 201 }] })) };
+        return fn(manager);
+      });
+
+      const result = await service.createManual({
+        serviceId: 7,
+        clientName: 'Test',
+        clientEmail: 'test@example.com',
+        clientPhone: '0600000000',
+        date: '2099-01-01',
+        startTime: '10:00',
+        status: 'confirmed',
+        addonIds: [50, 51],
+      } as any);
+
+      // 30 min (Manucure Classique) + 15 min (Nail Art) + 10 min (Pose Vernis) = 55 min
+      expect(result.guests[0]).toMatchObject({ startTime: '10:00', endTime: '10:55' });
+    });
+
+    it('findAllForAdmin attaches each reservation\'s addons alongside its service name', async () => {
+      dataSource.query.mockImplementation((sql: string) => {
+        if (sql.includes('JOIN services s')) {
+          return Promise.resolve([
+            { id: 1, service_name: 'Manucure Classique', addons: undefined },
+            { id: 2, service_name: 'Coupe Femme', addons: undefined },
+          ]);
+        }
+        if (sql.includes('FROM reservation_addons')) {
+          return Promise.resolve([{ reservation_id: 1, name: 'Nail Art', extra_price_cents: 1000, extra_duration_minutes: 15 }]);
+        }
+        throw new Error(`Unexpected query: ${sql}`);
+      });
+
+      const rows = await service.findAllForAdmin();
+
+      expect(rows.find((r) => r.id === 1)?.addons).toEqual([{ name: 'Nail Art', extra_price_cents: 1000, extra_duration_minutes: 15 }]);
+      expect(rows.find((r) => r.id === 2)?.addons).toEqual([]);
+    });
+
     it('rejects an addon id that does not exist', async () => {
       serviceRepo.findOne.mockResolvedValue(MANICURE);
       addonRepo.find.mockResolvedValue([]); // none found for the requested id

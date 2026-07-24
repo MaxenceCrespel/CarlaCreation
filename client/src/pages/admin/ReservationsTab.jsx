@@ -311,16 +311,50 @@ function EditReservationModal({ reservation, onClose, onSaved }) {
   const [feedback, setFeedback] = useState(null);
   const [saving, setSaving] = useState(false);
 
+  // reservation_addons only stores a name/price/duration snapshot, not an
+  // addon id (see updateReservation on the API side) — so on open, we
+  // best-effort match the current service's addons by NAME to pre-check
+  // the right boxes. If nothing changed, addonIds stays untouched
+  // (addonsDirty false) and is omitted from the PATCH entirely, so a
+  // rename that breaks the name match can never silently drop a supplement
+  // just by saving an unrelated field.
+  const [addonIds, setAddonIds] = useState([]);
+  const [addonsDirty, setAddonsDirty] = useState(false);
+  const [addonsInitialized, setAddonsInitialized] = useState(false);
+
   useEffect(() => {
     apiFetch('/admin/services').then(setServices).catch(() => showToast('Impossible de charger les prestations.', 'error'));
     apiFetch('/admin/service-categories').then(setCategories).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (addonsInitialized || services.length === 0) return;
+    const currentService = services.find((s) => s.id === reservation.service_id);
+    const existingNames = new Set((reservation.addons ?? []).map((a) => a.name));
+    const matched = (currentService?.addons ?? []).filter((a) => existingNames.has(a.name)).map((a) => a.id);
+    setAddonIds(matched);
+    setAddonsInitialized(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [services, addonsInitialized]);
+
   const categoryName = (id) => categories.find((c) => c.id === id)?.name ?? '';
+  const selectedService = services.find((s) => s.id === Number(form.serviceId)) || null;
 
   function update(field) {
-    return (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
+    return (e) => {
+      const value = e.target.value;
+      setForm((f) => ({ ...f, [field]: value }));
+      if (field === 'serviceId') {
+        setAddonIds([]);
+        setAddonsDirty(true);
+      }
+    };
+  }
+
+  function toggleAddon(addonId, checked) {
+    setAddonIds((ids) => (checked ? [...ids, addonId] : ids.filter((id) => id !== addonId)));
+    setAddonsDirty(true);
   }
 
   async function handleSubmit(e) {
@@ -346,6 +380,7 @@ function EditReservationModal({ reservation, onClose, onSaved }) {
           notes: form.notes,
           atClientHome: form.atClientHome,
           clientAddress: form.atClientHome ? form.clientAddress.trim() : undefined,
+          addonIds: addonsDirty ? addonIds : undefined,
         },
       });
       showToast('Réservation modifiée.', 'success');
@@ -379,6 +414,8 @@ function EditReservationModal({ reservation, onClose, onSaved }) {
             ))}
           </select>
         </div>
+
+        <AddonCheckboxes service={selectedService} selectedIds={addonIds} onToggle={toggleAddon} />
 
         <div className="form-row two-col">
           <div>
@@ -634,7 +671,12 @@ export default function ReservationsTab() {
                   <tr key={r.id} className={group.rows.length > 1 ? 'group-member-row' : ''}>
                     <td>{r.reservation_date}</td>
                     <td>{r.start_time} – {r.end_time}</td>
-                    <td>{r.service_name}</td>
+                    <td>
+                      {r.service_name}
+                      {r.addons && r.addons.length > 0 && (
+                        <div className="row-addons">+ {r.addons.map((a) => a.name).join(', ')}</div>
+                      )}
+                    </td>
                     <td>{r.client_name}</td>
                     <td>{r.client_email}<br />{r.client_phone}</td>
                     <td>{r.at_client_home ? <><span className="location-badge">Domicile</span><br />{r.client_address}</> : 'Studio'}</td>
