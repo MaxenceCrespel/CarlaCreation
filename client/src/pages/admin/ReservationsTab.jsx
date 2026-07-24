@@ -11,7 +11,7 @@ const STATUS_LABELS = {
   refused: 'Refusée',
 };
 
-const EMPTY_GUEST = () => ({ key: Date.now() + Math.random(), name: '', serviceId: '' });
+const EMPTY_GUEST = () => ({ key: Date.now() + Math.random(), name: '', serviceId: '', addonIds: [] });
 
 const EMPTY_MANUAL_FORM = {
   serviceId: '',
@@ -26,21 +26,61 @@ const EMPTY_MANUAL_FORM = {
   atClientHome: false,
 };
 
+// Same checkbox pattern as the public booking page's AddonCheckboxes, so
+// the admin can attach the same optional paid/timed supplements (e.g. nail
+// art) when logging a phone/walk-in booking manually.
+function AddonCheckboxes({ service, selectedIds, onToggle }) {
+  const addons = (service?.addons ?? []).filter((a) => a.active);
+  if (addons.length === 0) return null;
+  return (
+    <div className="addon-checkboxes">
+      {addons.map((addon) => (
+        <label key={addon.id} className="addon-checkbox">
+          <input
+            type="checkbox"
+            checked={selectedIds.includes(addon.id)}
+            onChange={(e) => onToggle(addon.id, e.target.checked)}
+          />
+          {addon.name}
+          <span className="addon-checkbox-meta">
+            +{(addon.extra_price_cents / 100).toFixed(2).replace('.', ',')} €
+            {addon.extra_duration_minutes > 0 ? ` · +${addon.extra_duration_minutes} min` : ''}
+          </span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
 function AddReservationForm({ onCreated, onCancel }) {
   const showToast = useToast();
   const [services, setServices] = useState([]);
   const [form, setForm] = useState(EMPTY_MANUAL_FORM);
+  const [addonIds, setAddonIds] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [guests, setGuests] = useState([]);
   const [feedback, setFeedback] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     apiFetch('/admin/services').then(setServices).catch(() => showToast('Impossible de charger les prestations.', 'error'));
+    apiFetch('/admin/service-categories').then(setCategories).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const categoryName = (id) => categories.find((c) => c.id === id)?.name ?? '';
+  const selectedService = services.find((s) => s.id === Number(form.serviceId)) || null;
+
   function update(field) {
-    return (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
+    return (e) => {
+      const value = e.target.value;
+      setForm((f) => ({ ...f, [field]: value }));
+      if (field === 'serviceId') setAddonIds([]);
+    };
+  }
+
+  function toggleAddon(addonId, checked) {
+    setAddonIds((ids) => (checked ? [...ids, addonId] : ids.filter((id) => id !== addonId)));
   }
 
   function addGuest() {
@@ -50,7 +90,23 @@ function AddReservationForm({ onCreated, onCancel }) {
     setGuests((g) => g.filter((guest) => guest.key !== key));
   }
   function updateGuest(key, patch) {
-    setGuests((g) => g.map((guest) => (guest.key === key ? { ...guest, ...patch } : guest)));
+    setGuests((g) =>
+      g.map((guest) => {
+        if (guest.key !== key) return guest;
+        const next = { ...guest, ...patch };
+        if ('serviceId' in patch) next.addonIds = [];
+        return next;
+      }),
+    );
+  }
+  function toggleGuestAddon(key, addonId, checked) {
+    setGuests((g) =>
+      g.map((guest) =>
+        guest.key === key
+          ? { ...guest, addonIds: checked ? [...guest.addonIds, addonId] : guest.addonIds.filter((id) => id !== addonId) }
+          : guest,
+      ),
+    );
   }
 
   async function handleSubmit(e) {
@@ -77,8 +133,9 @@ function AddReservationForm({ onCreated, onCancel }) {
         body: {
           ...form,
           serviceId: Number(form.serviceId),
+          addonIds,
           clientAddress: form.atClientHome ? form.clientAddress.trim() : undefined,
-          additionalGuests: guests.map((g) => ({ name: g.name.trim(), serviceId: Number(g.serviceId) })),
+          additionalGuests: guests.map((g) => ({ name: g.name.trim(), serviceId: Number(g.serviceId), addonIds: g.addonIds })),
         },
       });
       showToast('Réservation ajoutée.', 'success');
@@ -107,12 +164,14 @@ function AddReservationForm({ onCreated, onCancel }) {
           <option value="" disabled>Choisissez une prestation</option>
           {services.map((s) => (
             <option key={s.id} value={s.id}>
-              [{s.category === 'ongles' ? 'Ongles' : 'Coiffure'}] {s.name}
+              [{categoryName(s.category_id)}] {s.name}
               {!s.active ? ' (inactive)' : ''}
             </option>
           ))}
         </select>
       </div>
+
+      <AddonCheckboxes service={selectedService} selectedIds={addonIds} onToggle={toggleAddon} />
 
       <div className="form-row two-col">
         <div>
@@ -150,10 +209,15 @@ function AddReservationForm({ onCreated, onCancel }) {
             <option value="" disabled>Choisissez une prestation</option>
             {services.map((s) => (
               <option key={s.id} value={s.id}>
-                [{s.category === 'ongles' ? 'Ongles' : 'Coiffure'}] {s.name}
+                [{categoryName(s.category_id)}] {s.name}
               </option>
             ))}
           </select>
+          <AddonCheckboxes
+            service={services.find((s) => s.id === Number(guest.serviceId)) || null}
+            selectedIds={guest.addonIds}
+            onToggle={(addonId, checked) => toggleGuestAddon(guest.key, addonId, checked)}
+          />
         </div>
       ))}
 
@@ -232,6 +296,7 @@ function AddReservationForm({ onCreated, onCancel }) {
 function EditReservationModal({ reservation, onClose, onSaved }) {
   const showToast = useToast();
   const [services, setServices] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [form, setForm] = useState({
     serviceId: reservation.service_id,
     date: reservation.reservation_date,
@@ -248,8 +313,11 @@ function EditReservationModal({ reservation, onClose, onSaved }) {
 
   useEffect(() => {
     apiFetch('/admin/services').then(setServices).catch(() => showToast('Impossible de charger les prestations.', 'error'));
+    apiFetch('/admin/service-categories').then(setCategories).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const categoryName = (id) => categories.find((c) => c.id === id)?.name ?? '';
 
   function update(field) {
     return (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
@@ -305,7 +373,7 @@ function EditReservationModal({ reservation, onClose, onSaved }) {
           <select id="edit-service" required value={form.serviceId} onChange={update('serviceId')}>
             {services.map((s) => (
               <option key={s.id} value={s.id}>
-                [{s.category === 'ongles' ? 'Ongles' : 'Coiffure'}] {s.name}
+                [{categoryName(s.category_id)}] {s.name}
                 {!s.active ? ' (inactive)' : ''}
               </option>
             ))}

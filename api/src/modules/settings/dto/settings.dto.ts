@@ -29,3 +29,10 @@ export class UpdateTravelBufferDto {
   @Max(240)
   minutes!: number;
 }
+
+export class UpdateTravelFeeDto {
+  @IsInt()
+  @Min(0)
+  @Max(10000)
+  feeCents!: number;
+}

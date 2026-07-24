@@ -157,12 +157,16 @@ function DayEditor({ day, onSave, onReset }) {
 function TravelBufferCard() {
   const showToast = useToast();
   const [minutes, setMinutes] = useState(null);
+  const [feeEuros, setFeeEuros] = useState(null);
   const [saving, setSaving] = useState(false);
 
   function load() {
-    apiFetch('/admin/settings/travel-buffer')
-      .then((data) => setMinutes(data.minutes))
-      .catch(() => showToast('Impossible de charger le temps de trajet.', 'error'));
+    Promise.all([apiFetch('/admin/settings/travel-buffer'), apiFetch('/admin/settings/travel-fee')])
+      .then(([buffer, fee]) => {
+        setMinutes(buffer.minutes);
+        setFeeEuros((fee.feeCents / 100).toString());
+      })
+      .catch(() => showToast('Impossible de charger les réglages de trajet.', 'error'));
   }
 
   useEffect(load, []);
@@ -171,8 +175,14 @@ function TravelBufferCard() {
     e.preventDefault();
     setSaving(true);
     try {
-      await apiFetch('/admin/settings/travel-buffer', { method: 'PUT', body: { minutes: Number(minutes) } });
-      showToast('Temps de trajet mis à jour.', 'success');
+      await Promise.all([
+        apiFetch('/admin/settings/travel-buffer', { method: 'PUT', body: { minutes: Number(minutes) } }),
+        apiFetch('/admin/settings/travel-fee', {
+          method: 'PUT',
+          body: { feeCents: Math.round(Number(feeEuros) * 100) },
+        }),
+      ]);
+      showToast('Réglages de trajet mis à jour.', 'success');
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
@@ -182,15 +192,16 @@ function TravelBufferCard() {
 
   return (
     <form className="card travel-buffer-card" onSubmit={save}>
-      <h2>Temps de trajet (rendez-vous à domicile)</h2>
+      <h2>Trajet (rendez-vous à domicile)</h2>
       <p className="section-lead">
         Lorsqu'un rendez-vous est à domicile, ce temps est bloqué avant et après (y compris au tout début ou à la
-        toute fin d'une journée ouverte) pour ne jamais enchaîner un trajet sans marge.
+        toute fin d'une journée ouverte) pour ne jamais enchaîner un trajet sans marge, et ce supplément est ajouté
+        au prix affiché au client.
       </p>
-      {minutes === null ? (
+      {minutes === null || feeEuros === null ? (
         <p className="loading-text">Chargement…</p>
       ) : (
-        <div className="form-row two-col">
+        <div className="form-row three-col">
           <div>
             <label htmlFor="travel-buffer-minutes">Minutes bloquées avant/après</label>
             <input
@@ -202,6 +213,19 @@ function TravelBufferCard() {
               required
               value={minutes}
               onChange={(e) => setMinutes(e.target.value)}
+            />
+          </div>
+          <div>
+            <label htmlFor="travel-fee-euros">Supplément d'essence (€)</label>
+            <input
+              type="number"
+              id="travel-fee-euros"
+              min={0}
+              max={100}
+              step={0.5}
+              required
+              value={feeEuros}
+              onChange={(e) => setFeeEuros(e.target.value)}
             />
           </div>
           <div className="travel-buffer-save">

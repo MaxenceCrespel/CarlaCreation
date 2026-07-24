@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, Put, UseGuards } from '@nestjs/co
 import { AdminAuthGuard } from '../../common/admin-auth.guard';
 import { CsrfGuard } from '../../common/csrf';
 import { SettingsService } from './settings.service';
-import { UpdateDailyHoursDto, UpdateTravelBufferDto } from './dto/settings.dto';
+import { UpdateDailyHoursDto, UpdateTravelBufferDto, UpdateTravelFeeDto } from './dto/settings.dto';
 
 @UseGuards(AdminAuthGuard)
 @Controller('api/admin/settings')
@@ -37,6 +37,18 @@ export class AdminSettingsController {
   @Put('travel-buffer')
   async setTravelBuffer(@Body() dto: UpdateTravelBufferDto) {
     await this.settingsService.setTravelBufferMinutes(dto.minutes);
+    return { success: true };
+  }
+
+  @Get('travel-fee')
+  async getTravelFee() {
+    return { feeCents: await this.settingsService.getTravelFeeCents() };
+  }
+
+  @UseGuards(CsrfGuard)
+  @Put('travel-fee')
+  async setTravelFee(@Body() dto: UpdateTravelFeeDto) {
+    await this.settingsService.setTravelFeeCents(dto.feeCents);
     return { success: true };
   }
 }

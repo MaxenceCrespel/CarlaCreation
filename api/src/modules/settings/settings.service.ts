@@ -13,6 +13,8 @@ const WINDOW_DAYS = 60;
 // seeded by init.sql / the AddAppSettings migration) — keeps this read
 // from ever hard-failing the booking flow.
 const DEFAULT_TRAVEL_BUFFER_MINUTES = 30;
+// Same fallback rationale as above — mirrors the app_settings default.
+const DEFAULT_TRAVEL_FEE_CENTS = 200;
 
 @Injectable()
 export class SettingsService {
@@ -104,6 +106,24 @@ export class SettingsService {
       .into(AppSettings)
       .values({ id: 1, travel_buffer_minutes: minutes })
       .orUpdate(['travel_buffer_minutes'], ['id'])
+      .execute();
+  }
+
+  async getTravelFeeCents(): Promise<number> {
+    const row = await this.dataSource.getRepository(AppSettings).findOne({ where: { id: 1 } });
+    return row?.travel_fee_cents ?? DEFAULT_TRAVEL_FEE_CENTS;
+  }
+
+  async setTravelFeeCents(cents: number): Promise<void> {
+    if (!Number.isInteger(cents) || cents < 0 || cents > 10000) {
+      throw new BadRequestException("Le supplément de déplacement doit être un entier entre 0 et 10000 centimes.");
+    }
+    await this.dataSource
+      .createQueryBuilder()
+      .insert()
+      .into(AppSettings)
+      .values({ id: 1, travel_fee_cents: cents })
+      .orUpdate(['travel_fee_cents'], ['id'])
       .execute();
   }
 }

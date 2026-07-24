@@ -54,3 +54,55 @@ describe('SettingsService — travel buffer', () => {
     expect(execute).toHaveBeenCalled();
   });
 });
+
+describe('SettingsService — travel fee', () => {
+  let service: SettingsService;
+  let dataSource: { getRepository: jest.Mock; createQueryBuilder: jest.Mock };
+
+  beforeEach(async () => {
+    dataSource = { getRepository: jest.fn(), createQueryBuilder: jest.fn() };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [SettingsService, { provide: getDataSourceToken(), useValue: dataSource }],
+    }).compile();
+
+    service = module.get(SettingsService);
+  });
+
+  it('getTravelFeeCents returns the stored value', async () => {
+    dataSource.getRepository.mockReturnValue({ findOne: jest.fn().mockResolvedValue({ id: 1, travel_fee_cents: 350 }) });
+    await expect(service.getTravelFeeCents()).resolves.toBe(350);
+  });
+
+  it('getTravelFeeCents falls back to a default if the settings row is somehow missing', async () => {
+    dataSource.getRepository.mockReturnValue({ findOne: jest.fn().mockResolvedValue(null) });
+    await expect(service.getTravelFeeCents()).resolves.toBe(200);
+  });
+
+  it('setTravelFeeCents rejects a negative value', async () => {
+    await expect(service.setTravelFeeCents(-5)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('setTravelFeeCents rejects a non-integer value', async () => {
+    await expect(service.setTravelFeeCents(12.5)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('setTravelFeeCents rejects an unreasonably large value', async () => {
+    await expect(service.setTravelFeeCents(50000)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('setTravelFeeCents upserts a valid value', async () => {
+    const execute = jest.fn().mockResolvedValue(undefined);
+    const orUpdate = jest.fn().mockReturnValue({ execute });
+    const values = jest.fn().mockReturnValue({ orUpdate });
+    const into = jest.fn().mockReturnValue({ values });
+    const insert = jest.fn().mockReturnValue({ into });
+    dataSource.createQueryBuilder.mockReturnValue({ insert });
+
+    await service.setTravelFeeCents(350);
+
+    expect(values).toHaveBeenCalledWith({ id: 1, travel_fee_cents: 350 });
+    expect(orUpdate).toHaveBeenCalledWith(['travel_fee_cents'], ['id']);
+    expect(execute).toHaveBeenCalled();
+  });
+});
