@@ -15,6 +15,7 @@ interface ReservationRow {
   end_time: string;
   reservation_date: string;
   status: 'pending' | 'confirmed' | 'completed';
+  at_client_home: boolean;
 }
 
 @Injectable()
@@ -38,7 +39,7 @@ export class DashboardService {
     const today = localDateString(new Date());
 
     const reservations: ReservationRow[] = await this.dataSource.query(
-      `SELECT r.id, r.service_id, s.name AS service_name, s.price_cents, r.start_time, r.end_time, r.reservation_date, r.status
+      `SELECT r.id, r.service_id, s.name AS service_name, s.price_cents, r.start_time, r.end_time, r.reservation_date, r.status, r.at_client_home
        FROM reservations r
        JOIN services s ON s.id = r.service_id
        WHERE r.reservation_date BETWEEN $1 AND $2 AND r.status NOT IN ('cancelled', 'refused')`,
@@ -59,6 +60,9 @@ export class DashboardService {
     let upcomingCents = 0;
     let pendingCents = 0;
     let bookedMinutes = 0;
+    let confirmedOrCompletedCount = 0;
+    let atHomeCount = 0;
+    let studioCount = 0;
     const statusCounts = { pending: 0, confirmed: 0, completed: 0 };
     const serviceStats = new Map<number, { name: string; count: number; revenueCents: number }>();
 
@@ -72,6 +76,9 @@ export class DashboardService {
       }
 
       bookedMinutes += toMinutes(r.end_time) - toMinutes(r.start_time);
+      confirmedOrCompletedCount += 1;
+      if (r.at_client_home) atHomeCount += 1;
+      else studioCount += 1;
       if (r.reservation_date <= today) {
         generatedCents += total;
       } else {
@@ -116,14 +123,45 @@ export class DashboardService {
       [from, to],
     );
 
+    // Cancellation/refusal rate needs every status for the period, including
+    // the cancelled/refused rows the main query above deliberately excludes.
+    const statusBreakdown: { status: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'refused'; count: string }[] =
+      await this.dataSource.query(
+        `SELECT status, COUNT(*)::int AS count FROM reservations WHERE reservation_date BETWEEN $1 AND $2 GROUP BY status`,
+        [from, to],
+      );
+    let cancelledOrRefusedCount = 0;
+    let allStatusesTotal = 0;
+    for (const row of statusBreakdown) {
+      const count = Number(row.count);
+      allStatusesTotal += count;
+      if (row.status === 'cancelled' || row.status === 'refused') cancelledOrRefusedCount += count;
+    }
+    const cancellationRatePercent = allStatusesTotal > 0 ? round1((cancelledOrRefusedCount / allStatusesTotal) * 100) : 0;
+
     const topServices = [...serviceStats.entries()]
       .map(([serviceId, s]) => ({ serviceId, name: s.name, count: s.count, revenueCents: s.revenueCents }))
       .sort((a, b) => b.revenueCents - a.revenueCents)
       .slice(0, 5);
 
+    // Average € actually earned per booked hour (confirmed/completed only,
+    // same basis as generatedCents/upcomingCents), then projected onto
+    // every open hour in the period — "what if the whole schedule filled
+    // up at this same average rate", not a guarantee.
+    const avgRevenuePerHourCents = bookedMinutes > 0 ? Math.round((generatedCents + upcomingCents) / (bookedMinutes / 60)) : 0;
+    const projectedFullCapacityCents = Math.round(avgRevenuePerHourCents * (openMinutes / 60));
+    const avgBasketCents = confirmedOrCompletedCount > 0 ? Math.round((generatedCents + upcomingCents) / confirmedOrCompletedCount) : 0;
+
     return {
       period: { from, to },
-      revenue: { generatedCents, upcomingCents, pendingCents },
+      revenue: {
+        generatedCents,
+        upcomingCents,
+        pendingCents,
+        avgPerHourCents: avgRevenuePerHourCents,
+        projectedFullCapacityCents,
+        avgBasketCents,
+      },
       hours: {
         bookedHours: round1(bookedMinutes / 60),
         openHours: round1(openMinutes / 60),
@@ -135,7 +173,9 @@ export class DashboardService {
         confirmed: statusCounts.confirmed,
         completed: statusCounts.completed,
         total: reservations.length,
+        cancellationRatePercent,
       },
+      location: { atHomeCount, studioCount },
       newReservationsCount,
       topServices,
     };

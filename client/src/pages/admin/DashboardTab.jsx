@@ -36,11 +36,25 @@ function formatHours(hours) {
   return `${hours.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} h`;
 }
 
-function KpiCard({ label, value, hint }) {
+// null = no comparable previous value (avoids a misleading "+∞ %").
+function pctChange(current, previous) {
+  if (!previous) return null;
+  return Math.round(((current - previous) / previous) * 1000) / 10;
+}
+
+function DeltaBadge({ value }) {
+  if (value === null || value === undefined) return null;
+  const sign = value > 0 ? '+' : '';
+  const tone = value > 0 ? 'up' : value < 0 ? 'down' : 'neutral';
+  return <span className={`kpi-delta kpi-delta-${tone}`}>{sign}{value.toLocaleString('fr-FR')} % vs mois préc.</span>;
+}
+
+function KpiCard({ label, value, hint, delta }) {
   return (
     <div className="kpi-card">
       <span className="kpi-label">{label}</span>
       <span className="kpi-value">{value}</span>
+      <DeltaBadge value={delta} />
       {hint && <span className="kpi-hint">{hint}</span>}
     </div>
   );
@@ -50,14 +64,23 @@ export default function DashboardTab() {
   const showToast = useToast();
   const [month, setMonth] = useState(currentMonth());
   const [data, setData] = useState(null);
+  const [prevData, setPrevData] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     setData(null);
+    setPrevData(null);
     setError(null);
     const [from, to] = monthRange(month);
-    apiFetch(`/admin/dashboard?from=${from}&to=${to}`)
-      .then(setData)
+    const [prevFrom, prevTo] = monthRange(shiftMonth(month, -1));
+    Promise.all([
+      apiFetch(`/admin/dashboard?from=${from}&to=${to}`),
+      apiFetch(`/admin/dashboard?from=${prevFrom}&to=${prevTo}`),
+    ])
+      .then(([current, previous]) => {
+        setData(current);
+        setPrevData(previous);
+      })
       .catch((err) => {
         setError(err.message);
         showToast(err.message, 'error');
@@ -66,6 +89,10 @@ export default function DashboardTab() {
   }, [month]);
 
   const isCurrentMonth = month === currentMonth();
+  const revenueDelta = data && prevData ? pctChange(data.revenue.generatedCents, prevData.revenue.generatedCents) : null;
+  const hoursDelta = data && prevData ? pctChange(data.hours.bookedHours, prevData.hours.bookedHours) : null;
+  const atHomeTotal = data ? data.location.atHomeCount + data.location.studioCount : 0;
+  const atHomePercent = atHomeTotal > 0 ? Math.round((data.location.atHomeCount / atHomeTotal) * 1000) / 10 : 0;
 
   return (
     <>
@@ -92,16 +119,29 @@ export default function DashboardTab() {
       {!error && data && (
         <>
           <div className="kpi-grid">
-            <KpiCard label="CA généré" value={formatPrice(data.revenue.generatedCents)} hint="Rendez-vous confirmés/terminés déjà passés" />
+            <KpiCard label="CA généré" value={formatPrice(data.revenue.generatedCents)} hint="Rendez-vous confirmés/terminés déjà passés" delta={revenueDelta} />
             <KpiCard label="CA à venir" value={formatPrice(data.revenue.upcomingCents)} hint="Rendez-vous confirmés à venir" />
             <KpiCard label="CA en attente" value={formatPrice(data.revenue.pendingCents)} hint="Non confirmé, non comptabilisé ci-dessus" />
-            <KpiCard label="Heures de rendez-vous" value={formatHours(data.hours.bookedHours)} hint="Confirmés/terminés" />
+            <KpiCard label="Panier moyen" value={formatPrice(data.revenue.avgBasketCents)} hint="CA généré + à venir / nombre de réservations confirmées" />
+            <KpiCard label="CA moyen par heure" value={formatPrice(data.revenue.avgPerHourCents)} hint="Généré + à venir, sur les heures réellement réservées" />
+            <KpiCard
+              label="CA projeté à taux de remplissage 100 %"
+              value={formatPrice(data.revenue.projectedFullCapacityCents)}
+              hint="Si toutes les heures ouvertes étaient réservées, au même tarif moyen"
+            />
+            <KpiCard label="Heures de rendez-vous" value={formatHours(data.hours.bookedHours)} hint="Confirmés/terminés" delta={hoursDelta} />
             <KpiCard label="Heures disponibles non prises" value={formatHours(data.hours.availableHours)} hint={`Sur ${formatHours(data.hours.openHours)} ouvertes`} />
             <KpiCard label="Taux de remplissage" value={`${data.hours.fillRatePercent.toLocaleString('fr-FR')} %`} />
             <KpiCard
               label="Réservations"
               value={data.reservationsCount.total}
               hint={`${data.reservationsCount.confirmed} confirmées · ${data.reservationsCount.completed} terminées · ${data.reservationsCount.pending} en attente`}
+            />
+            <KpiCard label="Taux d'annulation / refus" value={`${data.reservationsCount.cancellationRatePercent.toLocaleString('fr-FR')} %`} hint="Sur l'ensemble des demandes de la période" />
+            <KpiCard
+              label="À domicile vs studio"
+              value={atHomeTotal > 0 ? `${atHomePercent.toLocaleString('fr-FR')} % à domicile` : '—'}
+              hint={`${data.location.atHomeCount} à domicile · ${data.location.studioCount} en studio`}
             />
             <KpiCard label="Nouvelles demandes" value={data.newReservationsCount} hint="Créées pendant la période" />
           </div>

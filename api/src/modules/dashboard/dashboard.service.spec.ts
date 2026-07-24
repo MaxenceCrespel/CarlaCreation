@@ -46,6 +46,7 @@ describe('DashboardService', () => {
             end_time: '09:30',
             reservation_date: '2026-01-01',
             status: 'confirmed',
+            at_client_home: true,
           },
           {
             id: 2,
@@ -56,11 +57,19 @@ describe('DashboardService', () => {
             end_time: '10:30',
             reservation_date: '2026-01-01',
             status: 'pending',
+            at_client_home: false,
           },
         ]);
       }
       if (sql.includes('reservation_addons')) {
         return Promise.resolve([{ reservation_id: 1, total: '500' }]);
+      }
+      if (sql.includes('GROUP BY status')) {
+        return Promise.resolve([
+          { status: 'confirmed', count: 1 },
+          { status: 'pending', count: 1 },
+          { status: 'cancelled', count: 1 },
+        ]);
       }
       if (sql.includes('COUNT(*)::int')) {
         return Promise.resolve([{ count: 2 }]);
@@ -77,8 +86,22 @@ describe('DashboardService', () => {
 
     const result = await service.getDashboard('2026-01-01', '2026-01-01');
 
-    expect(result.revenue).toEqual({ generatedCents: 3500, upcomingCents: 0, pendingCents: 3000 });
-    expect(result.reservationsCount).toEqual({ pending: 1, confirmed: 1, completed: 0, total: 2 });
+    expect(result.revenue).toEqual({
+      generatedCents: 3500,
+      upcomingCents: 0,
+      pendingCents: 3000,
+      avgPerHourCents: 7000, // 3500 / 0.5h
+      projectedFullCapacityCents: 21000, // 7000/h * 3h open
+      avgBasketCents: 3500, // 3500 / 1 confirmed+completed reservation
+    });
+    expect(result.reservationsCount).toEqual({
+      pending: 1,
+      confirmed: 1,
+      completed: 0,
+      total: 2,
+      cancellationRatePercent: 33.3, // 1 cancelled / 3 total (confirmed+pending+cancelled)
+    });
+    expect(result.location).toEqual({ atHomeCount: 1, studioCount: 0 }); // only the confirmed reservation counts
     expect(result.hours.bookedHours).toBe(0.5); // only the confirmed reservation's 30min
     expect(result.hours.openHours).toBe(3); // 09:00-12:00
     expect(result.hours.availableHours).toBe(2); // 180min open - 60min busy (confirmed + pending)
@@ -90,6 +113,7 @@ describe('DashboardService', () => {
   it('skips closed days when computing open/available hours', async () => {
     dataSource.query.mockImplementation((sql: string) => {
       if (sql.includes('FROM reservations r')) return Promise.resolve([]);
+      if (sql.includes('GROUP BY status')) return Promise.resolve([]);
       if (sql.includes('COUNT(*)::int')) return Promise.resolve([{ count: 0 }]);
       throw new Error(`Unexpected query: ${sql}`);
     });

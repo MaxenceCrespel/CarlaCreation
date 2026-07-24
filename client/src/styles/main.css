@@ -729,6 +729,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
 .kpi-label { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-muted); }
 .kpi-value { font-size: 1.6rem; font-weight: 700; color: var(--color-text); }
 .kpi-hint { font-size: 0.8rem; color: var(--color-text-soft); }
+.kpi-delta { font-size: 0.78rem; font-weight: 700; }
+.kpi-delta-up { color: #2f7a4a; }
+.kpi-delta-down { color: #b3413a; }
+.kpi-delta-neutral { color: var(--color-muted); }
 
 .manual-reservation-form { max-width: 640px; margin-bottom: 28px; }
 .manual-reservation-form h2 { font-size: 1.1rem; }
