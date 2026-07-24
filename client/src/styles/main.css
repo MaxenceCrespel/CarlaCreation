@@ -999,7 +999,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
 .addon-editor { display: flex; flex-direction: column; gap: 8px; }
 .addon-editor > label { font-weight: 600; font-size: 0.85rem; color: var(--color-text-soft); }
 .addon-row { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 8px; align-items: center; }
-.addon-row input { padding: 8px 10px; font-size: 0.85rem; }
+/* A bare `1fr` grid track won't shrink below its content's min-content
+   size (number inputs especially) — without this, a narrow admin-service-
+   card overflows instead of letting its inputs shrink. */
+.addon-row input { padding: 8px 10px; font-size: 0.85rem; min-width: 0; }
 
 /* Service categories manager (ServicesTab) */
 .categories-manager { margin-bottom: 24px; }
