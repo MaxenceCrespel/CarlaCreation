@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState } from 'react';
 import { apiFetch } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
+import ReservationsCalendar from './ReservationsCalendar';
 
 const STATUS_LABELS = {
   pending: 'En attente',
@@ -249,6 +250,13 @@ export default function ReservationsTab() {
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all');
   const [showAddForm, setShowAddForm] = useState(false);
+  const [viewMode, setViewMode] = useState('list'); // 'list' | 'calendar'
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
+  // { kind: 'single', id } | { kind: 'group', groupId } | null — deletion
+  // always goes through this confirmation modal, refuse/status changes don't
+  // (deleting is the one destructive, unrecoverable action here).
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   function load() {
     setReservations(null);
@@ -275,14 +283,24 @@ export default function ReservationsTab() {
     await updateStatus(id, 'refused');
   }
 
-  async function remove(id) {
-    if (!window.confirm('Supprimer définitivement cette réservation ?')) return;
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
     try {
-      await apiFetch(`/reservations/${id}`, { method: 'DELETE' });
-      setReservations((rows) => rows.filter((r) => r.id !== id));
-      showToast('Réservation supprimée.', 'success');
+      if (deleteTarget.kind === 'single') {
+        await apiFetch(`/reservations/${deleteTarget.id}`, { method: 'DELETE' });
+        setReservations((rows) => rows.filter((r) => r.id !== deleteTarget.id));
+        showToast('Réservation supprimée.', 'success');
+      } else {
+        await apiFetch(`/reservations/group/${deleteTarget.groupId}`, { method: 'DELETE' });
+        setReservations((rows) => rows.filter((r) => r.group_id !== deleteTarget.groupId));
+        showToast('Groupe supprimé.', 'success');
+      }
+      setDeleteTarget(null);
     } catch (err) {
       showToast(err.message, 'error');
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -297,18 +315,15 @@ export default function ReservationsTab() {
     }
   }
 
-  async function removeGroup(groupId) {
-    if (!window.confirm('Supprimer définitivement toutes les personnes de ce rendez-vous groupé ?')) return;
-    try {
-      await apiFetch(`/reservations/group/${groupId}`, { method: 'DELETE' });
-      setReservations((rows) => rows.filter((r) => r.group_id !== groupId));
-      showToast('Groupe supprimé.', 'success');
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
-  }
-
-  const rows = (reservations ?? []).filter((r) => filter === 'all' || r.status === filter);
+  const statusFiltered = (reservations ?? []).filter((r) => filter === 'all' || r.status === filter);
+  // In calendar mode, the table below only shows the selected day's detail
+  // (with the usual actions) — the calendar itself always shows the whole
+  // month regardless of a day being picked.
+  const rows = viewMode === 'calendar' && selectedCalendarDate
+    ? statusFiltered.filter((r) => r.reservation_date === selectedCalendarDate)
+    : viewMode === 'calendar'
+      ? []
+      : statusFiltered;
   const groups = groupRows(rows);
 
   return (
@@ -323,12 +338,26 @@ export default function ReservationsTab() {
           <option value="cancelled">Annulées</option>
           <option value="refused">Refusées</option>
         </select>
+
+        <div className="view-toggle" role="radiogroup" aria-label="Mode d'affichage">
+          <button type="button" role="radio" aria-checked={viewMode === 'list'} className={`view-toggle-btn ${viewMode === 'list' ? 'is-active' : ''}`} onClick={() => setViewMode('list')}>
+            Liste
+          </button>
+          <button type="button" role="radio" aria-checked={viewMode === 'calendar'} className={`view-toggle-btn ${viewMode === 'calendar' ? 'is-active' : ''}`} onClick={() => setViewMode('calendar')}>
+            Calendrier
+          </button>
+        </div>
+
         {!showAddForm && (
           <button type="button" className="btn btn-primary btn-sm" onClick={() => setShowAddForm(true)}>
             + Ajouter une réservation
           </button>
         )}
       </div>
+
+      {viewMode === 'calendar' && (
+        <ReservationsCalendar reservations={statusFiltered} selectedDate={selectedCalendarDate} onSelectDate={setSelectedCalendarDate} />
+      )}
 
       {showAddForm && (
         <AddReservationForm
@@ -359,7 +388,13 @@ export default function ReservationsTab() {
             {error && <tr><td colSpan={9}>Erreur : {error}</td></tr>}
             {!error && reservations === null && <tr><td colSpan={9}>Chargement…</td></tr>}
             {!error && reservations !== null && rows.length === 0 && (
-              <tr><td colSpan={9}>Aucune réservation trouvée.</td></tr>
+              <tr>
+                <td colSpan={9}>
+                  {viewMode === 'calendar' && !selectedCalendarDate
+                    ? 'Cliquez sur une date du calendrier pour voir le détail.'
+                    : 'Aucune réservation trouvée.'}
+                </td>
+              </tr>
             )}
             {!error && groups.map((group) => (
               <Fragment key={group.key}>
@@ -370,7 +405,7 @@ export default function ReservationsTab() {
                         <span className="group-badge">Rendez-vous groupé · {group.rows.length} personnes</span>
                         <div className="group-actions">
                           <button type="button" onClick={() => refuseGroup(group.groupId)}>Refuser le groupe</button>
-                          <button type="button" className="danger" onClick={() => removeGroup(group.groupId)}>Supprimer le groupe</button>
+                          <button type="button" className="danger" onClick={() => setDeleteTarget({ kind: 'group', groupId: group.groupId, count: group.rows.length })}>Supprimer le groupe</button>
                         </div>
                       </div>
                     </td>
@@ -399,7 +434,13 @@ export default function ReservationsTab() {
                       {r.status !== 'refused' && r.status !== 'cancelled' && (
                         <button type="button" onClick={() => refuse(r.id)}>Refuser</button>
                       )}
-                      <button type="button" className="danger" onClick={() => remove(r.id)}>Supprimer</button>
+                      <button
+                        type="button"
+                        className="danger"
+                        onClick={() => setDeleteTarget({ kind: 'single', id: r.id, clientName: r.client_name, willNotify: r.status === 'pending' || r.status === 'confirmed' })}
+                      >
+                        Supprimer
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -408,6 +449,34 @@ export default function ReservationsTab() {
           </tbody>
         </table>
       </div>
+
+      {deleteTarget && (
+        <div className="modal-overlay" onClick={() => !deleting && setDeleteTarget(null)}>
+          <div className="modal-card" role="dialog" aria-modal="true" aria-label="Confirmer la suppression" onClick={(e) => e.stopPropagation()}>
+            <h2>Confirmer la suppression</h2>
+            {deleteTarget.kind === 'single' ? (
+              <p>
+                Supprimer définitivement la réservation de <strong>{deleteTarget.clientName}</strong> ?
+                {deleteTarget.willNotify && " Le client recevra un email l'informant de l'annulation."}
+              </p>
+            ) : (
+              <p>
+                Supprimer définitivement les {deleteTarget.count} personnes de ce rendez-vous groupé ?
+                Le client recevra un email l'informant de l'annulation si le rendez-vous est en attente ou confirmé.
+              </p>
+            )}
+            <p className="loading-text">Cette action est irréversible.</p>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+                Annuler
+              </button>
+              <button type="button" className="btn btn-danger" onClick={confirmDelete} disabled={deleting}>
+                {deleting ? 'Suppression…' : 'Supprimer définitivement'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

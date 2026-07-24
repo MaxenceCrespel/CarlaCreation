@@ -190,8 +190,139 @@ describe('ReservationsService', () => {
   });
 
   it('remove throws NotFoundException when nothing was deleted', async () => {
+    dataSource.query.mockResolvedValue([]);
     reservationRepo.delete.mockResolvedValue({ affected: 0 });
     await expect(service.remove(999)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('remove notifies the client when deleting a pending reservation', async () => {
+    dataSource.query.mockResolvedValue([
+      {
+        group_id: null,
+        client_name: 'Alice',
+        client_email: 'alice@example.com',
+        reservation_date: '2099-01-01',
+        start_time: '10:00',
+        end_time: '10:45',
+        status: 'pending',
+        service_name: 'Coupe Femme',
+        at_client_home: false,
+        client_address: null,
+      },
+    ]);
+    reservationRepo.delete.mockResolvedValue({ affected: 1 });
+
+    await service.remove(1);
+
+    expect(mailService.sendStatusUpdate).toHaveBeenCalledWith(expect.objectContaining({ clientEmail: 'alice@example.com', status: 'cancelled' }));
+  });
+
+  it('remove notifies the client when deleting a confirmed reservation', async () => {
+    dataSource.query.mockResolvedValue([
+      {
+        group_id: null,
+        client_name: 'Alice',
+        client_email: 'alice@example.com',
+        reservation_date: '2099-01-01',
+        start_time: '10:00',
+        end_time: '10:45',
+        status: 'confirmed',
+        service_name: 'Coupe Femme',
+        at_client_home: false,
+        client_address: null,
+      },
+    ]);
+    reservationRepo.delete.mockResolvedValue({ affected: 1 });
+
+    await service.remove(1);
+
+    expect(mailService.sendStatusUpdate).toHaveBeenCalledWith(expect.objectContaining({ status: 'cancelled' }));
+  });
+
+  it('remove does not notify the client when deleting an already refused/cancelled/completed reservation', async () => {
+    for (const status of ['refused', 'cancelled', 'completed']) {
+      mailService.sendStatusUpdate.mockClear();
+      dataSource.query.mockResolvedValue([
+        {
+          group_id: null,
+          client_name: 'Alice',
+          client_email: 'alice@example.com',
+          reservation_date: '2099-01-01',
+          start_time: '10:00',
+          end_time: '10:45',
+          status,
+          service_name: 'Coupe Femme',
+          at_client_home: false,
+          client_address: null,
+        },
+      ]);
+      reservationRepo.delete.mockResolvedValue({ affected: 1 });
+
+      await service.remove(1);
+
+      expect(mailService.sendStatusUpdate).not.toHaveBeenCalled();
+    }
+  });
+
+  it('removeGroup notifies the client when deleting a pending/confirmed group', async () => {
+    dataSource.query.mockResolvedValue([
+      {
+        client_name: 'Mother',
+        client_email: 'mother@example.com',
+        reservation_date: '2099-01-01',
+        start_time: '10:00',
+        end_time: '10:45',
+        status: 'confirmed',
+        service_name: 'Coupe Femme',
+        at_client_home: false,
+        client_address: null,
+      },
+      {
+        client_name: 'Daughter',
+        client_email: 'mother@example.com',
+        reservation_date: '2099-01-01',
+        start_time: '10:45',
+        end_time: '11:15',
+        status: 'confirmed',
+        service_name: 'Manucure Classique',
+        at_client_home: false,
+        client_address: null,
+      },
+    ]);
+    reservationRepo.delete.mockResolvedValue({ affected: 2 });
+
+    await service.removeGroup('some-group');
+
+    expect(mailService.sendStatusUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'cancelled',
+        guests: [
+          expect.objectContaining({ name: 'Mother' }),
+          expect.objectContaining({ name: 'Daughter' }),
+        ],
+      }),
+    );
+  });
+
+  it('removeGroup does not notify when deleting an already refused group', async () => {
+    dataSource.query.mockResolvedValue([
+      {
+        client_name: 'Mother',
+        client_email: 'mother@example.com',
+        reservation_date: '2099-01-01',
+        start_time: '10:00',
+        end_time: '10:45',
+        status: 'refused',
+        service_name: 'Coupe Femme',
+        at_client_home: false,
+        client_address: null,
+      },
+    ]);
+    reservationRepo.delete.mockResolvedValue({ affected: 1 });
+
+    await service.removeGroup('some-group');
+
+    expect(mailService.sendStatusUpdate).not.toHaveBeenCalled();
   });
 
   it('findByGroupId returns the booking group, mapped by guest', async () => {

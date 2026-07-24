@@ -371,10 +371,48 @@ export class ReservationsService {
     }
   }
 
+  // Deleting is meant for cleaning up a mistake/spam entry, unlike
+  // refuse/cancel (a real decision the client needs to know about) — but if
+  // the row being deleted was still pending/confirmed (i.e. not yet past,
+  // not already refused/cancelled), the client had a real upcoming
+  // appointment and silently erasing it without a word would be worse than
+  // sending the same "annulé" email refuse/cancel already sends.
   async remove(id: number): Promise<void> {
+    const rows: {
+      group_id: string | null;
+      client_name: string;
+      client_email: string;
+      reservation_date: string;
+      start_time: string;
+      end_time: string;
+      status: ReservationStatus;
+      service_name: string;
+      at_client_home: boolean;
+      client_address: string | null;
+    }[] = await this.dataSource.query(
+      `SELECT r.group_id, r.client_name, r.client_email, r.reservation_date, r.start_time, r.end_time, r.status,
+              r.at_client_home, r.client_address, s.name AS service_name
+       FROM reservations r JOIN services s ON s.id = r.service_id WHERE r.id = $1`,
+      [id],
+    );
+    const row = rows[0];
+
     const result = await this.reservationRepo.delete(id);
     if (result.affected === 0) {
       throw new NotFoundException('Réservation introuvable.');
+    }
+
+    if (row && (row.status === 'pending' || row.status === 'confirmed')) {
+      await this.mailService.sendStatusUpdate({
+        clientName: row.client_name,
+        clientEmail: row.client_email,
+        date: row.reservation_date,
+        status: 'cancelled',
+        groupId: row.group_id ?? undefined,
+        atClientHome: row.at_client_home,
+        clientAddress: row.client_address,
+        guests: [{ name: row.client_name, serviceName: row.service_name, startTime: row.start_time, endTime: row.end_time }],
+      });
     }
   }
 
@@ -418,9 +456,40 @@ export class ReservationsService {
   }
 
   async removeGroup(groupId: string): Promise<void> {
+    const rows: {
+      client_name: string;
+      client_email: string;
+      reservation_date: string;
+      start_time: string;
+      end_time: string;
+      status: ReservationStatus;
+      service_name: string;
+      at_client_home: boolean;
+      client_address: string | null;
+    }[] = await this.dataSource.query(
+      `SELECT r.client_name, r.client_email, r.reservation_date, r.start_time, r.end_time, r.status,
+              r.at_client_home, r.client_address, s.name AS service_name
+       FROM reservations r JOIN services s ON s.id = r.service_id WHERE r.group_id = $1 ORDER BY r.start_time ASC`,
+      [groupId],
+    );
+
     const result = await this.reservationRepo.delete({ group_id: groupId });
     if (result.affected === 0) {
       throw new NotFoundException('Groupe de réservations introuvable.');
+    }
+
+    const [primary] = rows;
+    if (primary && (primary.status === 'pending' || primary.status === 'confirmed')) {
+      await this.mailService.sendStatusUpdate({
+        clientName: primary.client_name,
+        clientEmail: primary.client_email,
+        date: primary.reservation_date,
+        status: 'cancelled',
+        groupId,
+        atClientHome: primary.at_client_home,
+        clientAddress: primary.client_address,
+        guests: rows.map((r) => ({ name: r.client_name, serviceName: r.service_name, startTime: r.start_time, endTime: r.end_time })),
+      });
     }
   }
 
