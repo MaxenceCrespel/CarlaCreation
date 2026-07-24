@@ -108,6 +108,7 @@ describe('DashboardService', () => {
     expect(result.hours.fillRatePercent).toBeCloseTo(33.3, 1);
     expect(result.newReservationsCount).toBe(2);
     expect(result.topServices).toEqual([{ serviceId: 1, name: 'Coupe Femme', count: 1, revenueCents: 3500 }]);
+    expect(result.dailyBreakdown).toEqual([{ date: '2026-01-01', revenueCents: 3500, bookedHours: 0.5, isClosed: false }]);
   });
 
   it('skips closed days when computing open/available hours', async () => {
@@ -130,5 +131,6 @@ describe('DashboardService', () => {
     expect(result.hours.openHours).toBe(0);
     expect(result.hours.availableHours).toBe(0);
     expect(result.hours.fillRatePercent).toBe(0);
+    expect(result.dailyBreakdown).toEqual([{ date: '2026-01-01', revenueCents: 0, bookedHours: 0, isClosed: true }]);
   });
 });

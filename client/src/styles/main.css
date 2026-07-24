@@ -734,6 +734,57 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
 .kpi-delta-down { color: #b3413a; }
 .kpi-delta-neutral { color: var(--color-muted); }
 
+/* Dashboard: progress bar (fill rate, cancellation rate) */
+.progress-bar-track { width: 100%; height: 8px; border-radius: 999px; background: var(--color-bg-alt); overflow: hidden; margin-top: 4px; }
+.progress-bar-fill { height: 100%; border-radius: 999px; background: var(--color-accent); transition: width 0.3s ease; }
+.progress-bar-fill.progress-bar-danger { background: #b3413a; }
+
+/* Dashboard: à-domicile vs studio split bar */
+.split-bar { width: 100%; height: 8px; border-radius: 999px; overflow: hidden; display: flex; margin-top: 4px; }
+.split-bar-segment { height: 100%; transition: width 0.3s ease; }
+.split-bar-home { background: var(--color-accent); }
+.split-bar-studio { background: var(--color-bg-alt); }
+
+/* Dashboard: daily revenue bar chart */
+.daily-chart { display: flex; align-items: flex-end; gap: 4px; height: 180px; overflow-x: auto; padding-bottom: 4px; }
+.daily-chart-col { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 20px; flex: 1; height: 100%; }
+.daily-chart-bar-track { flex: 1; width: 100%; display: flex; align-items: flex-end; }
+.daily-chart-bar { width: 100%; background: var(--color-accent); border-radius: 3px 3px 0 0; min-height: 2px; transition: height 0.3s ease; }
+.daily-chart-col.is-closed .daily-chart-bar { background: var(--color-bg-alt); }
+.daily-chart-label { font-size: 0.62rem; color: var(--color-text-soft); }
+
+/* Dashboard: top prestations horizontal bars */
+.top-services-bars { display: flex; flex-direction: column; gap: 14px; margin-top: 12px; }
+.top-service-row { display: grid; grid-template-columns: 160px 1fr auto; gap: 12px; align-items: center; }
+.top-service-name { font-weight: 600; font-size: 0.88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.top-service-bar-track { height: 10px; border-radius: 999px; background: var(--color-bg-alt); overflow: hidden; }
+.top-service-bar { height: 100%; border-radius: 999px; background: var(--color-accent); transition: width 0.3s ease; }
+.top-service-value { font-size: 0.82rem; color: var(--color-text-soft); white-space: nowrap; }
+
+/* Dashboard: cumulative revenue line chart */
+.cumulative-chart { display: flex; flex-direction: column; gap: 10px; }
+.cumulative-chart-svg { width: 100%; height: 180px; }
+.cumulative-chart-line { stroke: var(--color-accent); stroke-width: 2.5; }
+.cumulative-chart-target { stroke: var(--color-muted); stroke-width: 1.5; stroke-dasharray: 6 4; }
+.cumulative-chart-legend { display: flex; gap: 20px; flex-wrap: wrap; font-size: 0.82rem; color: var(--color-text-soft); }
+.cumulative-chart-legend strong { color: var(--color-text); }
+.cumulative-chart-legend-target { color: var(--color-muted); }
+
+/* Dashboard: revenue split donut */
+.revenue-donut { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+.revenue-donut-svg { width: 130px; height: 130px; flex-shrink: 0; }
+.revenue-donut-track, .revenue-donut-svg circle { stroke-width: 18; }
+.revenue-donut-track { stroke: var(--color-bg-alt); }
+.donut-generated { stroke: var(--color-accent); }
+.donut-upcoming { stroke: #6b8fc9; }
+.donut-pending { stroke: #d9a441; }
+.revenue-donut-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 0.85rem; }
+.revenue-donut-legend li { display: flex; align-items: center; gap: 8px; }
+.revenue-donut-swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; flex-shrink: 0; }
+.revenue-donut-swatch.donut-generated { background: var(--color-accent); }
+.revenue-donut-swatch.donut-upcoming { background: #6b8fc9; }
+.revenue-donut-swatch.donut-pending { background: #d9a441; }
+
 .manual-reservation-form { max-width: 640px; margin-bottom: 28px; }
 .manual-reservation-form h2 { font-size: 1.1rem; }
 .manual-reservation-form-actions { display: flex; gap: 12px; margin-top: 4px; }
@@ -1067,6 +1118,11 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
 @media (max-width: 900px) {
   .about-grid, .booking-grid, .contact-grid { grid-template-columns: 1fr; }
   .about-image { order: -1; }
+}
+
+@media (max-width: 640px) {
+  .top-service-row { grid-template-columns: 1fr; gap: 4px; }
+  .top-service-value { white-space: normal; }
 }
 
 @media (max-width: 760px) {

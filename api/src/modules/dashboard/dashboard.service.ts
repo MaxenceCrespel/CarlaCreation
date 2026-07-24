@@ -65,6 +65,10 @@ export class DashboardService {
     let studioCount = 0;
     const statusCounts = { pending: 0, confirmed: 0, completed: 0 };
     const serviceStats = new Map<number, { name: string; count: number; revenueCents: number }>();
+    // Per-day revenue/duration (confirmed+completed only, same basis as the
+    // rest of the revenue figures) — powers the daily bar chart.
+    const dailyRevenueCents = new Map<string, number>();
+    const dailyBookedMinutes = new Map<string, number>();
 
     for (const r of reservations) {
       const total = r.price_cents + (addonSums.get(r.id) ?? 0);
@@ -75,7 +79,8 @@ export class DashboardService {
         continue;
       }
 
-      bookedMinutes += toMinutes(r.end_time) - toMinutes(r.start_time);
+      const duration = toMinutes(r.end_time) - toMinutes(r.start_time);
+      bookedMinutes += duration;
       confirmedOrCompletedCount += 1;
       if (r.at_client_home) atHomeCount += 1;
       else studioCount += 1;
@@ -84,6 +89,8 @@ export class DashboardService {
       } else {
         upcomingCents += total;
       }
+      dailyRevenueCents.set(r.reservation_date, (dailyRevenueCents.get(r.reservation_date) ?? 0) + total);
+      dailyBookedMinutes.set(r.reservation_date, (dailyBookedMinutes.get(r.reservation_date) ?? 0) + duration);
 
       const stat = serviceStats.get(r.service_id) ?? { name: r.service_name, count: 0, revenueCents: 0 };
       stat.count += 1;
@@ -104,11 +111,18 @@ export class DashboardService {
     }
     let openMinutes = 0;
     let busyMinutes = 0;
+    const dailyBreakdown: { date: string; revenueCents: number; bookedHours: number; isClosed: boolean }[] = [];
     for (let i = 0; i < days; i += 1) {
       const d = new Date(`${from}T00:00:00`);
       d.setDate(d.getDate() + i);
       const dateStr = localDateString(d);
       const hours = await getEffectiveHoursForDate(this.dataSource, dateStr);
+      dailyBreakdown.push({
+        date: dateStr,
+        revenueCents: dailyRevenueCents.get(dateStr) ?? 0,
+        bookedHours: round1((dailyBookedMinutes.get(dateStr) ?? 0) / 60),
+        isClosed: hours.isClosed || hours.ranges.length === 0,
+      });
       if (hours.isClosed || hours.ranges.length === 0) continue;
       const dayOpenMinutes = hours.ranges.reduce((sum, range) => sum + (toMinutes(range.closeTime) - toMinutes(range.openTime)), 0);
       openMinutes += dayOpenMinutes;
@@ -178,6 +192,7 @@ export class DashboardService {
       location: { atHomeCount, studioCount },
       newReservationsCount,
       topServices,
+      dailyBreakdown,
     };
   }
 }
