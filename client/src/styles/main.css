@@ -3,9 +3,13 @@
   --color-bg-alt: #E9DED2;
   --color-accent: #B8735A;
   --color-accent-dark: #9A5F4B;
-  --color-muted: #A99688;
+  /* Darkened from the original #A99688/#6B5C51 — those only hit ~2.6:1 and
+     ~5.9:1 contrast against --color-bg, and #A99688 fails WCAG AA (4.5:1)
+     for normal text entirely. These read the same at a glance but are
+     meaningfully easier to read, especially on a phone in daylight. */
+  --color-muted: #756148;
   --color-text: #3A2E27;
-  --color-text-soft: #6B5C51;
+  --color-text-soft: #594940;
   --color-white: #FFFFFF;
 
   --radius-sm: 8px;
