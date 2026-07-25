@@ -20,7 +20,13 @@ async function handleResponse(res) {
     // no JSON body
   }
   if (!res.ok) {
-    const message = (data && (data.error || (Array.isArray(data.message) ? data.message[0] : data.message))) || 'Une erreur est survenue.';
+    // NestJS's default HttpException body is { statusCode, message, error }
+    // — `error` is just the generic HTTP reason phrase ("Conflict", "Bad
+    // Request"...), `message` is the actual descriptive text passed to the
+    // exception (e.g. "Ce créneau chevauche une réservation existante...").
+    // `message` must win, or every specific error collapses into the
+    // generic English phrase.
+    const message = (data && ((Array.isArray(data.message) ? data.message[0] : data.message) || data.error)) || 'Une erreur est survenue.';
     throw new Error(message);
   }
   return data;
