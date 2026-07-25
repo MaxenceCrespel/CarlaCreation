@@ -24,6 +24,7 @@ const EMPTY_MANUAL_FORM = {
   notes: '',
   status: 'confirmed',
   atClientHome: false,
+  allowOverlap: false,
 };
 
 // Same checkbox pattern as the public booking page's AddonCheckboxes, so
@@ -263,6 +264,21 @@ function AddReservationForm({ onCreated, onCancel }) {
         </div>
       )}
 
+      <div className="form-row checkbox-row">
+        <label htmlFor="manual-allow-overlap">
+          <input
+            type="checkbox"
+            id="manual-allow-overlap"
+            checked={form.allowOverlap}
+            onChange={(e) => setForm((f) => ({ ...f, allowOverlap: e.target.checked }))}
+          />
+          Autoriser le chevauchement avec un autre rendez-vous
+        </label>
+        <p className="form-hint">
+          Utile par exemple pour caser une coupe pendant le temps de pose d'une couleur.
+        </p>
+      </div>
+
       <div className="form-row two-col">
         <div>
           <label htmlFor="manual-status">Statut</label>
@@ -307,6 +323,7 @@ function EditReservationModal({ reservation, onClose, onSaved }) {
     notes: reservation.notes || '',
     atClientHome: reservation.at_client_home,
     clientAddress: reservation.client_address || '',
+    allowOverlap: false,
   });
   const [feedback, setFeedback] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -381,6 +398,7 @@ function EditReservationModal({ reservation, onClose, onSaved }) {
           atClientHome: form.atClientHome,
           clientAddress: form.atClientHome ? form.clientAddress.trim() : undefined,
           addonIds: addonsDirty ? addonIds : undefined,
+          allowOverlap: form.allowOverlap,
         },
       });
       showToast('Réservation modifiée.', 'success');
@@ -466,6 +484,21 @@ function EditReservationModal({ reservation, onClose, onSaved }) {
         <div className="form-row">
           <label htmlFor="edit-notes">Note (optionnel)</label>
           <input type="text" id="edit-notes" maxLength={500} value={form.notes} onChange={update('notes')} />
+        </div>
+
+        <div className="form-row checkbox-row">
+          <label htmlFor="edit-allow-overlap">
+            <input
+              type="checkbox"
+              id="edit-allow-overlap"
+              checked={form.allowOverlap}
+              onChange={(e) => setForm((f) => ({ ...f, allowOverlap: e.target.checked }))}
+            />
+            Autoriser le chevauchement avec un autre rendez-vous
+          </label>
+          <p className="form-hint">
+            À cocher si ce créneau chevauche volontairement un autre rendez-vous (ex : temps de pose d'une couleur).
+          </p>
         </div>
 
         {feedback && <div className="form-feedback error">{feedback}</div>}

@@ -205,19 +205,24 @@ export class ReservationsService {
     const endMin = startMin + totalDuration;
     const candidate = effectiveInterval(startMin, endMin, atClientHome, travelBufferMinutes);
 
-    const existing = await this.reservationRepo
-      .createQueryBuilder('r')
-      .select(['r.start_time', 'r.end_time', 'r.at_client_home'])
-      .where('r.reservation_date = :date', { date: dto.date })
-      .andWhere('r.status NOT IN (:...excluded)', { excluded: ['cancelled', 'refused'] })
-      .getMany();
+    // allowOverlap is the admin's deliberate call (e.g. booking a haircut
+    // during a colour's processing time) — skip the check entirely rather
+    // than trying to guess which overlaps are "safe".
+    if (!dto.allowOverlap) {
+      const existing = await this.reservationRepo
+        .createQueryBuilder('r')
+        .select(['r.start_time', 'r.end_time', 'r.at_client_home'])
+        .where('r.reservation_date = :date', { date: dto.date })
+        .andWhere('r.status NOT IN (:...excluded)', { excluded: ['cancelled', 'refused'] })
+        .getMany();
 
-    const overlaps = existing.some((r) => {
-      const busy = effectiveInterval(toMinutes(r.start_time), toMinutes(r.end_time), r.at_client_home, travelBufferMinutes);
-      return intervalsOverlap(candidate, busy);
-    });
-    if (overlaps) {
-      throw new ConflictException('Ce créneau chevauche une réservation existante (ou son temps de trajet).');
+      const overlaps = existing.some((r) => {
+        const busy = effectiveInterval(toMinutes(r.start_time), toMinutes(r.end_time), r.at_client_home, travelBufferMinutes);
+        return intervalsOverlap(candidate, busy);
+      });
+      if (overlaps) {
+        throw new ConflictException('Ce créneau chevauche une réservation existante (ou son temps de trajet).');
+      }
     }
 
     const status = dto.status || 'confirmed';
@@ -459,20 +464,24 @@ export class ReservationsService {
     const travelBufferMinutes = await this.settingsService.getTravelBufferMinutes();
     const candidate = effectiveInterval(startMin, endMin, atClientHome, travelBufferMinutes);
 
-    const others = await this.reservationRepo
-      .createQueryBuilder('r')
-      .select(['r.start_time', 'r.end_time', 'r.at_client_home'])
-      .where('r.reservation_date = :date', { date })
-      .andWhere('r.id != :id', { id })
-      .andWhere('r.status NOT IN (:...excluded)', { excluded: ['cancelled', 'refused'] })
-      .getMany();
+    // See createManual for the rationale — the admin's deliberate call,
+    // not persisted, so an unrelated later edit still gets the normal check.
+    if (!dto.allowOverlap) {
+      const others = await this.reservationRepo
+        .createQueryBuilder('r')
+        .select(['r.start_time', 'r.end_time', 'r.at_client_home'])
+        .where('r.reservation_date = :date', { date })
+        .andWhere('r.id != :id', { id })
+        .andWhere('r.status NOT IN (:...excluded)', { excluded: ['cancelled', 'refused'] })
+        .getMany();
 
-    const overlaps = others.some((r) => {
-      const busy = effectiveInterval(toMinutes(r.start_time), toMinutes(r.end_time), r.at_client_home, travelBufferMinutes);
-      return intervalsOverlap(candidate, busy);
-    });
-    if (overlaps) {
-      throw new ConflictException('Ce créneau chevauche une réservation existante (ou son temps de trajet).');
+      const overlaps = others.some((r) => {
+        const busy = effectiveInterval(toMinutes(r.start_time), toMinutes(r.end_time), r.at_client_home, travelBufferMinutes);
+        return intervalsOverlap(candidate, busy);
+      });
+      if (overlaps) {
+        throw new ConflictException('Ce créneau chevauche une réservation existante (ou son temps de trajet).');
+      }
     }
 
     await this.dataSource.transaction(async (manager) => {

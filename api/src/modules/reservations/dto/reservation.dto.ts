@@ -218,6 +218,16 @@ export class UpdateReservationDto {
   @IsString()
   @Length(5, 300)
   clientAddress?: string;
+
+  // Admin-only escape hatch: some services have genuine idle time (e.g. a
+  // colour "processing" while it develops) during which Carla can work on
+  // someone else — checking this skips the overlap check for this save.
+  // Deliberately not persisted/remembered: re-saving the same reservation
+  // later re-runs the normal check unless this is ticked again, so an
+  // accidental extra overlap always still gets caught.
+  @IsOptional()
+  @IsBoolean()
+  allowOverlap?: boolean;
 }
 
 // Used by the admin to manually log a reservation (walk-in, phone booking…).
@@ -278,4 +288,11 @@ export class AdminCreateReservationDto {
   @ValidateNested({ each: true })
   @Type(() => AdditionalGuestDto)
   additionalGuests?: AdditionalGuestDto[];
+
+  // Admin-only escape hatch: skips the overlap check for this booking (e.g.
+  // a colour "processing" while Carla works on someone else) — see
+  // UpdateReservationDto for the full rationale, same behaviour here.
+  @IsOptional()
+  @IsBoolean()
+  allowOverlap?: boolean;
 }

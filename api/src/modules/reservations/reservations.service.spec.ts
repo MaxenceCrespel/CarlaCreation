@@ -117,6 +117,32 @@ describe('ReservationsService', () => {
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
+  it('createManual allows a genuinely overlapping slot when allowOverlap is set', async () => {
+    serviceRepo.findOne.mockResolvedValue(HAIRCUT);
+    // No createQueryBuilder call expected at all — allowOverlap skips the
+    // overlap check (and thus the "existing" lookup) entirely.
+    reservationRepo.createQueryBuilder.mockImplementation(() => {
+      throw new Error('should not query for overlaps when allowOverlap is true');
+    });
+    dataSource.transaction.mockImplementationOnce(async (fn) => {
+      const manager = { insert: jest.fn(async () => ({ identifiers: [{ id: 300 }] })) };
+      return fn(manager);
+    });
+
+    await expect(
+      service.createManual({
+        serviceId: 1,
+        clientName: 'Coupe pendant la pose',
+        clientEmail: 'test@example.com',
+        clientPhone: '0600000000',
+        date: '2099-01-01',
+        startTime: '10:30',
+        status: 'confirmed',
+        allowOverlap: true,
+      } as any),
+    ).resolves.toMatchObject({ startTime: '10:30' });
+  });
+
   it('createManual rejects a slot that only overlaps the travel buffer of an existing home visit', async () => {
     // travelBufferMinutes is 30 — an existing 10:15–11:00 à-domicile visit
     // busies 09:45–11:30, so a studio booking starting at 11:00 collides.
@@ -631,6 +657,31 @@ describe('ReservationsService', () => {
       });
 
       await expect(service.updateReservation(1, { startTime: '10:30' })).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('allows a genuinely overlapping edit when allowOverlap is set', async () => {
+      reservationRepo.findOne.mockResolvedValue({
+        id: 1,
+        service_id: 1,
+        client_name: 'Alice',
+        client_email: 'a@example.com',
+        client_phone: '0600000000',
+        reservation_date: '2099-01-01',
+        start_time: '10:00',
+        end_time: '10:45',
+        notes: '',
+        at_client_home: false,
+        client_address: null,
+      });
+      serviceRepo.findOne.mockResolvedValue(HAIRCUT);
+      dataSource.query.mockResolvedValue([]);
+      // No createQueryBuilder call expected — allowOverlap skips the "others"
+      // lookup entirely, same as createManual.
+      reservationRepo.createQueryBuilder.mockImplementation(() => {
+        throw new Error('should not query for overlaps when allowOverlap is true');
+      });
+
+      await expect(service.updateReservation(1, { startTime: '10:30', allowOverlap: true })).resolves.toBeUndefined();
     });
 
     it('replaces reservation_addons when addonIds is provided', async () => {
