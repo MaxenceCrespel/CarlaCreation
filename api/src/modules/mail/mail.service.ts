@@ -207,7 +207,9 @@ export class MailService {
       return;
     }
     try {
-      await this.transporter.sendMail({ from: config.SMTP_FROM, to, subject, html });
+      // An HTML-only email (no plain-text alternative) is a well-known spam
+      // signal to most filters — always send both parts.
+      await this.transporter.sendMail({ from: config.SMTP_FROM, to, subject, html, text: htmlToText(html) });
     } catch (err) {
       // A failed email must never break the booking flow itself — the
       // reservation is already saved; just log so the admin can investigate.
@@ -222,4 +224,25 @@ function escapeHtml(str: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+// Good-enough plain-text rendering of our own template HTML (not a general
+// HTML-to-text library) — just needs to be readable, not pixel-perfect.
+function htmlToText(html: string): string {
+  return html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|tr|h[1-6])>/gi, '\n')
+    .replace(/<li[^>]*>/gi, '- ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .split('\n')
+    .map((line) => line.trim())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }

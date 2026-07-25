@@ -70,4 +70,14 @@ describe('MailService — studio address privacy', () => {
     const html = sendMail.mock.calls[0][0].html;
     expect(html).toContain('9 avenue du Test, 59000 Lille');
   });
+
+  it('always sends a plain-text alternative alongside the HTML (avoids an HTML-only spam signal)', async () => {
+    await service.sendBookingReceived(baseInput);
+    const { html, text } = sendMail.mock.calls[0][0];
+    expect(text).toBeTruthy();
+    expect(text).not.toMatch(/<[a-z][\s\S]*>/i); // no leftover HTML tags
+    expect(text).toContain('Alice');
+    expect(text).toContain('Coupe Femme');
+    expect(html).toContain('<table');
+  });
 });
