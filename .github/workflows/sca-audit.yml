@@ -17,7 +17,12 @@ jobs:
         run: |
           cd api
           npm install
-          npm audit --audit-level=high
+          # --omit=dev: le build de prod (api/Dockerfile) fait `npm prune --omit=dev`
+          # avant de livrer l'image — les devDependencies (Jest, ts-jest...) ne sont
+          # jamais expédiées, donc les auditer ferait échouer la CI sur des CVE
+          # inatteignables en prod (ex: brace-expansion via une vieille version
+          # transitive de rimraf/glob dans Jest, sans fix non-breaking disponible).
+          npm audit --omit=dev --audit-level=high
       - name: Audit des dépendances Client (Frontend)
         run: |
           cd client
