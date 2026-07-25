@@ -38,6 +38,20 @@ RUN apk add --no-cache postgresql-client
 # waiting on a base image rebuild.
 RUN npm install -g npm@latest
 
+# Even the latest npm still vendors a vulnerable brace-expansion copy
+# internally (CVE-2026-14257, DoS via crafted pattern — fixed upstream in
+# 5.0.8, npm just hasn't picked it up yet). `npm install --prefix` can't
+# patch a single nested dependency in place (it tries to resolve npm's own
+# *private* internal package.json against the public registry and 404s),
+# so fetch the fixed tarball and swap the vendored copy directly.
+RUN NPM_DIR="$(npm root -g)/npm" \
+  && cd /tmp \
+  && npm pack brace-expansion@5.0.8 \
+  && tar -xzf brace-expansion-5.0.8.tgz \
+  && rm -rf "$NPM_DIR/node_modules/brace-expansion" \
+  && mv package "$NPM_DIR/node_modules/brace-expansion" \
+  && rm -f brace-expansion-5.0.8.tgz
+
 COPY --from=api-build /build/api/node_modules ./node_modules
 COPY --from=api-build /build/api/dist ./dist
 COPY --from=api-build /build/api/scripts ./scripts
