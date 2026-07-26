@@ -25,6 +25,7 @@ export default function GalleryTab() {
   const [error, setError] = useState(null);
   const [altText, setAltText] = useState('');
   const [categoryId, setCategoryId] = useState('');
+  const [uploadMode, setUploadMode] = useState('pair'); // 'pair' | 'single' — e.g. nail art rarely has a meaningful "before"
   const [uploading, setUploading] = useState(false);
   const [uploadFeedback, setUploadFeedback] = useState(null);
   const beforeInputRef = useRef(null);
@@ -45,13 +46,13 @@ export default function GalleryTab() {
     setUploadFeedback(null);
     const before = beforeInputRef.current?.files?.[0];
     const after = afterInputRef.current?.files?.[0];
-    if (!before || !after || !altText.trim()) {
+    if (!after || (uploadMode === 'pair' && !before) || !altText.trim()) {
       e.target.reportValidity();
       return;
     }
 
     const formData = new FormData();
-    formData.append('photoBefore', before);
+    if (uploadMode === 'pair') formData.append('photoBefore', before);
     formData.append('photoAfter', after);
     formData.append('altText', altText.trim());
     if (categoryId) formData.append('categoryId', categoryId);
@@ -64,8 +65,8 @@ export default function GalleryTab() {
       setCategoryId('');
       if (beforeInputRef.current) beforeInputRef.current.value = '';
       if (afterInputRef.current) afterInputRef.current.value = '';
-      setUploadFeedback({ type: 'success', text: 'Photos ajoutées avec succès.' });
-      showToast('Photos ajoutées.', 'success');
+      setUploadFeedback({ type: 'success', text: 'Photo ajoutée avec succès.' });
+      showToast('Photo ajoutée.', 'success');
     } catch (err) {
       setUploadFeedback({ type: 'error', text: err.message });
       showToast(err.message, 'error');
@@ -128,13 +129,44 @@ export default function GalleryTab() {
   return (
     <>
       <form className="card upload-form" noValidate onSubmit={handleUpload}>
-        <h2>Ajouter une photo avant/après</h2>
+        <h2>Ajouter une photo</h2>
+
         <div className="form-row">
-          <label htmlFor="photo-before">Photo « avant » (JPEG, PNG ou WebP, 5 Mo max)</label>
-          <input type="file" id="photo-before" ref={beforeInputRef} accept="image/jpeg,image/png,image/webp" required />
+          <label>Type de photo</label>
+          <div className="view-toggle" role="radiogroup" aria-label="Type de photo">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={uploadMode === 'pair'}
+              className={`view-toggle-btn ${uploadMode === 'pair' ? 'is-active' : ''}`}
+              onClick={() => setUploadMode('pair')}
+            >
+              Avant / Après
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={uploadMode === 'single'}
+              className={`view-toggle-btn ${uploadMode === 'single' ? 'is-active' : ''}`}
+              onClick={() => setUploadMode('single')}
+            >
+              Photo simple
+            </button>
+          </div>
+          <p className="form-hint">
+            « Photo simple » pour un résultat sans transformation à comparer (ex : nail art). « Avant / Après » pour
+            une coupe, coloration, etc.
+          </p>
         </div>
+
+        {uploadMode === 'pair' && (
+          <div className="form-row">
+            <label htmlFor="photo-before">Photo « avant » (JPEG, PNG ou WebP, 5 Mo max)</label>
+            <input type="file" id="photo-before" ref={beforeInputRef} accept="image/jpeg,image/png,image/webp" required />
+          </div>
+        )}
         <div className="form-row">
-          <label htmlFor="photo-after">Photo « après » (JPEG, PNG ou WebP, 5 Mo max)</label>
+          <label htmlFor="photo-after">{uploadMode === 'pair' ? 'Photo « après »' : 'Photo'} (JPEG, PNG ou WebP, 5 Mo max)</label>
           <input type="file" id="photo-after" ref={afterInputRef} accept="image/jpeg,image/png,image/webp" required />
         </div>
         <div className="form-row">
@@ -154,7 +186,7 @@ export default function GalleryTab() {
           <div className={`form-feedback ${uploadFeedback.type}`} role="status" aria-live="polite">{uploadFeedback.text}</div>
         )}
         <button type="submit" className="btn btn-primary" disabled={uploading}>
-          {uploading ? 'Envoi en cours…' : 'Téléverser les photos'}
+          {uploading ? 'Envoi en cours…' : uploadMode === 'pair' ? 'Téléverser les photos' : 'Téléverser la photo'}
         </button>
       </form>
 

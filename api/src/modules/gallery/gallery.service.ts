@@ -16,7 +16,10 @@ export class GalleryService {
     return this.galleryRepo.find({ order: { sort_order: 'ASC', id: 'ASC' } });
   }
 
-  async addUpload(beforeFilename: string, afterFilename: string, altText: string, categoryId?: number): Promise<Gallery> {
+  // beforeFilename is null for a standalone photo (e.g. nail art — there's
+  // no meaningful "before" shot), in which case the item renders as a
+  // single image instead of a before/after slider.
+  async addUpload(beforeFilename: string | null, afterFilename: string, altText: string, categoryId?: number): Promise<Gallery> {
     const raw = await this.galleryRepo
       .createQueryBuilder('gallery')
       .select('COALESCE(MAX(gallery.sort_order), 0)', 'max')
@@ -25,7 +28,7 @@ export class GalleryService {
 
     const item = this.galleryRepo.create({
       url: `uploads/${afterFilename}`,
-      before_url: `uploads/${beforeFilename}`,
+      before_url: beforeFilename ? `uploads/${beforeFilename}` : null,
       alt_text: altText,
       sort_order: Number(max) + 1,
       is_upload: true,

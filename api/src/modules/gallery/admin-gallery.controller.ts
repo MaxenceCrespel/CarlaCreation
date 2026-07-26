@@ -61,10 +61,12 @@ export class AdminGalleryController {
   ) {
     const before = files.photoBefore?.[0];
     const after = files.photoAfter?.[0];
-    if (!before || !after) {
-      throw new BadRequestException('Les photos avant et après sont toutes les deux requises.');
+    // "Avant" is optional — a single finished-result photo (e.g. nail art,
+    // where there's no meaningful "before") is just as valid as a pair.
+    if (!after) {
+      throw new BadRequestException('La photo est requise.');
     }
-    return this.galleryService.addUpload(before.filename, after.filename, dto.altText, dto.categoryId);
+    return this.galleryService.addUpload(before?.filename ?? null, after.filename, dto.altText, dto.categoryId);
   }
 
   @UseGuards(CsrfGuard)

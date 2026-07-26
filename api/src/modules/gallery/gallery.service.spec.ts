@@ -52,6 +52,19 @@ describe('GalleryService', () => {
     expect(result.is_upload).toBe(true);
   });
 
+  it('addUpload accepts a standalone photo with no before shot', async () => {
+    repo.createQueryBuilder.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      getRawOne: jest.fn().mockResolvedValue({ max: 0 }),
+    });
+
+    const result = await service.addUpload(null, 'nails.jpg', 'Nail art');
+
+    expect(result.url).toBe('uploads/nails.jpg');
+    expect(result.before_url).toBeNull();
+    expect(result.is_upload).toBe(true);
+  });
+
   it('addUpload defaults sort_order to 1 when the gallery is empty', async () => {
     repo.createQueryBuilder.mockReturnValue({
       select: jest.fn().mockReturnThis(),
