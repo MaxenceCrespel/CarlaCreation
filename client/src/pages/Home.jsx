@@ -5,6 +5,7 @@ import { useSiteConfig } from '../context/SiteConfigContext';
 import { useToast } from '../context/ToastContext';
 import { useSeo } from '../hooks/useSeo';
 import GalleryGrid from '../components/GalleryGrid';
+import ReviewsCarousel from '../components/ReviewsCarousel';
 
 function Stars({ value, size }) {
   return (
@@ -209,15 +210,7 @@ export default function Home() {
           )}
 
           {!reviewError && reviewSummary && reviewSummary.reviews.length > 0 && (
-            <div className="testimonials-grid">
-              {reviewSummary.reviews.slice(0, 6).map((review) => (
-                <blockquote className="testimonial-card" key={review.id}>
-                  <Stars value={review.rating} />
-                  <p>« {review.comment} »</p>
-                  <footer>— {review.clientName}</footer>
-                </blockquote>
-              ))}
-            </div>
+            <ReviewsCarousel reviews={reviewSummary.reviews} />
           )}
 
           <div className="testimonials-cta">

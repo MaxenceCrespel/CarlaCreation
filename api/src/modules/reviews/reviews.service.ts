@@ -13,7 +13,7 @@ export class ReviewsService {
     const reviews = await this.reviewRepo.find({
       where: { status: 'approved' },
       order: { created_at: 'DESC' },
-      take: 20,
+      take: 50,
     });
     const raw = await this.reviewRepo
       .createQueryBuilder('review')

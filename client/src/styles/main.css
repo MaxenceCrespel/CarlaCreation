@@ -468,6 +468,9 @@ img { max-width: 100%; display: block; }
 }
 .before-after-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .before-after-clip { position: absolute; inset: 0; }
+/* Only animated during the brief auto-demo on mount (see BeforeAfterSlider)
+   — live dragging must stay instant, with no transition lag. */
+.before-after-clip.is-demoing { transition: clip-path 0.6s ease; }
 .before-after-handle {
   position: absolute;
   top: 0;
@@ -480,6 +483,7 @@ img { max-width: 100%; display: block; }
   cursor: ew-resize;
   touch-action: none;
 }
+.before-after-handle.is-demoing { transition: left 0.6s ease; }
 .before-after-handle-grip {
   width: 4px;
   height: 100%;
@@ -497,6 +501,17 @@ img { max-width: 100%; display: block; }
   border-radius: 50%;
   background: var(--color-white);
   box-shadow: var(--shadow-sm);
+}
+.before-after-handle-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-accent-dark);
+  pointer-events: none;
 }
 .before-after-label {
   position: absolute;
@@ -633,6 +648,43 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
 .testimonial-card p { color: var(--color-text); font-style: italic; }
 .testimonial-card footer { color: var(--color-accent-dark); font-weight: 600; font-size: 0.9rem; }
 .testimonial-card .stars { margin-bottom: 10px; }
+
+/* Reviews carousel — autoplaying but also fully hand-slidable (native CSS
+   scroll-snap handles touch/trackpad drag, no JS drag logic needed). */
+.reviews-carousel { position: relative; display: flex; align-items: center; gap: 12px; margin-top: 40px; padding-bottom: 28px; }
+.reviews-carousel-track {
+  flex: 1;
+  display: flex;
+  gap: 20px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  padding: 4px;
+  scrollbar-width: none;
+}
+.reviews-carousel-track::-webkit-scrollbar { display: none; }
+.reviews-carousel-item { flex: 0 0 min(340px, 85vw); scroll-snap-align: start; }
+.reviews-carousel-nav {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid var(--color-bg-alt);
+  background: var(--color-white);
+  color: var(--color-accent-dark);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s ease;
+}
+.reviews-carousel-nav:hover { border-color: var(--color-accent); }
+.reviews-carousel-dots { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); display: flex; gap: 8px; }
+.reviews-carousel-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-bg-alt); border: none; padding: 0; cursor: pointer; }
+.reviews-carousel-dot.is-active { background: var(--color-accent); }
 
 /* Star ratings — read-only display and the clickable input used in the
    public review form. */
@@ -1135,6 +1187,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
 }
 
 @media (max-width: 760px) {
+  /* Touch swipe is the natural interaction here — the arrow buttons just
+     eat width from the track on a narrow screen. */
+  .reviews-carousel-nav { display: none; }
+
   .main-nav {
     position: fixed;
     top: 68px;
