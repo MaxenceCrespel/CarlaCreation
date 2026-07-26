@@ -16,7 +16,7 @@ export class GalleryService {
     return this.galleryRepo.find({ order: { sort_order: 'ASC', id: 'ASC' } });
   }
 
-  async addUpload(beforeFilename: string, afterFilename: string, altText: string): Promise<Gallery> {
+  async addUpload(beforeFilename: string, afterFilename: string, altText: string, categoryId?: number): Promise<Gallery> {
     const raw = await this.galleryRepo
       .createQueryBuilder('gallery')
       .select('COALESCE(MAX(gallery.sort_order), 0)', 'max')
@@ -29,6 +29,7 @@ export class GalleryService {
       alt_text: altText,
       sort_order: Number(max) + 1,
       is_upload: true,
+      category_id: categoryId ?? null,
     });
     return this.galleryRepo.save(item);
   }
@@ -42,6 +43,9 @@ export class GalleryService {
     }
     if (dto.sortOrder !== undefined) {
       item.sort_order = dto.sortOrder;
+    }
+    if (dto.categoryId !== undefined) {
+      item.category_id = dto.categoryId;
     }
     await this.galleryRepo.save(item);
   }

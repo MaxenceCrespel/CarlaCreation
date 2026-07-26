@@ -23,6 +23,12 @@ export class Gallery {
   @Column({ default: false })
   is_upload: boolean;
 
+  // Reuses service_categories (same taxonomy as prestations) rather than a
+  // separate gallery-only list — nullable, a photo doesn't have to be
+  // tagged right away.
+  @Column({ type: 'int', nullable: true })
+  category_id: number | null;
+
   @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;
 }

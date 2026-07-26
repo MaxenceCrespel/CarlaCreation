@@ -62,6 +62,35 @@ describe('GalleryService', () => {
     expect(result.sort_order).toBe(1);
   });
 
+  it('addUpload stores categoryId when provided, null otherwise', async () => {
+    repo.createQueryBuilder.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      getRawOne: jest.fn().mockResolvedValue({ max: 0 }),
+    });
+
+    const withCategory = await service.addUpload('b.jpg', 'a.jpg', 'Alt', 2);
+    expect(withCategory.category_id).toBe(2);
+
+    const withoutCategory = await service.addUpload('b2.jpg', 'a2.jpg', 'Alt 2');
+    expect(withoutCategory.category_id).toBeNull();
+  });
+
+  it('update sets categoryId when provided, and can clear it with null', async () => {
+    repo.findOne.mockResolvedValue({ id: 1, alt_text: 'Old', sort_order: 1, category_id: null });
+    await service.update(1, { categoryId: 3 });
+    expect(repo.save).toHaveBeenCalledWith(expect.objectContaining({ category_id: 3 }));
+
+    repo.findOne.mockResolvedValue({ id: 1, alt_text: 'Old', sort_order: 1, category_id: 3 });
+    await service.update(1, { categoryId: null });
+    expect(repo.save).toHaveBeenCalledWith(expect.objectContaining({ category_id: null }));
+  });
+
+  it('update leaves categoryId untouched when omitted', async () => {
+    repo.findOne.mockResolvedValue({ id: 1, alt_text: 'Old', sort_order: 1, category_id: 5 });
+    await service.update(1, { altText: 'New' });
+    expect(repo.save).toHaveBeenCalledWith(expect.objectContaining({ category_id: 5 }));
+  });
+
   it('remove throws NotFoundException for a missing photo', async () => {
     repo.findOne.mockResolvedValue(null);
     await expect(service.remove(999)).rejects.toBeInstanceOf(NotFoundException);

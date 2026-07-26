@@ -2,11 +2,29 @@ import { useEffect, useRef, useState } from 'react';
 import { apiFetch, apiUpload } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 
+// Flattens the (max one level deep) category tree into a single ordered
+// list — each top-level category immediately followed by its
+// subcategories — so a <select> can show the hierarchy via indentation.
+function orderedCategoryTree(categories) {
+  const topLevel = categories.filter((c) => !c.parent_id).sort((a, b) => a.sort_order - b.sort_order);
+  const result = [];
+  for (const top of topLevel) {
+    result.push({ ...top, depth: 0 });
+    categories
+      .filter((c) => c.parent_id === top.id)
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .forEach((child) => result.push({ ...child, depth: 1 }));
+  }
+  return result;
+}
+
 export default function GalleryTab() {
   const showToast = useToast();
   const [items, setItems] = useState(null);
+  const [categories, setCategories] = useState([]);
   const [error, setError] = useState(null);
   const [altText, setAltText] = useState('');
+  const [categoryId, setCategoryId] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadFeedback, setUploadFeedback] = useState(null);
   const beforeInputRef = useRef(null);
@@ -17,6 +35,7 @@ export default function GalleryTab() {
     apiFetch('/admin/gallery')
       .then(setItems)
       .catch((err) => setError(err.message));
+    apiFetch('/admin/service-categories').then(setCategories).catch(() => {});
   }
 
   useEffect(load, []);
@@ -35,12 +54,14 @@ export default function GalleryTab() {
     formData.append('photoBefore', before);
     formData.append('photoAfter', after);
     formData.append('altText', altText.trim());
+    if (categoryId) formData.append('categoryId', categoryId);
 
     setUploading(true);
     try {
       const created = await apiUpload('/admin/gallery', formData);
       setItems((rows) => [...(rows ?? []), created]);
       setAltText('');
+      setCategoryId('');
       if (beforeInputRef.current) beforeInputRef.current.value = '';
       if (afterInputRef.current) afterInputRef.current.value = '';
       setUploadFeedback({ type: 'success', text: 'Photos ajoutées avec succès.' });
@@ -53,10 +74,14 @@ export default function GalleryTab() {
     }
   }
 
-  async function saveAlt(id, value) {
+  async function saveCard(id, { altText: alt, categoryId: catId }) {
     try {
-      await apiFetch(`/admin/gallery/${id}`, { method: 'PATCH', body: { altText: value } });
-      showToast('Légende mise à jour.', 'success');
+      await apiFetch(`/admin/gallery/${id}`, {
+        method: 'PATCH',
+        body: { altText: alt, categoryId: catId === '' ? null : Number(catId) },
+      });
+      setItems((rows) => rows.map((r) => (r.id === id ? { ...r, alt_text: alt, category_id: catId === '' ? null : Number(catId) } : r)));
+      showToast('Photo mise à jour.', 'success');
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -116,6 +141,15 @@ export default function GalleryTab() {
           <label htmlFor="photo-alt">Légende</label>
           <input type="text" id="photo-alt" maxLength={150} required placeholder="Ex : Balayage caramel" value={altText} onChange={(e) => setAltText(e.target.value)} />
         </div>
+        <div className="form-row">
+          <label htmlFor="photo-category">Catégorie (optionnel)</label>
+          <select id="photo-category" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+            <option value="">Aucune</option>
+            {orderedCategoryTree(categories).map((c) => (
+              <option key={c.id} value={c.id}>{c.depth > 0 ? `— ${c.name}` : c.name}</option>
+            ))}
+          </select>
+        </div>
         {uploadFeedback && (
           <div className={`form-feedback ${uploadFeedback.type}`} role="status" aria-live="polite">{uploadFeedback.text}</div>
         )}
@@ -136,9 +170,10 @@ export default function GalleryTab() {
             <GalleryCard
               key={item.id}
               item={item}
+              categories={categories}
               isFirst={i === 0}
               isLast={i === sorted.length - 1}
-              onSave={saveAlt}
+              onSave={saveCard}
               onDelete={remove}
               onMoveUp={() => swapOrder(item.id, -1)}
               onMoveDown={() => swapOrder(item.id, 1)}
@@ -150,8 +185,9 @@ export default function GalleryTab() {
   );
 }
 
-function GalleryCard({ item, isFirst, isLast, onSave, onDelete, onMoveUp, onMoveDown }) {
+function GalleryCard({ item, categories, isFirst, isLast, onSave, onDelete, onMoveUp, onMoveDown }) {
   const [alt, setAlt] = useState(item.alt_text);
+  const [categoryId, setCategoryId] = useState(item.category_id ?? '');
 
   return (
     <div className="admin-gallery-card">
@@ -165,10 +201,16 @@ function GalleryCard({ item, isFirst, isLast, onSave, onDelete, onMoveUp, onMove
       )}
       <div className="admin-gallery-card-body">
         <input type="text" className="alt-input" value={alt} maxLength={150} aria-label="Légende" onChange={(e) => setAlt(e.target.value)} />
+        <select aria-label="Catégorie" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+          <option value="">Aucune catégorie</option>
+          {orderedCategoryTree(categories).map((c) => (
+            <option key={c.id} value={c.id}>{c.depth > 0 ? `— ${c.name}` : c.name}</option>
+          ))}
+        </select>
         <div className="admin-gallery-card-actions">
           <button type="button" disabled={isFirst} onClick={onMoveUp} aria-label="Monter">&uarr;</button>
           <button type="button" disabled={isLast} onClick={onMoveDown} aria-label="Descendre">&darr;</button>
-          <button type="button" className="save-btn" onClick={() => onSave(item.id, alt)}>Enregistrer</button>
+          <button type="button" className="save-btn" onClick={() => onSave(item.id, { altText: alt, categoryId })}>Enregistrer</button>
           <button type="button" className="danger" onClick={() => onDelete(item.id)}>Supprimer</button>
         </div>
       </div>

@@ -64,7 +64,7 @@ export class AdminGalleryController {
     if (!before || !after) {
       throw new BadRequestException('Les photos avant et après sont toutes les deux requises.');
     }
-    return this.galleryService.addUpload(before.filename, after.filename, dto.altText);
+    return this.galleryService.addUpload(before.filename, after.filename, dto.altText, dto.categoryId);
   }
 
   @UseGuards(CsrfGuard)

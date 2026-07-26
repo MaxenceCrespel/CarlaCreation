@@ -113,8 +113,11 @@ CREATE TABLE
         alt_text TEXT NOT NULL DEFAULT '',
         sort_order INTEGER NOT NULL DEFAULT 0,
         is_upload BOOLEAN NOT NULL DEFAULT false,
+        category_id INTEGER REFERENCES service_categories (id),
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+
+CREATE INDEX IF NOT EXISTS "IDX_gallery_category_id" ON gallery (category_id);
 
 CREATE TABLE
     IF NOT EXISTS contact_messages (
@@ -184,7 +187,8 @@ VALUES
     (1784973912847, 'AddTravelFee1784973912847'),
     (1784974821563, 'AddServiceCategories1784974821563'),
     (1784978234901, 'AddServiceCategoryParent1784978234901'),
-    (1785012345678, 'AddAdminCalendarToken1785012345678');
+    (1785012345678, 'AddAdminCalendarToken1785012345678'),
+    (1785018765432, 'AddGalleryCategory1785018765432');
 
 -- Admin account — username "carla", password "Carla0303!" (bcrypt, cost 12).
 -- Change this password after first login in a real deployment.
