@@ -593,6 +593,10 @@ img { max-width: 100%; display: block; }
 .form-row { margin-bottom: 18px; display: flex; flex-direction: column; gap: 6px; }
 .checkbox-row label { display: flex; flex-direction: row; align-items: center; gap: 8px; font-weight: 600; }
 .form-hint { font-size: 0.8rem; color: var(--color-text-soft); margin: 4px 0 0; }
+
+/* Admin account: calendar subscription link */
+.calendar-sync-url-row { display: flex; gap: 8px; margin-bottom: 8px; }
+.calendar-sync-url-row input { flex: 1; min-width: 0; font-family: monospace; font-size: 0.82rem; }
 .form-row.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 .form-row.three-col { display: grid; grid-template-columns: 1fr 1fr auto; gap: 18px; }
 .form-row.three-col > div { display: flex; flex-direction: column; gap: 6px; min-width: 0; }

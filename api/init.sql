@@ -28,6 +28,7 @@ CREATE TABLE
         id SERIAL PRIMARY KEY,
         username TEXT UNIQUE NOT NULL,
         password_hash TEXT NOT NULL,
+        calendar_token TEXT UNIQUE,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
@@ -182,7 +183,8 @@ VALUES
     (1784887549892, 'AddServiceAddons1784887549892'),
     (1784973912847, 'AddTravelFee1784973912847'),
     (1784974821563, 'AddServiceCategories1784974821563'),
-    (1784978234901, 'AddServiceCategoryParent1784978234901');
+    (1784978234901, 'AddServiceCategoryParent1784978234901'),
+    (1785012345678, 'AddAdminCalendarToken1785012345678');
 
 -- Admin account — username "carla", password "Carla0303!" (bcrypt, cost 12).
 -- Change this password after first login in a real deployment.
