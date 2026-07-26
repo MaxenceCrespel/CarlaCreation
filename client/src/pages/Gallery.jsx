@@ -13,6 +13,7 @@ export default function Gallery() {
   const [items, setItems] = useState(null);
   const [categories, setCategories] = useState([]);
   const [category, setCategory] = useState(null); // null = "Toutes"
+  const [subcategory, setSubcategory] = useState(null); // null = "Toutes" within the selected category
   const [error, setError] = useState(false);
 
   useEffect(() => {
@@ -34,12 +35,25 @@ export default function Gallery() {
     [topLevelCategories, usedCategoryIds, categories],
   );
 
+  // Same "only show what's actually used" rule for the subcategory pills
+  // under the selected top-level category.
+  const visibleSubcategories = useMemo(
+    () => categories.filter((c) => c.parent_id === category && usedCategoryIds.has(c.id)).sort((a, b) => a.sort_order - b.sort_order),
+    [categories, category, usedCategoryIds],
+  );
+
+  function pickCategory(id) {
+    setCategory(id);
+    setSubcategory(null);
+  }
+
   const visibleItems = useMemo(() => {
     if (!items) return [];
     if (!category) return items;
+    if (subcategory) return items.filter((i) => i.category_id === subcategory);
     const matchingCategoryIds = new Set(categories.filter((c) => c.id === category || c.parent_id === category).map((c) => c.id));
     return items.filter((i) => matchingCategoryIds.has(i.category_id));
-  }, [items, categories, category]);
+  }, [items, categories, category, subcategory]);
 
   return (
     <>
@@ -63,7 +77,7 @@ export default function Gallery() {
                 role="tab"
                 aria-selected={!category}
                 className={`category-tab ${!category ? 'is-active' : ''}`}
-                onClick={() => setCategory(null)}
+                onClick={() => pickCategory(null)}
               >
                 Toutes
               </button>
@@ -74,7 +88,33 @@ export default function Gallery() {
                   role="tab"
                   aria-selected={category === c.id}
                   className={`category-tab ${category === c.id ? 'is-active' : ''}`}
-                  onClick={() => setCategory(c.id)}
+                  onClick={() => pickCategory(c.id)}
+                >
+                  {c.name}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {!error && items && visibleSubcategories.length > 0 && (
+            <div className="subcategory-tabs center" role="tablist" aria-label="Filtrer par sous-catégorie">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={!subcategory}
+                className={`subcategory-tab ${!subcategory ? 'is-active' : ''}`}
+                onClick={() => setSubcategory(null)}
+              >
+                Tout
+              </button>
+              {visibleSubcategories.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={subcategory === c.id}
+                  className={`subcategory-tab ${subcategory === c.id ? 'is-active' : ''}`}
+                  onClick={() => setSubcategory(c.id)}
                 >
                   {c.name}
                 </button>

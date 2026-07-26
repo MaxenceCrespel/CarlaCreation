@@ -1,0 +1,16 @@
+{
+  "name": "Carla Création — Coiffure & Ongles",
+  "short_name": "Carla Création",
+  "description": "Studio coiffure et ongles à Lille : réalisations et réservation en ligne.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F8F4EF",
+  "theme_color": "#B8735A",
+  "lang": "fr",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/maskable-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
