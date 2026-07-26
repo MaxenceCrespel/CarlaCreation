@@ -1,8 +1,11 @@
-// Side-effect only: sets process.env.TZ = 'Europe/Paris' (normally done by
-// main.ts at real app startup, before anything else runs) — needed here
-// since toIcsUtc's correctness depends on the process TZ, and this spec
-// file's own import graph otherwise never touches config.ts.
-import '../../config';
+// toIcsUtc's correctness depends on the process running in Europe/Paris —
+// same as production (api/Dockerfile sets ENV TZ=Europe/Paris before node
+// even starts). Mutating process.env.TZ mid-process (e.g. via a plain
+// `import '../../config'` here) is NOT reliably picked up by Node's
+// Date/Intl internals on every platform — confirmed by this exact test
+// failing in CI despite passing locally. TZ must be set in the *shell*
+// before the process starts instead — see the "test"/"test:cov" scripts
+// in package.json.
 import { Test, TestingModule } from '@nestjs/testing';
 import { getDataSourceToken, getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException } from '@nestjs/common';
