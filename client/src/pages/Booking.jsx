@@ -11,6 +11,12 @@ const DAY_NAMES = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi'
 const HOURS_PREVIEW_DAYS = 14;
 const DAY_PICKER_DAYS = 30;
 const MAX_ADDITIONAL_GUESTS = 5;
+const STEPS = [
+  { id: 1, label: 'Prestation' },
+  { id: 2, label: 'Lieu' },
+  { id: 3, label: 'Date' },
+  { id: 4, label: 'Coordonnées' },
+];
 
 // 'YYYY-MM-DD' in the visitor's own local time — not toISOString() (always
 // UTC), which would show yesterday's date for the first couple hours after
@@ -147,6 +153,30 @@ function ServicePicker({ services, categories, category, onCategoryChange, subca
   );
 }
 
+// Persistent recap shown on steps after the prestation is picked, so the
+// client never loses sight of what (and which supplements) they've chosen
+// while moving through the rest of the flow.
+function BookingSummary({ recapGuests, totalDuration, totalPrice }) {
+  if (!recapGuests[0]?.service) return null;
+
+  return (
+    <div className="booking-summary">
+      <ul className="booking-summary-items">
+        {recapGuests.map((g, i) => (
+          <li key={i}>
+            {recapGuests.length > 1 && <strong>{g.name || `Personne ${i + 1}`} : </strong>}
+            {g.service ? g.service.name : '—'}
+            {g.addons.length > 0 && ` + ${g.addons.map((a) => a.name).join(', ')}`}
+          </li>
+        ))}
+      </ul>
+      <div className="booking-summary-total">
+        {formatDuration(totalDuration)} · {formatPrice(totalPrice)}
+      </div>
+    </div>
+  );
+}
+
 let guestKeySeq = 0;
 
 export default function Booking() {
@@ -158,6 +188,8 @@ export default function Booking() {
     path: '/booking',
   });
   const showToast = useToast();
+
+  const [step, setStep] = useState(1);
 
   const [services, setServices] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -198,7 +230,8 @@ export default function Booking() {
   const [submitting, setSubmitting] = useState(false);
   const [showRecap, setShowRecap] = useState(false);
 
-  const dateSectionRef = useRef(null);
+  const formTopRef = useRef(null);
+  const isFirstRender = useRef(true);
 
   useEffect(() => {
     apiFetch('/services').then(setServices).catch(() => showToast('Impossible de charger les prestations.', 'error'));
@@ -213,6 +246,17 @@ export default function Booking() {
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Every step change scrolls the card back into view — steps vary a lot
+  // in height, so without this the client could land mid-page after
+  // "Suivant" on a shorter step.
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    formTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [step]);
 
   const selectedService = services.find((s) => s.id === selectedServiceId) || null;
   const allGuestsHaveService = guests.every((g) => g.serviceId);
@@ -303,12 +347,6 @@ export default function Booking() {
     setSlots([]);
     setSlotsState('idle');
     setSelectedSlot('');
-    // Once a prestation is picked, bring the rest of the form (date, slot,
-    // contact info) into view instead of leaving the client to scroll
-    // themselves — especially useful on mobile where the picker is tall.
-    requestAnimationFrame(() => {
-      dateSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
   }
 
   function addGuest() {
@@ -403,25 +441,68 @@ export default function Booking() {
     return (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
   }
 
-  // Validates the form and, if everything checks out, opens the recap
-  // modal instead of submitting immediately — the actual API call happens
-  // in confirmBooking, once the client has reviewed and confirmed it.
+  // Each step validates only what it's responsible for — returns an error
+  // string, or null when the step is complete and it's safe to move on.
+  function validateStep(n) {
+    if (n === 1) {
+      if (!selectedServiceId) return 'Choisissez une prestation.';
+      if (guests.some((g) => !g.name.trim() || !g.serviceId)) {
+        return 'Complétez le nom et la prestation de chaque personne ajoutée, ou retirez-la.';
+      }
+      return null;
+    }
+    if (n === 2) {
+      if (atClientHome && !form.clientAddress.trim()) return 'Indiquez votre adresse pour un rendez-vous à domicile.';
+      return null;
+    }
+    if (n === 3) {
+      if (!date || !selectedSlot) return 'Choisissez une date et un créneau.';
+      return null;
+    }
+    return null;
+  }
+
+  function goNext() {
+    const error = validateStep(step);
+    if (error) {
+      setFeedback({ type: 'error', text: error });
+      return;
+    }
+    setFeedback(null);
+    setStep((s) => Math.min(4, s + 1));
+  }
+
+  function goBack() {
+    setFeedback(null);
+    setStep((s) => Math.max(1, s - 1));
+  }
+
+  function goToStep(n) {
+    if (n >= step) return;
+    setFeedback(null);
+    setStep(n);
+  }
+
+  // On any step but the last, Enter/"Suivant" just advances instead of
+  // submitting — the actual API call only ever happens from step 4, and
+  // only once the client has reviewed and confirmed the recap modal.
   function handleSubmit(e) {
     e.preventDefault();
+    if (step < 4) {
+      goNext();
+      return;
+    }
+
     setFeedback(null);
     setManageGroupId(null);
 
-    if (!selectedServiceId || !date || !selectedSlot) {
-      setFeedback({ type: 'error', text: 'Choisissez une prestation, une date et un créneau.' });
-      return;
-    }
-    if (guests.some((g) => !g.name.trim() || !g.serviceId)) {
-      setFeedback({ type: 'error', text: 'Complétez le nom et la prestation de chaque personne ajoutée, ou retirez-la.' });
-      return;
-    }
-    if (atClientHome && !form.clientAddress.trim()) {
-      setFeedback({ type: 'error', text: 'Indiquez votre adresse pour un rendez-vous à domicile.' });
-      return;
+    for (let n = 1; n <= 3; n += 1) {
+      const error = validateStep(n);
+      if (error) {
+        setFeedback({ type: 'error', text: error });
+        setStep(n);
+        return;
+      }
     }
     if (!e.target.checkValidity()) {
       e.target.reportValidity();
@@ -465,6 +546,7 @@ export default function Booking() {
       setSlots([]);
       setSlotsState('idle');
       setDate('');
+      setStep(1);
     } catch (err) {
       setFeedback({ type: 'error', text: err.message });
       showToast(err.message, 'error');
@@ -507,224 +589,251 @@ export default function Booking() {
             </p>
           </div>
 
-          <form className="card booking-form" noValidate onSubmit={handleSubmit}>
-            <div className="form-row">
-              <label>Type de prestation</label>
-              <ServicePicker
-                services={services}
-                categories={categories}
-                category={category}
-                onCategoryChange={pickCategory}
-                subcategory={subcategory}
-                onSubcategoryChange={pickSubcategory}
-                selectedServiceId={selectedServiceId}
-                onSelectService={pickService}
-              />
-              <AddonCheckboxes service={selectedService} selectedIds={selectedAddonIds} onToggle={toggleAddon} />
+          <form className="card booking-form" noValidate onSubmit={handleSubmit} ref={formTopRef}>
+            <div className="booking-steps" role="tablist" aria-label="Étapes de réservation">
+              {STEPS.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={step === s.id}
+                  className={`booking-step ${step === s.id ? 'is-active' : ''} ${step > s.id ? 'is-done' : ''}`}
+                  disabled={s.id > step}
+                  onClick={() => goToStep(s.id)}
+                >
+                  <span className="booking-step-num">{step > s.id ? '✓' : s.id}</span>
+                  <span className="booking-step-label">{s.label}</span>
+                </button>
+              ))}
             </div>
 
-            <div className="form-row">
-              <label>Lieu du rendez-vous</label>
-              <div className="location-toggle" role="radiogroup" aria-label="Lieu du rendez-vous">
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={!atClientHome}
-                  className={`location-option ${!atClientHome ? 'is-selected' : ''}`}
-                  onClick={() => pickLocation(false)}
-                >
-                  Je viens sur place
-                </button>
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={atClientHome}
-                  className={`location-option ${atClientHome ? 'is-selected' : ''}`}
-                  onClick={() => pickLocation(true)}
-                >
-                  À domicile (elle se déplace)
-                </button>
-              </div>
-            </div>
+            {step > 1 && <BookingSummary recapGuests={recapGuests} totalDuration={totalDuration} totalPrice={totalPrice} />}
 
-            {atClientHome && (
-              <div className="form-row">
-                <label htmlFor="clientAddress">Votre adresse</label>
-                <input
-                  type="text"
-                  id="clientAddress"
-                  autoComplete="street-address"
-                  required
-                  minLength={5}
-                  maxLength={300}
-                  placeholder="Numéro, rue, code postal, ville"
-                  value={form.clientAddress}
-                  onChange={updateField('clientAddress')}
-                />
-              </div>
+            {step === 1 && (
+              <>
+                <div className="form-row">
+                  <label>Type de prestation</label>
+                  <ServicePicker
+                    services={services}
+                    categories={categories}
+                    category={category}
+                    onCategoryChange={pickCategory}
+                    subcategory={subcategory}
+                    onSubcategoryChange={pickSubcategory}
+                    selectedServiceId={selectedServiceId}
+                    onSelectService={pickService}
+                  />
+                  <AddonCheckboxes service={selectedService} selectedIds={selectedAddonIds} onToggle={toggleAddon} />
+                </div>
+
+                {guests.map((guest, i) => (
+                  <div className="guest-block" key={guest.key}>
+                    <div className="guest-block-header">
+                      <label htmlFor={`guest-name-${guest.key}`}>Personne {i + 2} (ex : votre enfant)</label>
+                      <button type="button" className="guest-remove-btn" onClick={() => removeGuest(guest.key)}>
+                        Retirer
+                      </button>
+                    </div>
+                    <input
+                      type="text"
+                      id={`guest-name-${guest.key}`}
+                      required
+                      minLength={2}
+                      maxLength={100}
+                      placeholder="Nom complet"
+                      value={guest.name}
+                      onChange={(e) => updateGuest(guest.key, { name: e.target.value })}
+                    />
+                    <ServicePicker
+                      services={services}
+                      categories={categories}
+                      category={guest.category}
+                      onCategoryChange={(c) => updateGuest(guest.key, { category: c, subcategory: null, serviceId: null })}
+                      subcategory={guest.subcategory}
+                      onSubcategoryChange={(s) => updateGuest(guest.key, { subcategory: s, serviceId: null })}
+                      selectedServiceId={guest.serviceId}
+                      onSelectService={(id) => updateGuest(guest.key, { serviceId: id })}
+                    />
+                    <AddonCheckboxes
+                      service={services.find((s) => s.id === guest.serviceId) || null}
+                      selectedIds={guest.addonIds}
+                      onToggle={(addonId, checked) => toggleGuestAddon(guest.key, addonId, checked)}
+                    />
+                  </div>
+                ))}
+
+                {guests.length < MAX_ADDITIONAL_GUESTS && (
+                  <button type="button" className="btn btn-outline add-guest-btn" onClick={addGuest} disabled={!selectedServiceId}>
+                    + Ajouter une personne (ex : votre enfant)
+                  </button>
+                )}
+
+                {totalDuration > 0 && (
+                  <p className="total-duration-note">
+                    Durée totale du rendez-vous : <strong>{formatDuration(totalDuration)}</strong>
+                    {guests.length > 0 ? ` pour ${guests.length + 1} personnes` : ''}.
+                  </p>
+                )}
+              </>
             )}
 
-            {guests.map((guest, i) => (
-              <div className="guest-block" key={guest.key}>
-                <div className="guest-block-header">
-                  <label htmlFor={`guest-name-${guest.key}`}>Personne {i + 2} (ex : votre enfant)</label>
-                  <button type="button" className="guest-remove-btn" onClick={() => removeGuest(guest.key)}>
-                    Retirer
+            {step === 2 && (
+              <div className="form-row">
+                <label>Lieu du rendez-vous</label>
+                <div className="location-toggle" role="radiogroup" aria-label="Lieu du rendez-vous">
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={!atClientHome}
+                    className={`location-option ${!atClientHome ? 'is-selected' : ''}`}
+                    onClick={() => pickLocation(false)}
+                  >
+                    Je viens sur place
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={atClientHome}
+                    className={`location-option ${atClientHome ? 'is-selected' : ''}`}
+                    onClick={() => pickLocation(true)}
+                  >
+                    À domicile (elle se déplace)
                   </button>
                 </div>
-                <input
-                  type="text"
-                  id={`guest-name-${guest.key}`}
-                  required
-                  minLength={2}
-                  maxLength={100}
-                  placeholder="Nom complet"
-                  value={guest.name}
-                  onChange={(e) => updateGuest(guest.key, { name: e.target.value })}
-                />
-                <ServicePicker
-                  services={services}
-                  categories={categories}
-                  category={guest.category}
-                  onCategoryChange={(c) => updateGuest(guest.key, { category: c, subcategory: null, serviceId: null })}
-                  subcategory={guest.subcategory}
-                  onSubcategoryChange={(s) => updateGuest(guest.key, { subcategory: s, serviceId: null })}
-                  selectedServiceId={guest.serviceId}
-                  onSelectService={(id) => updateGuest(guest.key, { serviceId: id })}
-                />
-                <AddonCheckboxes
-                  service={services.find((s) => s.id === guest.serviceId) || null}
-                  selectedIds={guest.addonIds}
-                  onToggle={(addonId, checked) => toggleGuestAddon(guest.key, addonId, checked)}
-                />
-              </div>
-            ))}
 
-            {guests.length < MAX_ADDITIONAL_GUESTS && (
-              <button type="button" className="btn btn-outline add-guest-btn" onClick={addGuest} disabled={!selectedServiceId}>
-                + Ajouter une personne (ex : votre enfant)
-              </button>
-            )}
-
-            {totalDuration > 0 && (
-              <p className="total-duration-note">
-                Durée totale du rendez-vous : <strong>{formatDuration(totalDuration)}</strong>
-                {guests.length > 0 ? ` pour ${guests.length + 1} personnes` : ''}.
-              </p>
-            )}
-
-            {selectedServiceId && allGuestsHaveService && nextAvailable && nextAvailable !== 'loading' && nextAvailable !== 'none' && (
-              <div className="suggestion-card">
-                <span>
-                  Prochain créneau disponible : <strong>
-                    {DAY_NAMES[dayOfWeekFor(nextAvailable.date)].slice(0, 3)} {formatShortDate(nextAvailable.date)} à {nextAvailable.startTime}
-                  </strong>
-                </span>
-                <button type="button" className="btn btn-primary btn-sm" onClick={() => applySuggestion(nextAvailable)}>
-                  Réserver ce créneau
-                </button>
+                {atClientHome && (
+                  <div className="form-row">
+                    <label htmlFor="clientAddress">Votre adresse</label>
+                    <input
+                      type="text"
+                      id="clientAddress"
+                      autoComplete="street-address"
+                      required
+                      minLength={5}
+                      maxLength={300}
+                      placeholder="Numéro, rue, code postal, ville"
+                      value={form.clientAddress}
+                      onChange={updateField('clientAddress')}
+                    />
+                  </div>
+                )}
               </div>
             )}
-            {selectedServiceId && allGuestsHaveService && nextAvailable === 'loading' && (
-              <p className="loading-text suggestion-loading">Recherche du prochain créneau disponible…</p>
-            )}
-            {selectedServiceId && allGuestsHaveService && nextAvailable === 'none' && (
-              <p className="loading-text suggestion-loading">Aucun créneau disponible pour le moment sur les 60 prochains jours.</p>
-            )}
 
-            <div className="form-row" ref={dateSectionRef}>
-              <label>Date</label>
-              {!selectedService && <p className="loading-text day-picker-hint">Choisissez d'abord une prestation ci-dessus.</p>}
-              {selectedService && hours.length === 0 && <p className="loading-text">Chargement des disponibilités…</p>}
-              {selectedService && hours.length > 0 && (
-                <div className="day-picker-scroll" role="listbox" aria-label="Choisir une date">
-                  {hours.slice(0, DAY_PICKER_DAYS).map((h) => {
-                    const isOpen = h.isSet && !h.isClosed && h.ranges.length > 0;
-                    const isSelected = date === h.date;
-                    return (
-                      <button
-                        key={h.date}
-                        type="button"
-                        role="option"
-                        aria-selected={isSelected}
-                        className={`day-chip ${isOpen ? 'is-open' : 'is-closed'} ${isSelected ? 'is-selected' : ''}`}
-                        disabled={!isOpen}
-                        onClick={() => setDate(h.date)}
-                      >
-                        <span className="day-chip-dow">{DAY_NAMES[h.dayOfWeek].slice(0, 3)}</span>
-                        <span className="day-chip-num">{formatShortDate(h.date)}</span>
-                        <span className="day-chip-status">{isOpen ? 'Disponible' : 'Fermé'}</span>
-                      </button>
-                    );
-                  })}
+            {step === 3 && (
+              <>
+                {nextAvailable && nextAvailable !== 'loading' && nextAvailable !== 'none' && (
+                  <div className="suggestion-card">
+                    <span>
+                      Prochain créneau disponible : <strong>
+                        {DAY_NAMES[dayOfWeekFor(nextAvailable.date)].slice(0, 3)} {formatShortDate(nextAvailable.date)} à {nextAvailable.startTime}
+                      </strong>
+                    </span>
+                    <button type="button" className="btn btn-primary btn-sm" onClick={() => applySuggestion(nextAvailable)}>
+                      Réserver ce créneau
+                    </button>
+                  </div>
+                )}
+                {nextAvailable === 'loading' && (
+                  <p className="loading-text suggestion-loading">Recherche du prochain créneau disponible…</p>
+                )}
+                {nextAvailable === 'none' && (
+                  <p className="loading-text suggestion-loading">Aucun créneau disponible pour le moment sur les 60 prochains jours.</p>
+                )}
+
+                <div className="form-row">
+                  <label>Date</label>
+                  {hours.length === 0 && <p className="loading-text">Chargement des disponibilités…</p>}
+                  {hours.length > 0 && (
+                    <div className="day-picker-scroll" role="listbox" aria-label="Choisir une date">
+                      {hours.slice(0, DAY_PICKER_DAYS).map((h) => {
+                        const isOpen = h.isSet && !h.isClosed && h.ranges.length > 0;
+                        const isSelected = date === h.date;
+                        return (
+                          <button
+                            key={h.date}
+                            type="button"
+                            role="option"
+                            aria-selected={isSelected}
+                            className={`day-chip ${isOpen ? 'is-open' : 'is-closed'} ${isSelected ? 'is-selected' : ''}`}
+                            disabled={!isOpen}
+                            onClick={() => setDate(h.date)}
+                          >
+                            <span className="day-chip-dow">{DAY_NAMES[h.dayOfWeek].slice(0, 3)}</span>
+                            <span className="day-chip-num">{formatShortDate(h.date)}</span>
+                            <span className="day-chip-status">{isOpen ? 'Disponible' : 'Fermé'}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <details className="day-picker-fallback">
+                    <summary>Choisir une date au-delà de {DAY_PICKER_DAYS} jours</summary>
+                    <input
+                      type="date"
+                      id="date"
+                      min={todayISO()}
+                      max={maxDateISO()}
+                      value={date}
+                      onChange={(e) => setDate(e.target.value)}
+                    />
+                  </details>
                 </div>
-              )}
-              {selectedService && (
-                <details className="day-picker-fallback">
-                  <summary>Choisir une date au-delà de {DAY_PICKER_DAYS} jours</summary>
-                  <input
-                    type="date"
-                    id="date"
-                    min={todayISO()}
-                    max={maxDateISO()}
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                  />
-                </details>
-              )}
-            </div>
 
-            <div className="form-row">
-              <label htmlFor="slot">Créneau disponible</label>
-              <select
-                id="slot"
-                required
-                disabled={slotsState !== 'ready'}
-                value={selectedSlot}
-                onChange={(e) => setSelectedSlot(e.target.value)}
-              >
-                {slotsState === 'idle' && !allGuestsHaveService && (
-                  <option value="">Complétez la prestation de chaque personne ajoutée</option>
-                )}
-                {slotsState === 'idle' && allGuestsHaveService && <option value="">Choisissez d'abord une prestation et une date</option>}
-                {slotsState === 'loading' && <option value="">Chargement des créneaux…</option>}
-                {slotsState === 'empty' && <option value="">Aucun créneau disponible ce jour-là</option>}
-                {slotsState === 'error' && <option value="">Erreur de chargement</option>}
-                {slotsState === 'ready' && (
-                  <>
-                    {slots.map((s) => (
-                      <option key={s} value={s}>{s}{s === slots[0] ? ' (suggéré)' : ''}</option>
-                    ))}
-                  </>
-                )}
-              </select>
-            </div>
+                <div className="form-row">
+                  <label htmlFor="slot">Créneau disponible</label>
+                  <select
+                    id="slot"
+                    required
+                    disabled={slotsState !== 'ready'}
+                    value={selectedSlot}
+                    onChange={(e) => setSelectedSlot(e.target.value)}
+                  >
+                    {slotsState === 'idle' && <option value="">Choisissez d'abord une date</option>}
+                    {slotsState === 'loading' && <option value="">Chargement des créneaux…</option>}
+                    {slotsState === 'empty' && <option value="">Aucun créneau disponible ce jour-là</option>}
+                    {slotsState === 'error' && <option value="">Erreur de chargement</option>}
+                    {slotsState === 'ready' && (
+                      <>
+                        {slots.map((s) => (
+                          <option key={s} value={s}>{s}{s === slots[0] ? ' (suggéré)' : ''}</option>
+                        ))}
+                      </>
+                    )}
+                  </select>
+                </div>
+              </>
+            )}
 
-            <div className="form-row">
-              <label htmlFor="clientName">Nom complet {guests.length > 0 ? '(personne 1)' : ''}</label>
-              <input type="text" id="clientName" autoComplete="name" required minLength={2} maxLength={100} value={form.clientName} onChange={updateField('clientName')} />
-            </div>
+            {step === 4 && (
+              <>
+                <div className="form-row">
+                  <label htmlFor="clientName">Nom complet {guests.length > 0 ? '(personne 1)' : ''}</label>
+                  <input type="text" id="clientName" autoComplete="name" required minLength={2} maxLength={100} value={form.clientName} onChange={updateField('clientName')} />
+                </div>
 
-            <div className="form-row two-col">
-              <div>
-                <label htmlFor="clientEmail">Email</label>
-                <input type="email" id="clientEmail" autoComplete="email" required value={form.clientEmail} onChange={updateField('clientEmail')} />
-              </div>
-              <div>
-                <label htmlFor="clientPhone">Téléphone</label>
-                <input type="tel" id="clientPhone" autoComplete="tel" required placeholder="06 12 34 56 78" value={form.clientPhone} onChange={updateField('clientPhone')} />
-              </div>
-            </div>
+                <div className="form-row two-col">
+                  <div>
+                    <label htmlFor="clientEmail">Email</label>
+                    <input type="email" id="clientEmail" autoComplete="email" required value={form.clientEmail} onChange={updateField('clientEmail')} />
+                  </div>
+                  <div>
+                    <label htmlFor="clientPhone">Téléphone</label>
+                    <input type="tel" id="clientPhone" autoComplete="tel" required placeholder="06 12 34 56 78" value={form.clientPhone} onChange={updateField('clientPhone')} />
+                  </div>
+                </div>
 
-            <div className="form-row">
-              <label htmlFor="notes">Message (optionnel)</label>
-              <textarea id="notes" rows={3} maxLength={500} placeholder="Précisions sur votre demande…" value={form.notes} onChange={updateField('notes')} />
-            </div>
+                <div className="form-row">
+                  <label htmlFor="notes">Message (optionnel)</label>
+                  <textarea id="notes" rows={3} maxLength={500} placeholder="Précisions sur votre demande…" value={form.notes} onChange={updateField('notes')} />
+                </div>
 
-            <div className="honeypot" aria-hidden="true">
-              <label htmlFor="website">Ne pas remplir ce champ</label>
-              <input type="text" id="website" tabIndex={-1} autoComplete="off" value={form.website} onChange={updateField('website')} />
-            </div>
+                <div className="honeypot" aria-hidden="true">
+                  <label htmlFor="website">Ne pas remplir ce champ</label>
+                  <input type="text" id="website" tabIndex={-1} autoComplete="off" value={form.website} onChange={updateField('website')} />
+                </div>
+              </>
+            )}
 
             {feedback && (
               <div className={`form-feedback ${feedback.type}`} role="status" aria-live="polite">
@@ -738,9 +847,23 @@ export default function Booking() {
               </div>
             )}
 
-            <button type="submit" className="btn btn-primary btn-block form-actions">
-              Vérifier et confirmer ma demande
-            </button>
+            <div className="booking-step-actions">
+              {step > 1 && (
+                <button type="button" className="btn btn-outline" onClick={goBack}>
+                  ← Précédent
+                </button>
+              )}
+              {step < 4 && (
+                <button type="button" className="btn btn-primary" onClick={goNext}>
+                  Suivant →
+                </button>
+              )}
+              {step === 4 && (
+                <button type="submit" className="btn btn-primary form-actions">
+                  Vérifier et confirmer ma demande
+                </button>
+              )}
+            </div>
           </form>
         </div>
       </section>
