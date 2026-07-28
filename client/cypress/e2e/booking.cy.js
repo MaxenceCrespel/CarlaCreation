@@ -37,10 +37,14 @@ describe('Booking flow', () => {
           `day ${openedDate} should be open — got ${JSON.stringify(day)}`,
         ).to.eq(true);
 
-        // Pick a service to unveil components
+        // Step 1 — Prestation: pick a service, then advance
         cy.get('.service-pick-card').first().click();
-        
-        // Click the exact day chip calculated by index
+        cy.contains('button', 'Suivant').click();
+
+        // Step 2 — Lieu: default "sur place" is already selected, advance
+        cy.contains('button', 'Suivant').click();
+
+        // Step 3 — Date & créneau: click the exact day chip calculated by index
         cy.get('.day-chip', { timeout: 15000 }).eq(openedDayIndex).click();
 
         // Wait for slots to load from the server
@@ -53,7 +57,9 @@ describe('Booking flow', () => {
         cy.get('#slot').should('not.be.disabled');
         cy.get('#slot option').should('have.length.at.least', 1);
         cy.get('#slot').select(0);
+        cy.contains('button', 'Suivant').click();
 
+        // Step 4 — Coordonnées
         cy.get('#clientName').type('Cypress Visitor');
         cy.get('#clientEmail').type('cypress-visitor@example.com');
         cy.get('#clientPhone').type('0600000099');
