@@ -42,19 +42,27 @@ function pctChange(current, previous) {
   return Math.round(((current - previous) / previous) * 1000) / 10;
 }
 
-function DeltaBadge({ value }) {
+// For metrics that are already a rate/percentage (e.g. taux de remplissage),
+// a relative "% change of a %" reads as confusing — a plain point
+// difference ("+5,2 pts") is clearer.
+function pointChange(current, previous) {
+  if (current === null || current === undefined || previous === null || previous === undefined) return null;
+  return Math.round((current - previous) * 10) / 10;
+}
+
+function DeltaBadge({ value, unit = '%' }) {
   if (value === null || value === undefined) return null;
   const sign = value > 0 ? '+' : '';
   const tone = value > 0 ? 'up' : value < 0 ? 'down' : 'neutral';
-  return <span className={`kpi-delta kpi-delta-${tone}`}>{sign}{value.toLocaleString('fr-FR')} % vs mois préc.</span>;
+  return <span className={`kpi-delta kpi-delta-${tone}`}>{sign}{value.toLocaleString('fr-FR')} {unit} vs mois préc.</span>;
 }
 
-function KpiCard({ label, value, hint, delta, bar }) {
+function KpiCard({ label, value, hint, delta, deltaUnit, bar }) {
   return (
     <div className="kpi-card">
       <span className="kpi-label">{label}</span>
       <span className="kpi-value">{value}</span>
-      <DeltaBadge value={delta} />
+      <DeltaBadge value={delta} unit={deltaUnit} />
       {bar}
       {hint && <span className="kpi-hint">{hint}</span>}
     </div>
@@ -236,8 +244,14 @@ export default function DashboardTab() {
   }, [month]);
 
   const isCurrentMonth = month === currentMonth();
-  const revenueDelta = data && prevData ? pctChange(data.revenue.generatedCents, prevData.revenue.generatedCents) : null;
-  const hoursDelta = data && prevData ? pctChange(data.hours.bookedHours, prevData.hours.bookedHours) : null;
+  // Comparing raw totals (CA généré, heures réservées) to a full previous
+  // month is misleading for any month still in progress — they only grow
+  // with days elapsed, so they'd read as "down" almost all month long.
+  // Rate/average metrics don't have that problem: they're comparable no
+  // matter how much of the month has passed.
+  const avgBasketDelta = data && prevData ? pctChange(data.revenue.avgBasketCents, prevData.revenue.avgBasketCents) : null;
+  const avgPerHourDelta = data && prevData ? pctChange(data.revenue.avgPerHourCents, prevData.revenue.avgPerHourCents) : null;
+  const fillRateDelta = data && prevData ? pointChange(data.hours.fillRatePercent, prevData.hours.fillRatePercent) : null;
   const atHomeTotal = data ? data.location.atHomeCount + data.location.studioCount : 0;
   const atHomePercent = atHomeTotal > 0 ? Math.round((data.location.atHomeCount / atHomeTotal) * 1000) / 10 : 0;
 
@@ -266,22 +280,34 @@ export default function DashboardTab() {
       {!error && data && (
         <>
           <div className="kpi-grid">
-            <KpiCard label="CA généré" value={formatPrice(data.revenue.generatedCents)} hint="Rendez-vous confirmés/terminés déjà passés" delta={revenueDelta} />
+            <KpiCard label="CA généré" value={formatPrice(data.revenue.generatedCents)} hint="Rendez-vous confirmés/terminés déjà passés" />
             <KpiCard label="CA à venir" value={formatPrice(data.revenue.upcomingCents)} hint="Rendez-vous confirmés à venir" />
             <KpiCard label="CA en attente" value={formatPrice(data.revenue.pendingCents)} hint="Non confirmé, non comptabilisé ci-dessus" />
-            <KpiCard label="Panier moyen" value={formatPrice(data.revenue.avgBasketCents)} hint="CA généré + à venir / nombre de réservations confirmées" />
-            <KpiCard label="CA moyen par heure" value={formatPrice(data.revenue.avgPerHourCents)} hint="Généré + à venir, sur les heures réellement réservées" />
+            <KpiCard
+              label="Panier moyen"
+              value={formatPrice(data.revenue.avgBasketCents)}
+              hint="CA généré + à venir / nombre de réservations confirmées"
+              delta={avgBasketDelta}
+            />
+            <KpiCard
+              label="CA moyen par heure"
+              value={formatPrice(data.revenue.avgPerHourCents)}
+              hint="Généré + à venir, sur les heures réellement réservées"
+              delta={avgPerHourDelta}
+            />
             <KpiCard
               label="CA projeté à taux de remplissage 100 %"
               value={formatPrice(data.revenue.projectedFullCapacityCents)}
               hint="Si toutes les heures ouvertes étaient réservées, au même tarif moyen"
             />
-            <KpiCard label="Heures de rendez-vous" value={formatHours(data.hours.bookedHours)} hint="Confirmés/terminés" delta={hoursDelta} />
+            <KpiCard label="Heures de rendez-vous" value={formatHours(data.hours.bookedHours)} hint="Confirmés/terminés" />
             <KpiCard label="Heures disponibles non prises" value={formatHours(data.hours.availableHours)} hint={`Sur ${formatHours(data.hours.openHours)} ouvertes`} />
             <KpiCard
               label="Taux de remplissage"
               value={`${data.hours.fillRatePercent.toLocaleString('fr-FR')} %`}
               bar={<ProgressBar percent={data.hours.fillRatePercent} />}
+              delta={fillRateDelta}
+              deltaUnit="pts"
             />
             <KpiCard
               label="Réservations"

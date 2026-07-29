@@ -29,6 +29,13 @@ html {
      itself — individual scrollable regions (tables, day-picker, etc.) opt
      into their own overflow-x instead. */
   overflow-x: hidden;
+  /* Mobile Safari/Chrome auto-inflate font sizes in columns of text that
+     are much narrower than a horizontally-scrollable wide element (e.g.
+     the admin reservations table, min-width 900px) — "helpfully" boosting
+     readability by guessing, which instead makes the text comically huge
+     and inconsistent with the rest of the site. Opt out everywhere. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
