@@ -71,6 +71,13 @@ const SMTP_PASS = process.env.SMTP_PASS || '';
 const SMTP_FROM = process.env.SMTP_FROM || `"Carla Création" <no-reply@carlacreation.example>`;
 const MAIL_ENABLED = Boolean(SMTP_HOST);
 
+// Also entirely optional, same pattern as SMTP above. Without a key, à
+// domicile bookings just use the flat base travel fee (no per-km
+// surcharge, no distance/duration shown) — the booking flow never hard-
+// depends on this. Free tier at openrouteservice.org (no card required).
+const GEOCODING_API_KEY = process.env.ORS_API_KEY || '';
+const GEOCODING_ENABLED = Boolean(GEOCODING_API_KEY);
+
 export const config = {
   NODE_ENV,
   isProd,
@@ -86,4 +93,6 @@ export const config = {
   SMTP_PASS,
   SMTP_FROM,
   MAIL_ENABLED,
+  GEOCODING_API_KEY,
+  GEOCODING_ENABLED,
 };

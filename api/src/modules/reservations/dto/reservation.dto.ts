@@ -51,6 +51,20 @@ export class AvailabilityQueryDto {
   @IsInt()
   @Min(0)
   addonMinutes?: number;
+
+  // Optional: when set for an à-domicile query, the travel buffer used to
+  // compute slots is the real one-way driving time to this address instead
+  // of the flat admin default — see ReservationsService.resolveTravelBuffer.
+  @IsOptional()
+  @IsString()
+  @Length(5, 300)
+  address?: string;
+}
+
+export class TravelEstimateQueryDto {
+  @IsString()
+  @Length(5, 300)
+  address!: string;
 }
 
 export class NextAvailableQueryDto {
@@ -76,6 +90,11 @@ export class NextAvailableQueryDto {
   @IsInt()
   @Min(0)
   addonMinutes?: number;
+
+  @IsOptional()
+  @IsString()
+  @Length(5, 300)
+  address?: string;
 }
 
 // A person booked alongside the primary contact (e.g. a mother booking for

@@ -30,9 +30,16 @@ export class UpdateTravelBufferDto {
   minutes!: number;
 }
 
-export class UpdateTravelFeeDto {
+export class UpdateTravelFeeBaseDto {
   @IsInt()
   @Min(0)
   @Max(10000)
+  feeCents!: number;
+}
+
+export class UpdateTravelFeePerKmDto {
+  @IsInt()
+  @Min(0)
+  @Max(5000)
   feeCents!: number;
 }

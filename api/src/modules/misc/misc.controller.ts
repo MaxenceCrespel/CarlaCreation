@@ -23,7 +23,8 @@ export class MiscController {
     return {
       ...publicConfig,
       siteUrl: config.PUBLIC_ORIGIN,
-      travelFeeCents: await this.settingsService.getTravelFeeCents(),
+      travelFeeBaseCents: await this.settingsService.getTravelFeeBaseCents(),
+      travelFeePerKmCents: await this.settingsService.getTravelFeePerKmCents(),
     };
   }
 }

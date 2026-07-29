@@ -13,8 +13,9 @@ const WINDOW_DAYS = 60;
 // seeded by init.sql / the AddAppSettings migration) — keeps this read
 // from ever hard-failing the booking flow.
 const DEFAULT_TRAVEL_BUFFER_MINUTES = 30;
-// Same fallback rationale as above — mirrors the app_settings default.
-const DEFAULT_TRAVEL_FEE_CENTS = 200;
+// Same fallback rationale as above — mirrors the app_settings defaults.
+const DEFAULT_TRAVEL_FEE_BASE_CENTS = 200;
+const DEFAULT_TRAVEL_FEE_PER_KM_CENTS = 50;
 
 @Injectable()
 export class SettingsService {
@@ -109,21 +110,39 @@ export class SettingsService {
       .execute();
   }
 
-  async getTravelFeeCents(): Promise<number> {
+  async getTravelFeeBaseCents(): Promise<number> {
     const row = await this.dataSource.getRepository(AppSettings).findOne({ where: { id: 1 } });
-    return row?.travel_fee_cents ?? DEFAULT_TRAVEL_FEE_CENTS;
+    return row?.travel_fee_base_cents ?? DEFAULT_TRAVEL_FEE_BASE_CENTS;
   }
 
-  async setTravelFeeCents(cents: number): Promise<void> {
+  async setTravelFeeBaseCents(cents: number): Promise<void> {
     if (!Number.isInteger(cents) || cents < 0 || cents > 10000) {
-      throw new BadRequestException("Le supplément de déplacement doit être un entier entre 0 et 10000 centimes.");
+      throw new BadRequestException('Le frais de base de déplacement doit être un entier entre 0 et 10000 centimes.');
     }
     await this.dataSource
       .createQueryBuilder()
       .insert()
       .into(AppSettings)
-      .values({ id: 1, travel_fee_cents: cents })
-      .orUpdate(['travel_fee_cents'], ['id'])
+      .values({ id: 1, travel_fee_base_cents: cents })
+      .orUpdate(['travel_fee_base_cents'], ['id'])
+      .execute();
+  }
+
+  async getTravelFeePerKmCents(): Promise<number> {
+    const row = await this.dataSource.getRepository(AppSettings).findOne({ where: { id: 1 } });
+    return row?.travel_fee_per_km_cents ?? DEFAULT_TRAVEL_FEE_PER_KM_CENTS;
+  }
+
+  async setTravelFeePerKmCents(cents: number): Promise<void> {
+    if (!Number.isInteger(cents) || cents < 0 || cents > 5000) {
+      throw new BadRequestException('Le prix au kilomètre doit être un entier entre 0 et 5000 centimes.');
+    }
+    await this.dataSource
+      .createQueryBuilder()
+      .insert()
+      .into(AppSettings)
+      .values({ id: 1, travel_fee_per_km_cents: cents })
+      .orUpdate(['travel_fee_per_km_cents'], ['id'])
       .execute();
   }
 }

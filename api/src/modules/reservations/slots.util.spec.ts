@@ -6,7 +6,7 @@ import { Reservation } from '../../database/entities/reservation.entity';
 function fakeDataSource(opts: {
   isClosed: boolean;
   ranges: { open_time: string; close_time: string }[];
-  busy?: { start_time: string; end_time: string; at_client_home?: boolean }[];
+  busy?: { start_time: string; end_time: string; at_client_home?: boolean; travel_duration_minutes?: number | null }[];
 }) {
   const repos: Record<string, unknown> = {
     [DailyHours.name]: { findOne: jest.fn().mockResolvedValue({ date: 'x', is_closed: opts.isClosed }) },
@@ -66,13 +66,13 @@ describe('getAvailableSlots', () => {
 
   it('returns no slots when the day is closed', async () => {
     const dataSource = fakeDataSource({ isClosed: true, ranges: [] });
-    const slots = await getAvailableSlots(dataSource, FUTURE_DATE, 30);
+    const { slots } = await getAvailableSlots(dataSource, FUTURE_DATE, 30);
     expect(slots).toEqual([]);
   });
 
   it('generates 15-minute-stepped slots that fit within a single range', async () => {
     const dataSource = fakeDataSource({ isClosed: false, ranges: [{ open_time: '10:00', close_time: '11:00' }] });
-    const slots = await getAvailableSlots(dataSource, FUTURE_DATE, 30);
+    const { slots } = await getAvailableSlots(dataSource, FUTURE_DATE, 30);
 
     // Last slot must leave room for the full 30-minute duration before closing.
     expect(slots).toEqual(['10:00', '10:15', '10:30']);
@@ -87,7 +87,7 @@ describe('getAvailableSlots', () => {
       ],
     });
     // 60-minute service: fits exactly in either range, but must never bridge the 11:00–14:00 gap.
-    const slots = await getAvailableSlots(dataSource, FUTURE_DATE, 60);
+    const { slots } = await getAvailableSlots(dataSource, FUTURE_DATE, 60);
 
     expect(slots).toEqual(['10:00', '14:00']);
   });
@@ -98,7 +98,7 @@ describe('getAvailableSlots', () => {
       ranges: [{ open_time: '10:00', close_time: '11:00' }],
       busy: [{ start_time: '10:15', end_time: '10:45' }],
     });
-    const slots = await getAvailableSlots(dataSource, FUTURE_DATE, 15);
+    const { slots } = await getAvailableSlots(dataSource, FUTURE_DATE, 15);
 
     expect(slots).not.toContain('10:15');
     expect(slots).not.toContain('10:30');
@@ -114,7 +114,7 @@ describe('getAvailableSlots', () => {
       ranges: [{ open_time: '09:00', close_time: '12:00' }],
       busy: [{ start_time: '10:15', end_time: '10:45', at_client_home: true }],
     });
-    const slots = await getAvailableSlots(dataSource, FUTURE_DATE, 15, false, 30);
+    const { slots } = await getAvailableSlots(dataSource, FUTURE_DATE, 15, false, 30);
 
     expect(slots).not.toContain('09:45');
     expect(slots).not.toContain('10:30');
@@ -131,12 +131,12 @@ describe('getAvailableSlots', () => {
     });
 
     // Studio booking: only needs its own 15 minutes, 10:45 is fine.
-    const studioSlots = await getAvailableSlots(dataSource, FUTURE_DATE, 15, false, 30);
+    const { slots: studioSlots } = await getAvailableSlots(dataSource, FUTURE_DATE, 15, false, 30);
     expect(studioSlots).toContain('10:45');
 
     // À-domicile booking: needs the 30-minute buffer on top too, so a slot
     // ending right before the existing reservation is no longer safe.
-    const homeSlots = await getAvailableSlots(dataSource, FUTURE_DATE, 15, true, 30);
+    const { slots: homeSlots } = await getAvailableSlots(dataSource, FUTURE_DATE, 15, true, 30);
     expect(homeSlots).not.toContain('10:45');
   });
 
@@ -149,7 +149,7 @@ describe('getAvailableSlots', () => {
       ranges: [{ open_time: '09:00', close_time: '19:00' }],
     });
 
-    const homeSlots = await getAvailableSlots(dataSource, FUTURE_DATE, 30, true, 30);
+    const { slots: homeSlots } = await getAvailableSlots(dataSource, FUTURE_DATE, 30, true, 30);
     expect(homeSlots).not.toContain('09:00');
     expect(homeSlots).not.toContain('09:15');
     expect(homeSlots).toContain('09:30');
@@ -161,16 +161,45 @@ describe('getAvailableSlots', () => {
     expect(homeSlots).toContain('18:00');
 
     // A studio booking on the very same day is unaffected by the buffer.
-    const studioSlots = await getAvailableSlots(dataSource, FUTURE_DATE, 30, false, 30);
+    const { slots: studioSlots } = await getAvailableSlots(dataSource, FUTURE_DATE, 30, false, 30);
     expect(studioSlots).toContain('09:00');
     expect(studioSlots).toContain('18:30');
+  });
+
+  it("uses each existing à-domicile reservation's own real travel duration to block time, not the flat default", async () => {
+    const dataSource = fakeDataSource({
+      isClosed: false,
+      ranges: [{ open_time: '09:00', close_time: '19:00' }],
+      busy: [{ start_time: '10:00', end_time: '10:30', at_client_home: true, travel_duration_minutes: 10 }],
+    });
+
+    // Busy window becomes 09:50–10:40 (real 10-minute buffer each side, not
+    // the flat 30-minute default) — the 15-minute grid slot right after
+    // that, 10:45, is free.
+    const { slots } = await getAvailableSlots(dataSource, FUTURE_DATE, 15, false, 0, 30);
+    expect(slots).not.toContain('10:30');
+    expect(slots).toContain('10:45');
+  });
+
+  it('falls back to the flat default buffer for an existing reservation with no persisted travel duration', async () => {
+    const dataSource = fakeDataSource({
+      isClosed: false,
+      ranges: [{ open_time: '09:00', close_time: '19:00' }],
+      busy: [{ start_time: '10:00', end_time: '10:30', at_client_home: true, travel_duration_minutes: null }],
+    });
+
+    // No real duration recorded — falls back to the flat 30-minute default,
+    // busy window becomes 09:30–11:00.
+    const { slots } = await getAvailableSlots(dataSource, FUTURE_DATE, 15, false, 0, 30);
+    expect(slots).not.toContain('10:45');
+    expect(slots).toContain('11:00');
   });
 
   it('excludes past time slots when the requested date is today', async () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-08-01T10:30:00'));
     const dataSource = fakeDataSource({ isClosed: false, ranges: [{ open_time: '09:00', close_time: '12:00' }] });
 
-    const slots = await getAvailableSlots(dataSource, '2026-08-01', 15);
+    const { slots } = await getAvailableSlots(dataSource, '2026-08-01', 15);
 
     expect(slots).not.toContain('09:00');
     expect(slots).not.toContain('10:15');
@@ -179,13 +208,50 @@ describe('getAvailableSlots', () => {
     jest.useRealTimers();
   });
 
+  it('flags tooFarForAnyOpenRange when the round-trip travel buffer + duration exceeds every open range that day', async () => {
+    // Open 09:00–19:00 (10h window). A 2h (120 min) service with a 5h
+    // (300 min) one-way trip needs 300+120+300 = 720 min — no range can
+    // ever fit that, no matter how empty the schedule is.
+    const dataSource = fakeDataSource({ isClosed: false, ranges: [{ open_time: '09:00', close_time: '19:00' }] });
+
+    const result = await getAvailableSlots(dataSource, FUTURE_DATE, 120, true, 300, 300);
+
+    expect(result.slots).toEqual([]);
+    expect(result.tooFarForAnyOpenRange).toBe(true);
+  });
+
+  it('does not flag tooFarForAnyOpenRange when the trip fits the open range but the day is just fully booked', async () => {
+    const dataSource = fakeDataSource({
+      isClosed: false,
+      ranges: [{ open_time: '09:00', close_time: '19:00' }],
+      busy: [{ start_time: '09:00', end_time: '19:00' }],
+    });
+
+    const result = await getAvailableSlots(dataSource, FUTURE_DATE, 30, true, 30, 30);
+
+    expect(result.slots).toEqual([]);
+    expect(result.tooFarForAnyOpenRange).toBe(false);
+  });
+
+  it('never flags tooFarForAnyOpenRange for a studio (non à-domicile) booking', async () => {
+    const dataSource = fakeDataSource({ isClosed: false, ranges: [{ open_time: '09:00', close_time: '09:30' }] });
+
+    // A 5-hour service in a 30-minute window would never fit either, but
+    // the flag is only meaningful for à-domicile travel time — a studio
+    // booking that simply doesn't fit is just... not offered, no special
+    // messaging needed since there's no travel involved to explain.
+    const result = await getAvailableSlots(dataSource, FUTURE_DATE, 300, false, 0, 30);
+
+    expect(result.tooFarForAnyOpenRange).toBe(false);
+  });
+
   it('à-domicile also needs the travel buffer counted from right now, not just "not yet past"', async () => {
     // 11:32 now — a home visit can't start at 11:45 (only 13 min notice for
     // a 30-min trip); the first honest slot is 12:15.
     jest.useFakeTimers().setSystemTime(new Date('2026-08-01T11:32:00'));
     const dataSource = fakeDataSource({ isClosed: false, ranges: [{ open_time: '09:00', close_time: '19:00' }] });
 
-    const slots = await getAvailableSlots(dataSource, '2026-08-01', 15, true, 30);
+    const { slots } = await getAvailableSlots(dataSource, '2026-08-01', 15, true, 30);
 
     expect(slots).not.toContain('11:45');
     expect(slots).not.toContain('12:00');

@@ -157,14 +157,16 @@ function DayEditor({ day, onSave, onReset }) {
 function TravelBufferCard() {
   const showToast = useToast();
   const [minutes, setMinutes] = useState(null);
-  const [feeEuros, setFeeEuros] = useState(null);
+  const [baseFeeEuros, setBaseFeeEuros] = useState(null);
+  const [perKmEuros, setPerKmEuros] = useState(null);
   const [saving, setSaving] = useState(false);
 
   function load() {
     Promise.all([apiFetch('/admin/settings/travel-buffer'), apiFetch('/admin/settings/travel-fee')])
       .then(([buffer, fee]) => {
         setMinutes(buffer.minutes);
-        setFeeEuros((fee.feeCents / 100).toString());
+        setBaseFeeEuros((fee.baseFeeCents / 100).toString());
+        setPerKmEuros((fee.perKmCents / 100).toString());
       })
       .catch(() => showToast('Impossible de charger les réglages de trajet.', 'error'));
   }
@@ -177,9 +179,13 @@ function TravelBufferCard() {
     try {
       await Promise.all([
         apiFetch('/admin/settings/travel-buffer', { method: 'PUT', body: { minutes: Number(minutes) } }),
-        apiFetch('/admin/settings/travel-fee', {
+        apiFetch('/admin/settings/travel-fee/base', {
           method: 'PUT',
-          body: { feeCents: Math.round(Number(feeEuros) * 100) },
+          body: { feeCents: Math.round(Number(baseFeeEuros) * 100) },
+        }),
+        apiFetch('/admin/settings/travel-fee/per-km', {
+          method: 'PUT',
+          body: { feeCents: Math.round(Number(perKmEuros) * 100) },
         }),
       ]);
       showToast('Réglages de trajet mis à jour.', 'success');
@@ -194,16 +200,17 @@ function TravelBufferCard() {
     <form className="card travel-buffer-card" onSubmit={save}>
       <h2>Trajet (rendez-vous à domicile)</h2>
       <p className="section-lead">
-        Lorsqu'un rendez-vous est à domicile, ce temps est bloqué avant et après (y compris au tout début ou à la
-        toute fin d'une journée ouverte) pour ne jamais enchaîner un trajet sans marge, et ce supplément est ajouté
-        au prix affiché au client.
+        Le temps de trajet réel (calculé automatiquement à partir de l'adresse du client) est utilisé en priorité
+        pour bloquer le planning avant/après un rendez-vous à domicile, et pour calculer le frais de déplacement
+        (frais de base + prix au km). Les valeurs ci-dessous ne servent que de repli : quand l'adresse n'est pas
+        encore connue, introuvable, ou que le calcul automatique est indisponible.
       </p>
-      {minutes === null || feeEuros === null ? (
+      {minutes === null || baseFeeEuros === null || perKmEuros === null ? (
         <p className="loading-text">Chargement…</p>
       ) : (
-        <div className="form-row three-col">
+        <div className="form-row four-col">
           <div>
-            <label htmlFor="travel-buffer-minutes">Minutes bloquées avant/après</label>
+            <label htmlFor="travel-buffer-minutes">Minutes bloquées avant/après (repli)</label>
             <input
               type="number"
               id="travel-buffer-minutes"
@@ -216,16 +223,29 @@ function TravelBufferCard() {
             />
           </div>
           <div>
-            <label htmlFor="travel-fee-euros">Supplément d'essence (€)</label>
+            <label htmlFor="travel-fee-base-euros">Frais de base (€)</label>
             <input
               type="number"
-              id="travel-fee-euros"
+              id="travel-fee-base-euros"
               min={0}
               max={100}
               step={0.5}
               required
-              value={feeEuros}
-              onChange={(e) => setFeeEuros(e.target.value)}
+              value={baseFeeEuros}
+              onChange={(e) => setBaseFeeEuros(e.target.value)}
+            />
+          </div>
+          <div>
+            <label htmlFor="travel-fee-per-km-euros">Prix au km (€)</label>
+            <input
+              type="number"
+              id="travel-fee-per-km-euros"
+              min={0}
+              max={50}
+              step={0.05}
+              required
+              value={perKmEuros}
+              onChange={(e) => setPerKmEuros(e.target.value)}
             />
           </div>
           <div className="travel-buffer-save">

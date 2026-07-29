@@ -12,6 +12,8 @@ import { effectiveInterval, getAvailableSlots, intervalsOverlap, isValidDateStri
 import { AdditionalGuestDto, AdminCreateReservationDto, CreateReservationDto, UpdateReservationDto } from './dto/reservation.dto';
 import { MailService } from '../mail/mail.service';
 import { SettingsService } from '../settings/settings.service';
+import { DistanceService } from '../distance/distance.service';
+import { siteConfig } from '../../site-config';
 
 interface Guest {
   name: string;
@@ -44,6 +46,9 @@ interface ReservationWithServiceRow {
   service_name: string;
   at_client_home: boolean;
   client_address: string | null;
+  travel_distance_km: number | null;
+  travel_duration_minutes: number | null;
+  travel_fee_cents: number | null;
   addons: { name: string; extra_price_cents: number; extra_duration_minutes: number }[];
 }
 
@@ -71,19 +76,68 @@ export class ReservationsService {
     @InjectRepository(ServiceAddon) private readonly addonRepo: Repository<ServiceAddon>,
     private readonly mailService: MailService,
     private readonly settingsService: SettingsService,
+    private readonly distanceService: DistanceService,
   ) {}
+
+  // Base call-out fee always applies for an à-domicile booking; the
+  // per-km surcharge only if the address could actually be geocoded (see
+  // DistanceService — disabled/unconfigured/unresolvable all degrade to
+  // null distance rather than throwing).
+  private async computeTravel(
+    atClientHome: boolean,
+    clientAddress: string | null,
+  ): Promise<{ feeCents: number | null; distanceKm: number | null; durationMinutes: number | null }> {
+    if (!atClientHome) return { feeCents: null, distanceKm: null, durationMinutes: null };
+
+    const baseFeeCents = await this.settingsService.getTravelFeeBaseCents();
+    if (!clientAddress) return { feeCents: baseFeeCents, distanceKm: null, durationMinutes: null };
+
+    const estimate = await this.distanceService.estimate(siteConfig.siteAddress, clientAddress);
+    if (!estimate) return { feeCents: baseFeeCents, distanceKm: null, durationMinutes: null };
+
+    const perKmCents = await this.settingsService.getTravelFeePerKmCents();
+    return {
+      feeCents: baseFeeCents + Math.round(estimate.distanceKm * perKmCents),
+      distanceKm: estimate.distanceKm,
+      durationMinutes: estimate.durationMinutes,
+    };
+  }
+
+  // Powers the live estimate shown to the client while filling in their
+  // address on the booking page, before the reservation actually exists.
+  async estimateTravel(address: string): Promise<{ available: boolean; distanceKm: number | null; durationMinutes: number | null; feeCents: number | null }> {
+    const result = await this.computeTravel(true, address);
+    return { available: result.distanceKm !== null, ...result };
+  }
+
+  // The buffer blocked around an à-domicile slot used to be one flat
+  // admin-configured number regardless of how far the client actually is —
+  // now it's the real one-way driving time to their specific address
+  // whenever that's resolvable, falling back to the flat setting only when
+  // it isn't (no address yet, geocoding disabled/unresolvable). Existing
+  // reservations use their own persisted travel_duration_minutes the same
+  // way — see getAvailableSlots.
+  private async resolveTravelBuffer(atClientHome: boolean, address?: string | null): Promise<{ candidateBufferMinutes: number; defaultBufferMinutes: number }> {
+    const defaultBufferMinutes = await this.settingsService.getTravelBufferMinutes();
+    if (!atClientHome) return { candidateBufferMinutes: 0, defaultBufferMinutes };
+    if (!address) return { candidateBufferMinutes: defaultBufferMinutes, defaultBufferMinutes };
+
+    const estimate = await this.distanceService.estimate(siteConfig.siteAddress, address);
+    return { candidateBufferMinutes: estimate?.durationMinutes ?? defaultBufferMinutes, defaultBufferMinutes };
+  }
 
   async getAvailability(
     date: string,
     serviceIds: number[],
     atClientHome = false,
     addonMinutes = 0,
-  ): Promise<{ date: string; serviceIds: number[]; slots: string[] }> {
+    address?: string,
+  ): Promise<{ date: string; serviceIds: number[]; slots: string[]; tooFarForAnyOpenRange: boolean }> {
     const services = await this.resolveServices(serviceIds, { activeOnly: true });
     const totalDuration = services.reduce((sum, s) => sum + s.duration_minutes, 0) + addonMinutes;
-    const travelBufferMinutes = await this.settingsService.getTravelBufferMinutes();
-    const slots = await getAvailableSlots(this.dataSource, date, totalDuration, atClientHome, travelBufferMinutes);
-    return { date, serviceIds, slots };
+    const { candidateBufferMinutes, defaultBufferMinutes } = await this.resolveTravelBuffer(atClientHome, address);
+    const { slots, tooFarForAnyOpenRange } = await getAvailableSlots(this.dataSource, date, totalDuration, atClientHome, candidateBufferMinutes, defaultBufferMinutes);
+    return { date, serviceIds, slots, tooFarForAnyOpenRange };
   }
 
   // Scans forward from today (the admin's day-by-day schedule only ever
@@ -95,16 +149,19 @@ export class ReservationsService {
     serviceIds: number[],
     atClientHome = false,
     addonMinutes = 0,
+    address?: string,
   ): Promise<{ date: string; startTime: string } | null> {
     const services = await this.resolveServices(serviceIds, { activeOnly: true });
     const totalDuration = services.reduce((sum, s) => sum + s.duration_minutes, 0) + addonMinutes;
-    const travelBufferMinutes = await this.settingsService.getTravelBufferMinutes();
+    // Resolved once outside the day loop — the address doesn't change
+    // day-to-day, so this avoids up to 60 redundant geocoding calls.
+    const { candidateBufferMinutes, defaultBufferMinutes } = await this.resolveTravelBuffer(atClientHome, address);
 
     const HORIZON_DAYS = 60;
     const cursor = new Date();
     for (let i = 0; i < HORIZON_DAYS; i += 1) {
       const dateStr = localDateString(cursor);
-      const slots = await getAvailableSlots(this.dataSource, dateStr, totalDuration, atClientHome, travelBufferMinutes);
+      const { slots } = await getAvailableSlots(this.dataSource, dateStr, totalDuration, atClientHome, candidateBufferMinutes, defaultBufferMinutes);
       if (slots.length > 0) {
         return { date: dateStr, startTime: slots[0] };
       }
@@ -134,9 +191,12 @@ export class ReservationsService {
       0,
     );
     const atClientHome = dto.atClientHome ?? false;
+    const clientAddress = atClientHome ? dto.clientAddress ?? null : null;
+    const travel = await this.computeTravel(atClientHome, clientAddress);
+    const defaultBufferMinutes = await this.settingsService.getTravelBufferMinutes();
+    const candidateBufferMinutes = travel.durationMinutes ?? defaultBufferMinutes;
 
-    const travelBufferMinutes = await this.settingsService.getTravelBufferMinutes();
-    const available = await getAvailableSlots(this.dataSource, dto.date, totalDuration, atClientHome, travelBufferMinutes);
+    const { slots: available } = await getAvailableSlots(this.dataSource, dto.date, totalDuration, atClientHome, candidateBufferMinutes, defaultBufferMinutes);
     if (!available.includes(dto.startTime)) {
       throw new ConflictException("Ce créneau n'est plus disponible. Merci d'en choisir un autre.");
     }
@@ -149,7 +209,10 @@ export class ReservationsService {
       notes: dto.notes || '',
       status: 'pending',
       atClientHome,
-      clientAddress: atClientHome ? dto.clientAddress ?? null : null,
+      clientAddress,
+      travelDistanceKm: travel.distanceKm,
+      travelDurationMinutes: travel.durationMinutes,
+      travelFeeCents: travel.feeCents,
     });
 
     await this.mailService.sendBookingReceived({
@@ -199,11 +262,14 @@ export class ReservationsService {
       0,
     );
     const atClientHome = dto.atClientHome ?? false;
+    const clientAddress = atClientHome ? dto.clientAddress ?? null : null;
+    const travel = await this.computeTravel(atClientHome, clientAddress);
+    const defaultBufferMinutes = await this.settingsService.getTravelBufferMinutes();
+    const candidateBufferMinutes = travel.durationMinutes ?? defaultBufferMinutes;
 
-    const travelBufferMinutes = await this.settingsService.getTravelBufferMinutes();
     const startMin = toMinutes(dto.startTime);
     const endMin = startMin + totalDuration;
-    const candidate = effectiveInterval(startMin, endMin, atClientHome, travelBufferMinutes);
+    const candidate = effectiveInterval(startMin, endMin, atClientHome, candidateBufferMinutes);
 
     // allowOverlap is the admin's deliberate call (e.g. booking a haircut
     // during a colour's processing time) — skip the check entirely rather
@@ -211,13 +277,13 @@ export class ReservationsService {
     if (!dto.allowOverlap) {
       const existing = await this.reservationRepo
         .createQueryBuilder('r')
-        .select(['r.start_time', 'r.end_time', 'r.at_client_home'])
+        .select(['r.start_time', 'r.end_time', 'r.at_client_home', 'r.travel_duration_minutes'])
         .where('r.reservation_date = :date', { date: dto.date })
         .andWhere('r.status NOT IN (:...excluded)', { excluded: ['cancelled', 'refused'] })
         .getMany();
 
       const overlaps = existing.some((r) => {
-        const busy = effectiveInterval(toMinutes(r.start_time), toMinutes(r.end_time), r.at_client_home, travelBufferMinutes);
+        const busy = effectiveInterval(toMinutes(r.start_time), toMinutes(r.end_time), r.at_client_home, r.travel_duration_minutes ?? defaultBufferMinutes);
         return intervalsOverlap(candidate, busy);
       });
       if (overlaps) {
@@ -226,6 +292,7 @@ export class ReservationsService {
     }
 
     const status = dto.status || 'confirmed';
+
     const result = await this.insertGroup(guests, services, addonsPerGuest, {
       date: dto.date,
       startTime: dto.startTime,
@@ -234,7 +301,10 @@ export class ReservationsService {
       notes: dto.notes || '',
       status,
       atClientHome,
-      clientAddress: atClientHome ? dto.clientAddress ?? null : null,
+      clientAddress,
+      travelDistanceKm: travel.distanceKm,
+      travelDurationMinutes: travel.durationMinutes,
+      travelFeeCents: travel.feeCents,
     });
 
     // A manual booking is usually entered as already-confirmed, so send the
@@ -320,6 +390,9 @@ export class ReservationsService {
       status: ReservationStatus;
       atClientHome: boolean;
       clientAddress: string | null;
+      travelDistanceKm: number | null;
+      travelDurationMinutes: number | null;
+      travelFeeCents: number | null;
     },
   ): Promise<{ groupId: string; date: string; startTime: string; endTime: string; guests: BookedGuest[]; atClientHome: boolean; clientAddress: string | null }> {
     const groupId = crypto.randomUUID();
@@ -349,6 +422,9 @@ export class ReservationsService {
           status: common.status,
           at_client_home: common.atClientHome,
           client_address: common.clientAddress,
+          travel_distance_km: common.travelDistanceKm,
+          travel_duration_minutes: common.travelDurationMinutes,
+          travel_fee_cents: common.travelFeeCents,
         });
         const reservationId = Number(inserted.identifiers[0].id);
 
@@ -394,10 +470,11 @@ export class ReservationsService {
       `SELECT r.id, r.group_id, r.client_name, r.client_email, r.client_phone, r.reservation_date,
               r.start_time, r.end_time, r.notes, r.status, r.created_at, r.service_id,
               r.at_client_home, r.client_address,
+              r.travel_distance_km::float8 AS travel_distance_km, r.travel_duration_minutes, r.travel_fee_cents,
               s.name AS service_name
        FROM reservations r
        JOIN services s ON s.id = r.service_id
-       ORDER BY r.reservation_date DESC, r.start_time ASC`,
+       ORDER BY r.reservation_date ASC, r.start_time ASC`,
     );
     if (rows.length === 0) return [];
 
@@ -441,6 +518,13 @@ export class ReservationsService {
     const startTime = dto.startTime ?? existing.start_time;
     const atClientHome = dto.atClientHome ?? existing.at_client_home;
     const clientAddress = atClientHome ? dto.clientAddress ?? existing.client_address : null;
+    // Only re-geocode if location actually changed — an edit that just
+    // fixes the time/notes shouldn't spend an API call re-confirming a
+    // distance that hasn't moved.
+    const locationChanged = atClientHome !== existing.at_client_home || clientAddress !== existing.client_address;
+    const travel = locationChanged
+      ? await this.computeTravel(atClientHome, clientAddress)
+      : { distanceKm: existing.travel_distance_km, durationMinutes: existing.travel_duration_minutes, feeCents: existing.travel_fee_cents };
 
     // reservation_addons only stores a name/price/duration snapshot, not an
     // addon id — so when addonIds isn't provided, re-use the existing
@@ -461,22 +545,23 @@ export class ReservationsService {
     const endMin = startMin + service.duration_minutes + addonDuration;
     const endTime = toHHMM(endMin);
 
-    const travelBufferMinutes = await this.settingsService.getTravelBufferMinutes();
-    const candidate = effectiveInterval(startMin, endMin, atClientHome, travelBufferMinutes);
+    const defaultBufferMinutes = await this.settingsService.getTravelBufferMinutes();
+    const candidateBufferMinutes = travel.durationMinutes ?? defaultBufferMinutes;
+    const candidate = effectiveInterval(startMin, endMin, atClientHome, candidateBufferMinutes);
 
     // See createManual for the rationale — the admin's deliberate call,
     // not persisted, so an unrelated later edit still gets the normal check.
     if (!dto.allowOverlap) {
       const others = await this.reservationRepo
         .createQueryBuilder('r')
-        .select(['r.start_time', 'r.end_time', 'r.at_client_home'])
+        .select(['r.start_time', 'r.end_time', 'r.at_client_home', 'r.travel_duration_minutes'])
         .where('r.reservation_date = :date', { date })
         .andWhere('r.id != :id', { id })
         .andWhere('r.status NOT IN (:...excluded)', { excluded: ['cancelled', 'refused'] })
         .getMany();
 
       const overlaps = others.some((r) => {
-        const busy = effectiveInterval(toMinutes(r.start_time), toMinutes(r.end_time), r.at_client_home, travelBufferMinutes);
+        const busy = effectiveInterval(toMinutes(r.start_time), toMinutes(r.end_time), r.at_client_home, r.travel_duration_minutes ?? defaultBufferMinutes);
         return intervalsOverlap(candidate, busy);
       });
       if (overlaps) {
@@ -496,6 +581,9 @@ export class ReservationsService {
         notes: dto.notes ?? existing.notes,
         at_client_home: atClientHome,
         client_address: clientAddress,
+        travel_distance_km: travel.distanceKm,
+        travel_duration_minutes: travel.durationMinutes,
+        travel_fee_cents: travel.feeCents,
       });
 
       if (dto.addonIds !== undefined) {

@@ -46,33 +46,64 @@ export function isValidDateString(dateStr: string): boolean {
   return !Number.isNaN(d.getTime());
 }
 
+export interface AvailableSlotsResult {
+  slots: string[];
+  // True when even a genuinely empty day (no other bookings at all)
+  // couldn't fit this appointment — the round-trip travel buffer plus the
+  // service duration is simply longer than every one of that day's open
+  // ranges. Distinct from a plain empty `slots` array, which just means
+  // "fully booked today" — the client is too far away for this particular
+  // appointment to ever fit, not unlucky with timing. Only meaningful for
+  // à-domicile bookings; always false otherwise.
+  tooFarForAnyOpenRange: boolean;
+}
+
 // Returns available start times (HH:MM) for a given date and service
 // duration, excluding slots that overlap existing (non-cancelled)
 // reservations and past times. Hours are resolved per exact date (admin
 // override if set, otherwise closed) — see getEffectiveHoursForDate. A day
 // can have several open ranges (e.g. a lunch break); a booking must fit
 // entirely inside one range, it never spans the gap between two.
+// candidateBufferMinutes is the buffer for the slot being searched — ideally
+// the real one-way driving time to the specific address being booked (see
+// ReservationsService.resolveTravelBuffer), falling back to the flat admin
+// setting when that isn't available. defaultBufferMinutes is used for
+// EXISTING reservations that don't have their own persisted
+// travel_duration_minutes (booked before this feature, or geocoding failed
+// for them) — each existing à-domicile reservation otherwise uses its own
+// real travel time, not the global flat setting, since two different
+// addresses genuinely take different times to reach.
 export async function getAvailableSlots(
   dataSource: DataSource,
   dateStr: string,
   durationMinutes: number,
   atClientHome = false,
-  travelBufferMinutes = 0,
-): Promise<string[]> {
-  if (!isValidDateString(dateStr)) return [];
+  candidateBufferMinutes = 0,
+  defaultBufferMinutes = candidateBufferMinutes,
+): Promise<AvailableSlotsResult> {
+  if (!isValidDateString(dateStr)) return { slots: [], tooFarForAnyOpenRange: false };
 
   const hours = await getEffectiveHoursForDate(dataSource, dateStr);
-  if (hours.isClosed || hours.ranges.length === 0) return [];
+  if (hours.isClosed || hours.ranges.length === 0) return { slots: [], tooFarForAnyOpenRange: false };
+
+  // Structural check, independent of any other booking that day: does the
+  // round trip + appointment even fit inside the WIDEST open range? If not,
+  // no amount of an empty schedule would help — worth telling the client
+  // that plainly instead of a generic "nothing available today".
+  const requiredSpan = atClientHome ? candidateBufferMinutes * 2 + durationMinutes : durationMinutes;
+  const tooFarForAnyOpenRange = atClientHome && hours.ranges.every((r) => toMinutes(r.closeTime) - toMinutes(r.openTime) < requiredSpan);
 
   const existing = await dataSource
     .getRepository(Reservation)
     .createQueryBuilder('r')
-    .select(['r.start_time', 'r.end_time', 'r.at_client_home'])
+    .select(['r.start_time', 'r.end_time', 'r.at_client_home', 'r.travel_duration_minutes'])
     .where('r.reservation_date = :dateStr', { dateStr })
     .andWhere('r.status NOT IN (:...excluded)', { excluded: ['cancelled', 'refused'] })
     .getMany();
 
-  const busy = existing.map((r) => effectiveInterval(toMinutes(r.start_time), toMinutes(r.end_time), r.at_client_home, travelBufferMinutes));
+  const busy = existing.map((r) =>
+    effectiveInterval(toMinutes(r.start_time), toMinutes(r.end_time), r.at_client_home, r.travel_duration_minutes ?? defaultBufferMinutes),
+  );
 
   const now = new Date();
   const isToday = dateStr === localDateString(now);
@@ -80,7 +111,7 @@ export async function getAvailableSlots(
   // travel buffer just to physically get there, same as at the edges of the
   // open window (see rangeStart below).
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
-  const pastCutoff = atClientHome ? nowMinutes + travelBufferMinutes : nowMinutes;
+  const pastCutoff = atClientHome ? nowMinutes + candidateBufferMinutes : nowMinutes;
 
   const slots: string[] = [];
   for (const range of hours.ranges) {
@@ -89,19 +120,19 @@ export async function getAvailableSlots(
     // À-domicile also needs travel time to/from the edges of the open
     // window itself, not just around other bookings — otherwise the very
     // first slot of the day would ignore the trip to get there at all.
-    const rangeStart = atClientHome ? openMin + travelBufferMinutes : openMin;
-    const rangeEnd = atClientHome ? closeMin - travelBufferMinutes : closeMin;
+    const rangeStart = atClientHome ? openMin + candidateBufferMinutes : openMin;
+    const rangeEnd = atClientHome ? closeMin - candidateBufferMinutes : closeMin;
 
     for (let start = rangeStart; start + durationMinutes <= rangeEnd; start += SLOT_STEP_MINUTES) {
       const end = start + durationMinutes;
       if (isToday && start <= pastCutoff) continue;
 
-      const candidate = effectiveInterval(start, end, atClientHome, travelBufferMinutes);
+      const candidate = effectiveInterval(start, end, atClientHome, candidateBufferMinutes);
       const overlaps = busy.some((b) => intervalsOverlap(candidate, b));
       if (!overlaps) {
         slots.push(toHHMM(start));
       }
     }
   }
-  return slots;
+  return { slots, tooFarForAnyOpenRange };
 }

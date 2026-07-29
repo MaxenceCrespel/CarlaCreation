@@ -532,11 +532,44 @@ function groupRows(rows) {
   return groups;
 }
 
+// One section per day (rows already sorted by date/time from the API) —
+// makes a long list scannable at a glance instead of a wall of identical-
+// looking rows the admin has to read date-by-date to tell apart.
+function groupByDay(rows) {
+  const days = [];
+  const byDate = new Map();
+  rows.forEach((r) => {
+    if (!byDate.has(r.reservation_date)) {
+      const day = { date: r.reservation_date, rows: [] };
+      byDate.set(r.reservation_date, day);
+      days.push(day);
+    }
+    byDate.get(r.reservation_date).rows.push(r);
+  });
+  return days;
+}
+
+const DAY_NAMES = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+function formatDayHeading(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  return `${DAY_NAMES[date.getDay()]} ${date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}`;
+}
+
+function mapsUrl(address) {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+}
+function wazeUrl(address) {
+  return `https://waze.com/ul?q=${encodeURIComponent(address)}&navigate=yes`;
+}
+
 export default function ReservationsTab() {
   const showToast = useToast();
   const [reservations, setReservations] = useState(null);
   const [error, setError] = useState(null);
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState('confirmed');
+  const [search, setSearch] = useState('');
+  const [dateFilter, setDateFilter] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'calendar'
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
@@ -605,19 +638,40 @@ export default function ReservationsTab() {
   }
 
   const statusFiltered = (reservations ?? []).filter((r) => filter === 'all' || r.status === filter);
+  const searchNeedle = search.trim().toLowerCase();
+  const searchFiltered = searchNeedle
+    ? statusFiltered.filter((r) =>
+        [r.client_name, r.client_email, r.client_phone, r.notes, r.service_name, r.client_address]
+          .filter(Boolean)
+          .some((field) => field.toLowerCase().includes(searchNeedle)),
+      )
+    : statusFiltered;
+  const dateFiltered = dateFilter ? searchFiltered.filter((r) => r.reservation_date === dateFilter) : searchFiltered;
   // In calendar mode, the table below only shows the selected day's detail
   // (with the usual actions) — the calendar itself always shows the whole
   // month regardless of a day being picked.
   const rows = viewMode === 'calendar' && selectedCalendarDate
-    ? statusFiltered.filter((r) => r.reservation_date === selectedCalendarDate)
+    ? dateFiltered.filter((r) => r.reservation_date === selectedCalendarDate)
     : viewMode === 'calendar'
       ? []
-      : statusFiltered;
-  const groups = groupRows(rows);
+      : dateFiltered;
+  const days = viewMode === 'calendar' ? [{ date: null, rows }] : groupByDay(rows);
 
   return (
     <>
       <div className="admin-filters">
+        <label htmlFor="reservation-search">Rechercher</label>
+        <input
+          type="search"
+          id="reservation-search"
+          placeholder="Nom, email, téléphone, note…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+
+        <label htmlFor="date-filter">Filtrer par date</label>
+        <input type="date" id="date-filter" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />
+
         <label htmlFor="status-filter">Filtrer par statut</label>
         <select id="status-filter" value={filter} onChange={(e) => setFilter(e.target.value)}>
           <option value="all">Toutes</option>
@@ -685,59 +739,88 @@ export default function ReservationsTab() {
                 </td>
               </tr>
             )}
-            {!error && groups.map((group) => (
-              <Fragment key={group.key}>
-                {group.rows.length > 1 && (
-                  <tr className="group-header-row">
-                    <td colSpan={9}>
-                      <div className="group-header">
-                        <span className="group-badge">Rendez-vous groupé · {group.rows.length} personnes</span>
-                        <div className="group-actions">
-                          <button type="button" onClick={() => refuseGroup(group.groupId)}>Refuser le groupe</button>
-                          <button type="button" className="danger" onClick={() => setDeleteTarget({ kind: 'group', groupId: group.groupId, count: group.rows.length })}>Supprimer le groupe</button>
-                        </div>
-                      </div>
-                    </td>
+            {!error && days.map((day) => (
+              <Fragment key={day.date ?? 'calendar'}>
+                {day.date && (
+                  <tr className="day-header-row">
+                    <td colSpan={9}>{formatDayHeading(day.date)} · {day.rows.length} réservation{day.rows.length > 1 ? 's' : ''}</td>
                   </tr>
                 )}
-                {group.rows.map((r) => (
-                  <tr key={r.id} className={group.rows.length > 1 ? 'group-member-row' : ''}>
-                    <td>{r.reservation_date}</td>
-                    <td>{r.start_time} – {r.end_time}</td>
-                    <td>
-                      {r.service_name}
-                      {r.addons && r.addons.length > 0 && (
-                        <div className="row-addons">+ {r.addons.map((a) => a.name).join(', ')}</div>
-                      )}
-                    </td>
-                    <td>{r.client_name}</td>
-                    <td>{r.client_email}<br />{r.client_phone}</td>
-                    <td>{r.at_client_home ? <><span className="location-badge">Domicile</span><br />{r.client_address}</> : 'Studio'}</td>
-                    <td>{r.notes || '—'}</td>
-                    <td>
-                      <div className="status-cell">
-                        <span className={`status-badge status-${r.status}`}>{STATUS_LABELS[r.status] || r.status}</span>
-                        <select className="status-select" value={r.status} onChange={(e) => updateStatus(r.id, e.target.value)}>
-                          {Object.entries(STATUS_LABELS).map(([value, label]) => (
-                            <option key={value} value={value}>{label}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </td>
-                    <td className="row-actions">
-                      <button type="button" onClick={() => setEditTarget(r)}>Modifier</button>
-                      {r.status !== 'refused' && r.status !== 'cancelled' && (
-                        <button type="button" onClick={() => refuse(r.id)}>Refuser</button>
-                      )}
-                      <button
-                        type="button"
-                        className="danger"
-                        onClick={() => setDeleteTarget({ kind: 'single', id: r.id, clientName: r.client_name, willNotify: r.status === 'pending' || r.status === 'confirmed' })}
-                      >
-                        Supprimer
-                      </button>
-                    </td>
-                  </tr>
+                {groupRows(day.rows).map((group) => (
+                  <Fragment key={group.key}>
+                    {group.rows.length > 1 && (
+                      <tr className="group-header-row">
+                        <td colSpan={9}>
+                          <div className="group-header">
+                            <span className="group-badge">Rendez-vous groupé · {group.rows.length} personnes</span>
+                            <div className="group-actions">
+                              <button type="button" onClick={() => refuseGroup(group.groupId)}>Refuser le groupe</button>
+                              <button type="button" className="danger" onClick={() => setDeleteTarget({ kind: 'group', groupId: group.groupId, count: group.rows.length })}>Supprimer le groupe</button>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    {group.rows.map((r) => (
+                      <tr key={r.id} className={group.rows.length > 1 ? 'group-member-row' : ''}>
+                        <td>{r.reservation_date}</td>
+                        <td>{r.start_time} – {r.end_time}</td>
+                        <td>
+                          {r.service_name}
+                          {r.addons && r.addons.length > 0 && (
+                            <div className="row-addons">+ {r.addons.map((a) => a.name).join(', ')}</div>
+                          )}
+                        </td>
+                        <td>{r.client_name}</td>
+                        <td>{r.client_email}<br />{r.client_phone}</td>
+                        <td>
+                          {r.at_client_home ? (
+                            <>
+                              <span className="location-badge">Domicile</span><br />
+                              {r.client_address}
+                              <div className="location-links">
+                                <a href={mapsUrl(r.client_address)} target="_blank" rel="noopener noreferrer">Maps</a>
+                                {' · '}
+                                <a href={wazeUrl(r.client_address)} target="_blank" rel="noopener noreferrer">Waze</a>
+                              </div>
+                              {r.travel_distance_km != null && (
+                                <div className="location-travel">
+                                  ≈ {r.travel_distance_km} km · {r.travel_duration_minutes} min
+                                  {r.travel_fee_cents != null && ` · ${(r.travel_fee_cents / 100).toFixed(2).replace('.', ',')} €`}
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            'Studio'
+                          )}
+                        </td>
+                        <td>{r.notes || '—'}</td>
+                        <td>
+                          <div className="status-cell">
+                            <span className={`status-badge status-${r.status}`}>{STATUS_LABELS[r.status] || r.status}</span>
+                            <select className="status-select" value={r.status} onChange={(e) => updateStatus(r.id, e.target.value)}>
+                              {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                                <option key={value} value={value}>{label}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </td>
+                        <td className="row-actions">
+                          <button type="button" onClick={() => setEditTarget(r)}>Modifier</button>
+                          {r.status !== 'refused' && r.status !== 'cancelled' && (
+                            <button type="button" onClick={() => refuse(r.id)}>Refuser</button>
+                          )}
+                          <button
+                            type="button"
+                            className="danger"
+                            onClick={() => setDeleteTarget({ kind: 'single', id: r.id, clientName: r.client_name, willNotify: r.status === 'pending' || r.status === 'confirmed' })}
+                          >
+                            Supprimer
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </Fragment>
                 ))}
               </Fragment>
             ))}

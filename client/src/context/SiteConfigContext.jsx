@@ -9,7 +9,8 @@ const FALLBACK = {
   siteEmail: '',
   siteAddress: '',
   siteUrl: '',
-  travelFeeCents: 200,
+  travelFeeBaseCents: 200,
+  travelFeePerKmCents: 50,
   navLinks: [
     { href: '/', label: 'Accueil', key: 'home' },
     { href: '/services', label: 'Prestations', key: 'services' },

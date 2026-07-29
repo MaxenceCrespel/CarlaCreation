@@ -1,4 +1,13 @@
-import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, ValueTransformer } from 'typeorm';
+
+// Postgres NUMERIC columns come back from `pg` as strings by default (to
+// avoid silent float precision loss) — this reservation only ever stores a
+// rounded km figure, so a plain JS number is safe and much easier to work
+// with than threading string parsing through every caller.
+const numericTransformer: ValueTransformer = {
+  to: (value: number | null) => value,
+  from: (value: string | null) => (value === null ? null : parseFloat(value)),
+};
 
 export type ReservationStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'refused';
 
@@ -54,6 +63,19 @@ export class Reservation {
 
   @Column({ type: 'text', nullable: true })
   client_address: string | null;
+
+  // Computed once at booking time (create or edit) via the geocoding
+  // service — null when geocoding is disabled/unconfigured or the address
+  // couldn't be resolved, in which case travel_fee_cents still holds the
+  // flat base fee alone.
+  @Column({ type: 'numeric', precision: 6, scale: 2, nullable: true, transformer: numericTransformer })
+  travel_distance_km: number | null;
+
+  @Column({ type: 'int', nullable: true })
+  travel_duration_minutes: number | null;
+
+  @Column({ type: 'int', nullable: true })
+  travel_fee_cents: number | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;

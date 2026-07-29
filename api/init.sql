@@ -87,6 +87,9 @@ CREATE TABLE
         reminder_sent BOOLEAN NOT NULL DEFAULT false,
         at_client_home BOOLEAN NOT NULL DEFAULT false,
         client_address TEXT,
+        travel_distance_km NUMERIC(6, 2),
+        travel_duration_minutes INTEGER,
+        travel_fee_cents INTEGER,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
@@ -160,10 +163,11 @@ CREATE TABLE
     IF NOT EXISTS app_settings (
         id INTEGER PRIMARY KEY DEFAULT 1,
         travel_buffer_minutes INTEGER NOT NULL DEFAULT 30,
-        travel_fee_cents INTEGER NOT NULL DEFAULT 200
+        travel_fee_base_cents INTEGER NOT NULL DEFAULT 200,
+        travel_fee_per_km_cents INTEGER NOT NULL DEFAULT 50
     );
 
-INSERT INTO app_settings (id, travel_buffer_minutes, travel_fee_cents) VALUES (1, 30, 200);
+INSERT INTO app_settings (id, travel_buffer_minutes, travel_fee_base_cents, travel_fee_per_km_cents) VALUES (1, 30, 200, 50);
 
 -- Records this bootstrap as already-applied so `npm run migration:run`
 -- doesn't try to re-run the (already-executed-via-this-file) InitSchema
@@ -188,7 +192,8 @@ VALUES
     (1784974821563, 'AddServiceCategories1784974821563'),
     (1784978234901, 'AddServiceCategoryParent1784978234901'),
     (1785012345678, 'AddAdminCalendarToken1785012345678'),
-    (1785018765432, 'AddGalleryCategory1785018765432');
+    (1785018765432, 'AddGalleryCategory1785018765432'),
+    (1785100000000, 'AddTravelDistance1785100000000');
 
 -- Admin account — username "carla", password "Carla0303!" (bcrypt, cost 12).
 -- Change this password after first login in a real deployment.

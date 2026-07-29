@@ -12,5 +12,8 @@ export class AppSettings {
   travel_buffer_minutes: number;
 
   @Column({ default: 200 })
-  travel_fee_cents: number;
+  travel_fee_base_cents: number;
+
+  @Column({ default: 50 })
+  travel_fee_per_km_cents: number;
 }

@@ -180,7 +180,7 @@ function BookingSummary({ recapGuests, totalDuration, totalPrice }) {
 let guestKeySeq = 0;
 
 export default function Booking() {
-  const { sitePhone, sitePhoneHref, travelFeeCents } = useSiteConfig();
+  const { sitePhone, sitePhoneHref, travelFeeBaseCents } = useSiteConfig();
   useSeo({
     title: 'Réserver un rendez-vous à Lille',
     description:
@@ -206,10 +206,18 @@ export default function Booking() {
   // Carla is a solo auto-entrepreneuse: the client either comes to her
   // (default) or she travels to the client's address instead.
   const [atClientHome, setAtClientHome] = useState(false);
+  // null = not fetched yet, 'loading', 'unavailable' (geocoding off/failed
+  // — falls back to the flat base fee), or { distanceKm, durationMinutes,
+  // feeCents } once resolved.
+  const [travelEstimate, setTravelEstimate] = useState(null);
 
   const [date, setDate] = useState('');
   const [slots, setSlots] = useState([]);
   const [slotsState, setSlotsState] = useState('idle'); // idle | loading | ready | empty | error
+  // Set when the last availability check came back empty specifically
+  // because the round-trip travel time + service duration can never fit
+  // that day's hours — distinct from "just fully booked".
+  const [slotsTooFar, setSlotsTooFar] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState('');
   const [hours, setHours] = useState([]);
   const [nextAvailable, setNextAvailable] = useState(null); // null | 'loading' | 'none' | { date, startTime }
@@ -277,12 +285,19 @@ export default function Booking() {
     () => serviceIds.reduce((sum, id) => sum + (services.find((s) => s.id === id)?.duration_minutes ?? 0), 0) + totalAddonMinutes,
     [serviceIds, services, totalAddonMinutes],
   );
+  // Uses the live per-address estimate once it's resolved; falls back to
+  // the flat base fee while it's loading, unavailable, or geocoding is
+  // disabled — the client never sees a $0 quote just because the estimate
+  // hasn't landed yet.
+  const travelFeeCents = atClientHome
+    ? (travelEstimate && typeof travelEstimate === 'object' ? travelEstimate.feeCents : travelFeeBaseCents)
+    : 0;
   const totalPrice = useMemo(
     () =>
       serviceIds.reduce((sum, id) => sum + (services.find((s) => s.id === id)?.price_cents ?? 0), 0) +
       totalAddonPrice +
-      (atClientHome ? travelFeeCents : 0),
-    [serviceIds, services, totalAddonPrice, atClientHome, travelFeeCents],
+      travelFeeCents,
+    [serviceIds, services, totalAddonPrice, travelFeeCents],
   );
   const recapGuests = useMemo(
     () => [
@@ -336,6 +351,7 @@ export default function Booking() {
 
   function pickLocation(home) {
     setAtClientHome(home);
+    setTravelEstimate(null);
     setSlots([]);
     setSlotsState('idle');
     setSelectedSlot('');
@@ -374,6 +390,22 @@ export default function Booking() {
     setSelectedSlot('');
   }
 
+  // Settles 700ms after the client stops typing their à-domicile address —
+  // shared by the travel estimate, next-available and availability effects
+  // below so none of them (nor the geocoding API behind them) fire on every
+  // keystroke, and slot availability reflects the real travel time to this
+  // specific address once it's known.
+  const [debouncedAddress, setDebouncedAddress] = useState('');
+  useEffect(() => {
+    const address = form.clientAddress.trim();
+    if (!atClientHome || address.length < 5) {
+      setDebouncedAddress('');
+      return undefined;
+    }
+    const timer = setTimeout(() => setDebouncedAddress(address), 700);
+    return () => clearTimeout(timer);
+  }, [atClientHome, form.clientAddress]);
+
   // Suggests the earliest date+time the client could actually get, computed
   // server-side, as soon as the prestation(s) are chosen — before the client
   // has to manually browse the day picker themselves.
@@ -384,7 +416,8 @@ export default function Booking() {
     }
     let cancelled = false;
     setNextAvailable('loading');
-    apiFetch(`/reservations/next-available?serviceIds=${serviceIds.join(',')}&atClientHome=${atClientHome}&addonMinutes=${totalAddonMinutes}`)
+    const addressParam = debouncedAddress ? `&address=${encodeURIComponent(debouncedAddress)}` : '';
+    apiFetch(`/reservations/next-available?serviceIds=${serviceIds.join(',')}&atClientHome=${atClientHome}&addonMinutes=${totalAddonMinutes}${addressParam}`)
       .then((result) => {
         if (cancelled) return;
         setNextAvailable(result || 'none');
@@ -396,7 +429,7 @@ export default function Booking() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serviceIds.join(','), allGuestsHaveService, atClientHome, totalAddonMinutes]);
+  }, [serviceIds.join(','), allGuestsHaveService, atClientHome, totalAddonMinutes, debouncedAddress]);
 
   function applySuggestion(suggestion) {
     setDate(suggestion.date);
@@ -410,11 +443,13 @@ export default function Booking() {
     }
     let cancelled = false;
     setSlotsState('loading');
-    apiFetch(`/reservations/availability?date=${encodeURIComponent(date)}&serviceIds=${serviceIds.join(',')}&atClientHome=${atClientHome}&addonMinutes=${totalAddonMinutes}`)
+    const addressParam = debouncedAddress ? `&address=${encodeURIComponent(debouncedAddress)}` : '';
+    apiFetch(`/reservations/availability?date=${encodeURIComponent(date)}&serviceIds=${serviceIds.join(',')}&atClientHome=${atClientHome}&addonMinutes=${totalAddonMinutes}${addressParam}`)
       .then((result) => {
         if (cancelled) return;
         setSlots(result.slots);
         setSlotsState(result.slots.length ? 'ready' : 'empty');
+        setSlotsTooFar(Boolean(result.tooFarForAnyOpenRange));
         // Auto-suggest the earliest slot of the chosen day so most clients
         // can just confirm instead of opening the dropdown themselves.
         setSelectedSlot(result.slots[0] || '');
@@ -426,7 +461,29 @@ export default function Booking() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, serviceIds.join(','), allGuestsHaveService, atClientHome, totalAddonMinutes]);
+  }, [date, serviceIds.join(','), allGuestsHaveService, atClientHome, totalAddonMinutes, debouncedAddress]);
+
+  // Live distance/duration/fee preview while the client fills in their
+  // à-domicile address — reuses the same debounced value as above.
+  useEffect(() => {
+    if (!debouncedAddress) {
+      setTravelEstimate(null);
+      return undefined;
+    }
+    let cancelled = false;
+    setTravelEstimate('loading');
+    apiFetch(`/reservations/travel-estimate?address=${encodeURIComponent(debouncedAddress)}`)
+      .then((result) => {
+        if (cancelled) return;
+        setTravelEstimate(result.available ? result : 'unavailable');
+      })
+      .catch(() => {
+        if (!cancelled) setTravelEstimate('unavailable');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedAddress]);
 
   useEffect(() => {
     if (!showRecap) return undefined;
@@ -452,7 +509,18 @@ export default function Booking() {
       return null;
     }
     if (n === 2) {
-      if (atClientHome && !form.clientAddress.trim()) return 'Indiquez votre adresse pour un rendez-vous à domicile.';
+      if (atClientHome) {
+        const address = form.clientAddress.trim();
+        if (!address) return 'Indiquez votre adresse pour un rendez-vous à domicile.';
+        if (address.length < 5) return 'Indiquez une adresse complète.';
+        // debouncedAddress only catches up ~700ms after typing stops, and
+        // travelEstimate resolves after that — moving on before either is
+        // done would let the next steps compute availability/price off a
+        // stale or missing distance instead of the real one.
+        if (debouncedAddress !== address || travelEstimate === 'loading') {
+          return 'Merci de patienter quelques instants, calcul du trajet en cours…';
+        }
+      }
       return null;
     }
     if (n === 3) {
@@ -715,6 +783,12 @@ export default function Booking() {
                       value={form.clientAddress}
                       onChange={updateField('clientAddress')}
                     />
+                    {travelEstimate === 'loading' && <p className="loading-text travel-estimate-hint">Calcul du trajet…</p>}
+                    {travelEstimate && typeof travelEstimate === 'object' && (
+                      <p className="travel-estimate-hint">
+                        ≈ {travelEstimate.distanceKm} km · {travelEstimate.durationMinutes} min de route · +{formatPrice(travelEstimate.feeCents)} de frais de déplacement
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
@@ -791,7 +865,9 @@ export default function Booking() {
                   >
                     {slotsState === 'idle' && <option value="">Choisissez d'abord une date</option>}
                     {slotsState === 'loading' && <option value="">Chargement des créneaux…</option>}
-                    {slotsState === 'empty' && <option value="">Aucun créneau disponible ce jour-là</option>}
+                    {slotsState === 'empty' && (
+                      <option value="">{slotsTooFar ? 'Trajet trop long pour ce jour' : 'Aucun créneau disponible ce jour-là'}</option>
+                    )}
                     {slotsState === 'error' && <option value="">Erreur de chargement</option>}
                     {slotsState === 'ready' && (
                       <>
@@ -801,6 +877,13 @@ export default function Booking() {
                       </>
                     )}
                   </select>
+                  {slotsState === 'empty' && slotsTooFar && (
+                    <p className="form-feedback error">
+                      Avec le trajet aller-retour jusqu'à votre adresse et la durée de la prestation, ce rendez-vous
+                      ne peut tenir dans les horaires d'ouverture de cette journée. Essayez une autre date, ou
+                      contactez-moi directement pour en discuter.
+                    </p>
+                  )}
                 </div>
               </>
             )}
