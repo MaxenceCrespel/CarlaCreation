@@ -378,15 +378,18 @@ img { max-width: 100%; display: block; }
 .day-chip.is-selected .day-chip-dow,
 .day-chip.is-selected .day-chip-num,
 .day-chip.is-selected .day-chip-status { color: #fff; }
-.day-chip.is-closed { opacity: 0.5; cursor: not-allowed; }
+/* Closed stays deliberately quiet — a day off isn't something the client
+   needs to notice, just skip past. */
+.day-chip.is-closed { opacity: 0.35; border-style: dashed; background: transparent; cursor: not-allowed; }
 .day-chip.is-closed .day-chip-status { color: var(--color-muted); }
-/* Open but nothing left for this prestation — a solid warm-tinted card
-   (not just dimmed like a day off) so it reads at a glance as "busy", a
-   different situation from "closed", rather than a fainter version of it. */
-.day-chip.is-full { cursor: not-allowed; background: #f6dad7; border-color: #eec3be; }
+/* Open but nothing left for this prestation — the opposite: a solid,
+   high-contrast block that draws the eye, since it's the one state that
+   could otherwise be mistaken for "available" if skimmed too quickly. */
+.day-chip.is-full { cursor: not-allowed; background: #b3413a; border-color: #b3413a; box-shadow: var(--shadow-sm); }
 .day-chip.is-full .day-chip-dow,
-.day-chip.is-full .day-chip-num { color: #8a2f2f; }
-.day-chip.is-full .day-chip-status { color: #b3413a; }
+.day-chip.is-full .day-chip-num,
+.day-chip.is-full .day-chip-status { color: #fff; }
+.day-chip.is-full .day-chip-status { font-weight: 700; }
 .day-chip:disabled { cursor: not-allowed; }
 
 .day-picker-fallback { margin-top: 10px; font-size: 0.85rem; color: var(--color-text-soft); }

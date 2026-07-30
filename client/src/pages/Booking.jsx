@@ -242,8 +242,10 @@ export default function Booking() {
   const [manageGroupId, setManageGroupId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [showRecap, setShowRecap] = useState(false);
+  const [showAddonNudge, setShowAddonNudge] = useState(false);
 
   const formTopRef = useRef(null);
+  const addonsSectionRef = useRef(null);
   const isFirstRender = useRef(true);
 
   useEffect(() => {
@@ -315,6 +317,23 @@ export default function Booking() {
     [form.clientName, selectedService, selectedAddonIds, guests, services],
   );
 
+  // People whose chosen service has supplements available but none picked
+  // yet — used to nudge once before leaving step 1, instead of letting the
+  // client tab through without ever noticing they exist.
+  const addonNudgeTargets = useMemo(() => {
+    const targets = [];
+    if (selectedService?.addons?.length > 0 && selectedAddonIds.length === 0) {
+      targets.push({ name: form.clientName.trim() || 'vous', addons: selectedService.addons });
+    }
+    guests.forEach((g) => {
+      const svc = services.find((s) => s.id === g.serviceId);
+      if (svc?.addons?.length > 0 && g.addonIds.length === 0) {
+        targets.push({ name: g.name.trim() || 'cette personne', addons: svc.addons });
+      }
+    });
+    return targets;
+  }, [selectedService, selectedAddonIds, guests, services, form.clientName]);
+
   function pickCategory(key) {
     setCategory(key);
     setSubcategory(null);
@@ -368,6 +387,12 @@ export default function Booking() {
     setSlots([]);
     setSlotsState('idle');
     setSelectedSlot('');
+    // Bring the supplements into view so they're never missed just because
+    // the service grid pushed them below the fold — this is what the
+    // whole multi-step redesign was for in the first place.
+    requestAnimationFrame(() => {
+      addonsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    });
   }
 
   function addGuest() {
@@ -564,8 +589,28 @@ export default function Booking() {
       setFeedback({ type: 'error', text: error });
       return;
     }
+    // One soft nudge before leaving step 1 if a chosen service has
+    // supplements nobody's added yet — easy to miss even with the
+    // auto-scroll, and it's the one moment worth a gentle upsell.
+    if (step === 1 && addonNudgeTargets.length > 0) {
+      setShowAddonNudge(true);
+      return;
+    }
     setFeedback(null);
     setStep((s) => Math.min(4, s + 1));
+  }
+
+  function confirmSkipAddons() {
+    setShowAddonNudge(false);
+    setFeedback(null);
+    setStep((s) => Math.min(4, s + 1));
+  }
+
+  function reviewAddons() {
+    setShowAddonNudge(false);
+    requestAnimationFrame(() => {
+      addonsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    });
   }
 
   function goBack() {
@@ -719,7 +764,9 @@ export default function Booking() {
                     selectedServiceId={selectedServiceId}
                     onSelectService={pickService}
                   />
-                  <AddonCheckboxes service={selectedService} selectedIds={selectedAddonIds} onToggle={toggleAddon} />
+                  <div ref={addonsSectionRef}>
+                    <AddonCheckboxes service={selectedService} selectedIds={selectedAddonIds} onToggle={toggleAddon} />
+                  </div>
                 </div>
 
                 {guests.map((guest, i) => (
@@ -989,6 +1036,28 @@ export default function Booking() {
           </form>
         </div>
       </section>
+
+      {showAddonNudge && (
+        <div className="modal-overlay" onClick={reviewAddons}>
+          <div className="modal-card" role="dialog" aria-modal="true" aria-label="Suppléments disponibles" onClick={(e) => e.stopPropagation()}>
+            <h2>Ajouter un supplément ?</h2>
+            <p>
+              {addonNudgeTargets.map((t, i) => (
+                <span key={i}>
+                  {addonNudgeTargets.length > 1 && <strong>{t.name} — </strong>}
+                  {t.addons.map((a) => a.name).join(', ')}
+                  {i < addonNudgeTargets.length - 1 ? <br /> : null}
+                </span>
+              ))}
+              {' '}sont disponibles pour {addonNudgeTargets.length > 1 ? 'ces prestations' : 'cette prestation'}. Vous pouvez continuer sans, ou y jeter un œil.
+            </p>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-outline" onClick={reviewAddons}>Voir les suppléments</button>
+              <button type="button" className="btn btn-primary" onClick={confirmSkipAddons}>Continuer sans supplément</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showRecap && (
         <div className="modal-overlay" onClick={() => !submitting && setShowRecap(false)}>
