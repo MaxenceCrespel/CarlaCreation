@@ -36,9 +36,12 @@ export default function Gallery() {
   );
 
   // Same "only show what's actually used" rule for the subcategory pills
-  // under the selected top-level category.
+  // under the selected top-level category. Guarded on `category` being set:
+  // when it's null ("Toutes"), `c.parent_id === category` would otherwise
+  // match every OTHER top-level category too (their parent_id is also
+  // null), leaking them in as fake subcategories.
   const visibleSubcategories = useMemo(
-    () => categories.filter((c) => c.parent_id === category && usedCategoryIds.has(c.id)).sort((a, b) => a.sort_order - b.sort_order),
+    () => (category ? categories.filter((c) => c.parent_id === category && usedCategoryIds.has(c.id)).sort((a, b) => a.sort_order - b.sort_order) : []),
     [categories, category, usedCategoryIds],
   );
 
