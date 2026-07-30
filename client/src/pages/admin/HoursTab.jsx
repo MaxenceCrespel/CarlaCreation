@@ -151,44 +151,68 @@ function DayEditor({ day, onSave, onReset }) {
   );
 }
 
+let tierKeySeq = 0;
+
 // Carla is a solo auto-entrepreneuse: when a booking is à domicile, this
 // many minutes get blocked before/after it (and at the edges of the day's
-// open hours) so back-to-back bookings never ignore travel time.
+// open hours) so back-to-back bookings never ignore travel time. The travel
+// fee itself is a step schedule by distance (e.g. free under 10km, +2€
+// beyond) rather than a flat rate — clients see the free radius upfront on
+// the booking page, so there's never a surprise fee added at the end.
 function TravelBufferCard() {
   const showToast = useToast();
   const [minutes, setMinutes] = useState(null);
-  const [baseFeeEuros, setBaseFeeEuros] = useState(null);
-  const [perKmEuros, setPerKmEuros] = useState(null);
+  const [fallbackFeeEuros, setFallbackFeeEuros] = useState(null);
+  const [tiers, setTiers] = useState(null); // [{ key, minKm, feeEuros }]
   const [saving, setSaving] = useState(false);
 
   function load() {
     Promise.all([apiFetch('/admin/settings/travel-buffer'), apiFetch('/admin/settings/travel-fee')])
       .then(([buffer, fee]) => {
         setMinutes(buffer.minutes);
-        setBaseFeeEuros((fee.baseFeeCents / 100).toString());
-        setPerKmEuros((fee.perKmCents / 100).toString());
+        setFallbackFeeEuros((fee.fallbackCents / 100).toString());
+        setTiers(
+          [...fee.tiers]
+            .sort((a, b) => a.minKm - b.minKm)
+            .map((t) => ({ key: (tierKeySeq += 1), minKm: t.minKm.toString(), feeEuros: (t.feeCents / 100).toString() })),
+        );
       })
       .catch(() => showToast('Impossible de charger les réglages de trajet.', 'error'));
   }
 
   useEffect(load, []);
 
+  function updateTier(key, patch) {
+    setTiers((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  }
+  function addTier() {
+    setTiers((rows) => [...rows, { key: (tierKeySeq += 1), minKm: '', feeEuros: '' }]);
+  }
+  function removeTier(key) {
+    setTiers((rows) => rows.filter((r) => r.key !== key));
+  }
+
   async function save(e) {
     e.preventDefault();
+    if (!tiers.some((t) => Number(t.minKm) === 0)) {
+      showToast('Il faut un palier à partir de 0 km (le rayon gratuit).', 'error');
+      return;
+    }
     setSaving(true);
     try {
       await Promise.all([
         apiFetch('/admin/settings/travel-buffer', { method: 'PUT', body: { minutes: Number(minutes) } }),
-        apiFetch('/admin/settings/travel-fee/base', {
+        apiFetch('/admin/settings/travel-fee/fallback', {
           method: 'PUT',
-          body: { feeCents: Math.round(Number(baseFeeEuros) * 100) },
+          body: { feeCents: Math.round(Number(fallbackFeeEuros) * 100) },
         }),
-        apiFetch('/admin/settings/travel-fee/per-km', {
+        apiFetch('/admin/settings/travel-fee/tiers', {
           method: 'PUT',
-          body: { feeCents: Math.round(Number(perKmEuros) * 100) },
+          body: { tiers: tiers.map((t) => ({ minKm: Number(t.minKm), feeCents: Math.round(Number(t.feeEuros) * 100) })) },
         }),
       ]);
       showToast('Réglages de trajet mis à jour.', 'success');
+      load();
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
@@ -201,59 +225,89 @@ function TravelBufferCard() {
       <h2>Trajet (rendez-vous à domicile)</h2>
       <p className="section-lead">
         Le temps de trajet réel (calculé automatiquement à partir de l'adresse du client) est utilisé en priorité
-        pour bloquer le planning avant/après un rendez-vous à domicile, et pour calculer le frais de déplacement
-        (frais de base + prix au km). Les valeurs ci-dessous ne servent que de repli : quand l'adresse n'est pas
-        encore connue, introuvable, ou que le calcul automatique est indisponible.
+        pour bloquer le planning avant/après un rendez-vous à domicile. Le frais de déplacement suit les paliers
+        ci-dessous selon la distance réelle (ex : gratuit jusqu'à 10 km, puis 2 € au-delà) — le client voit le rayon
+        gratuit avant même de saisir son adresse. Les valeurs de repli ne servent que quand la distance est
+        introuvable (adresse non reconnue, calcul indisponible).
       </p>
-      {minutes === null || baseFeeEuros === null || perKmEuros === null ? (
+      {minutes === null || fallbackFeeEuros === null || tiers === null ? (
         <p className="loading-text">Chargement…</p>
       ) : (
-        <div className="form-row four-col">
-          <div>
-            <label htmlFor="travel-buffer-minutes">Minutes bloquées avant/après (repli)</label>
-            <input
-              type="number"
-              id="travel-buffer-minutes"
-              min={0}
-              max={240}
-              step={5}
-              required
-              value={minutes}
-              onChange={(e) => setMinutes(e.target.value)}
-            />
+        <>
+          <div className="form-row two-col">
+            <div>
+              <label htmlFor="travel-buffer-minutes">Minutes bloquées avant/après (repli)</label>
+              <input
+                type="number"
+                id="travel-buffer-minutes"
+                min={0}
+                max={240}
+                step={5}
+                required
+                value={minutes}
+                onChange={(e) => setMinutes(e.target.value)}
+              />
+            </div>
+            <div>
+              <label htmlFor="travel-fee-fallback-euros">Frais de repli (€)</label>
+              <input
+                type="number"
+                id="travel-fee-fallback-euros"
+                min={0}
+                max={100}
+                step={0.5}
+                required
+                value={fallbackFeeEuros}
+                onChange={(e) => setFallbackFeeEuros(e.target.value)}
+              />
+            </div>
           </div>
-          <div>
-            <label htmlFor="travel-fee-base-euros">Frais de base (€)</label>
-            <input
-              type="number"
-              id="travel-fee-base-euros"
-              min={0}
-              max={100}
-              step={0.5}
-              required
-              value={baseFeeEuros}
-              onChange={(e) => setBaseFeeEuros(e.target.value)}
-            />
+
+          <div className="form-row">
+            <label>Paliers de frais de déplacement</label>
+            <div className="travel-fee-tiers">
+              {tiers.map((t) => (
+                <div className="travel-fee-tier-row" key={t.key}>
+                  <span className="travel-fee-tier-label">À partir de</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={500}
+                    step={0.5}
+                    required
+                    value={t.minKm}
+                    onChange={(e) => updateTier(t.key, { minKm: e.target.value })}
+                    aria-label="Distance en km"
+                  />
+                  <span className="travel-fee-tier-label">km :</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.5}
+                    required
+                    value={t.feeEuros}
+                    onChange={(e) => updateTier(t.key, { feeEuros: e.target.value })}
+                    aria-label="Frais en euros"
+                  />
+                  <span className="travel-fee-tier-label">€</span>
+                  <button type="button" className="guest-remove-btn" onClick={() => removeTier(t.key)} disabled={tiers.length <= 1}>
+                    Retirer
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button type="button" className="btn btn-outline btn-sm" onClick={addTier} style={{ marginTop: 10 }}>
+              + Ajouter un palier
+            </button>
           </div>
-          <div>
-            <label htmlFor="travel-fee-per-km-euros">Prix au km (€)</label>
-            <input
-              type="number"
-              id="travel-fee-per-km-euros"
-              min={0}
-              max={50}
-              step={0.05}
-              required
-              value={perKmEuros}
-              onChange={(e) => setPerKmEuros(e.target.value)}
-            />
-          </div>
-          <div className="travel-buffer-save">
+
+          <div className="travel-buffer-save" style={{ marginTop: 16 }}>
             <button type="submit" className="btn btn-primary" disabled={saving}>
               {saving ? 'Enregistrement…' : 'Enregistrer'}
             </button>
           </div>
-        </div>
+        </>
       )}
     </form>
   );

@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsBoolean, IsInt, IsOptional, Matches, Max, Min, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsInt, IsNumber, IsOptional, Matches, Max, Min, ValidateNested } from 'class-validator';
 
 export class TimeRangeDto {
   @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
@@ -30,16 +30,33 @@ export class UpdateTravelBufferDto {
   minutes!: number;
 }
 
-export class UpdateTravelFeeBaseDto {
+export class UpdateTravelFeeFallbackDto {
   @IsInt()
   @Min(0)
   @Max(10000)
   feeCents!: number;
 }
 
-export class UpdateTravelFeePerKmDto {
+export class TravelFeeTierDto {
+  @IsNumber()
+  @Min(0)
+  @Max(500)
+  minKm!: number;
+
   @IsInt()
   @Min(0)
-  @Max(5000)
+  @Max(10000)
   feeCents!: number;
+}
+
+export class UpdateTravelFeeTiersDto {
+  // Replaces the whole schedule at once — simpler to reason about (and to
+  // validate as a set: unique thresholds, one starting at 0) than diffing
+  // individual tier edits.
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(10)
+  @ValidateNested({ each: true })
+  @Type(() => TravelFeeTierDto)
+  tiers!: TravelFeeTierDto[];
 }

@@ -9,6 +9,7 @@ import { Service } from '../../database/entities/service.entity';
 import { ServiceAddon } from '../../database/entities/service-addon.entity';
 import { ReservationAddon } from '../../database/entities/reservation-addon.entity';
 import { effectiveInterval, getAvailableSlots, intervalsOverlap, isValidDateString, localDateString, toHHMM, toMinutes } from './slots.util';
+import { resolveTierFee } from './travel-fee.util';
 import { AdditionalGuestDto, AdminCreateReservationDto, CreateReservationDto, UpdateReservationDto } from './dto/reservation.dto';
 import { MailService } from '../mail/mail.service';
 import { SettingsService } from '../settings/settings.service';
@@ -79,25 +80,28 @@ export class ReservationsService {
     private readonly distanceService: DistanceService,
   ) {}
 
-  // Base call-out fee always applies for an à-domicile booking; the
-  // per-km surcharge only if the address could actually be geocoded (see
-  // DistanceService — disabled/unconfigured/unresolvable all degrade to
-  // null distance rather than throwing).
+  // The fee schedule is a step function of distance (free under the admin's
+  // configured radius, then whatever tier the actual distance falls into —
+  // see resolveTierFee) so a client is never quoted a moving-target price:
+  // the "beyond Xkm, fees may apply" message is shown upfront in the
+  // booking flow, well before this ever runs. The flat fallback only
+  // applies when distance genuinely can't be determined (geocoding
+  // disabled/unconfigured/unresolvable), never as part of normal pricing.
   private async computeTravel(
     atClientHome: boolean,
     clientAddress: string | null,
   ): Promise<{ feeCents: number | null; distanceKm: number | null; durationMinutes: number | null }> {
     if (!atClientHome) return { feeCents: null, distanceKm: null, durationMinutes: null };
 
-    const baseFeeCents = await this.settingsService.getTravelFeeBaseCents();
-    if (!clientAddress) return { feeCents: baseFeeCents, distanceKm: null, durationMinutes: null };
+    const fallbackFeeCents = await this.settingsService.getTravelFeeFallbackCents();
+    if (!clientAddress) return { feeCents: fallbackFeeCents, distanceKm: null, durationMinutes: null };
 
     const estimate = await this.distanceService.estimate(siteConfig.siteAddress, clientAddress);
-    if (!estimate) return { feeCents: baseFeeCents, distanceKm: null, durationMinutes: null };
+    if (!estimate) return { feeCents: fallbackFeeCents, distanceKm: null, durationMinutes: null };
 
-    const perKmCents = await this.settingsService.getTravelFeePerKmCents();
+    const tiers = await this.settingsService.getTravelFeeTiers();
     return {
-      feeCents: baseFeeCents + Math.round(estimate.distanceKm * perKmCents),
+      feeCents: resolveTierFee(tiers, estimate.distanceKm),
       distanceKm: estimate.distanceKm,
       durationMinutes: estimate.durationMinutes,
     };
@@ -168,6 +172,32 @@ export class ReservationsService {
       cursor.setDate(cursor.getDate() + 1);
     }
     return null;
+  }
+
+  // Powers the day picker's "Complet" label: an open day with genuinely no
+  // slot left for this prestation (studio or à domicile — both can fill up)
+  // reads very differently from a day that's simply closed, and clients
+  // shouldn't have to tap through every open-looking day to find out.
+  async getDayAvailability(
+    serviceIds: number[],
+    atClientHome = false,
+    addonMinutes = 0,
+    address?: string,
+    days = 30,
+  ): Promise<{ date: string; hasSlots: boolean }[]> {
+    const services = await this.resolveServices(serviceIds, { activeOnly: true });
+    const totalDuration = services.reduce((sum, s) => sum + s.duration_minutes, 0) + addonMinutes;
+    const { candidateBufferMinutes, defaultBufferMinutes } = await this.resolveTravelBuffer(atClientHome, address);
+
+    const result: { date: string; hasSlots: boolean }[] = [];
+    const cursor = new Date();
+    for (let i = 0; i < days; i += 1) {
+      const dateStr = localDateString(cursor);
+      const { slots } = await getAvailableSlots(this.dataSource, dateStr, totalDuration, atClientHome, candidateBufferMinutes, defaultBufferMinutes);
+      result.push({ date: dateStr, hasSlots: slots.length > 0 });
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return result;
   }
 
   // Public booking: the primary contact (serviceId/clientName) plus any

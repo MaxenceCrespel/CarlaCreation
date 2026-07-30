@@ -31,7 +31,7 @@ describe('DistanceService', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('returns a rounded distance/duration when both calls succeed', async () => {
+  it('returns the distance rounded to 0.1km and the duration rounded UP to the nearest 15 minutes', async () => {
     (config as { GEOCODING_ENABLED: boolean }).GEOCODING_ENABLED = true;
 
     fetchMock
@@ -41,7 +41,9 @@ describe('DistanceService', () => {
 
     const result = await service.estimate('Origin', 'Destination');
 
-    expect(result).toEqual({ distanceKm: 8.4, durationMinutes: 14 });
+    // 842s = 14.03 min, rounded UP to the 15-minute grid — never 14, and
+    // never anything that would produce an ugly appointment time like 09:22.
+    expect(result).toEqual({ distanceKm: 8.4, durationMinutes: 15 });
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 

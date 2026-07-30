@@ -21,7 +21,7 @@ describe('ReservationsService', () => {
     sendAdminNewBookingNotification: jest.Mock;
     sendReminder: jest.Mock;
   };
-  let settingsService: { getTravelBufferMinutes: jest.Mock; getTravelFeeBaseCents: jest.Mock; getTravelFeePerKmCents: jest.Mock };
+  let settingsService: { getTravelBufferMinutes: jest.Mock; getTravelFeeFallbackCents: jest.Mock; getTravelFeeTiers: jest.Mock };
   let distanceService: { estimate: jest.Mock };
 
   const HAIRCUT = { id: 1, name: 'Coupe Femme', duration_minutes: 45, active: true };
@@ -58,11 +58,14 @@ describe('ReservationsService', () => {
     // "travelBufferMinutes is 30" assumption in the tests below.
     settingsService = {
       getTravelBufferMinutes: jest.fn().mockResolvedValue(30),
-      getTravelFeeBaseCents: jest.fn().mockResolvedValue(200),
-      getTravelFeePerKmCents: jest.fn().mockResolvedValue(50),
+      getTravelFeeFallbackCents: jest.fn().mockResolvedValue(200),
+      getTravelFeeTiers: jest.fn().mockResolvedValue([
+        { minKm: 0, feeCents: 0 },
+        { minKm: 10, feeCents: 200 },
+      ]),
     };
     // No address geocoded by default — most tests don't care about travel
-    // distance, so this keeps them on the "flat base fee only" fallback.
+    // distance, so this keeps them on the "flat fallback fee only" path.
     distanceService = { estimate: jest.fn().mockResolvedValue(null) };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -269,10 +272,10 @@ describe('ReservationsService', () => {
     expect(insertCalls[0]).toMatchObject({ travel_fee_cents: 200, travel_distance_km: null, travel_duration_minutes: null });
   });
 
-  it('createManual persists base fee + per-km surcharge when the address geocodes successfully', async () => {
+  it('createManual is free within the configured radius when the address geocodes successfully', async () => {
     serviceRepo.findOne.mockResolvedValue(HAIRCUT);
     noOverlap();
-    distanceService.estimate.mockResolvedValue({ distanceKm: 8.4, durationMinutes: 14 });
+    distanceService.estimate.mockResolvedValue({ distanceKm: 8.4, durationMinutes: 15 });
 
     const insertCalls: Record<string, unknown>[] = [];
     dataSource.transaction.mockImplementationOnce(async (fn) => {
@@ -292,8 +295,35 @@ describe('ReservationsService', () => {
       clientAddress: '12 rue du Test, 59000 Lille',
     } as any);
 
-    // 200 base + round(8.4 * 50) = 200 + 420 = 620
-    expect(insertCalls[0]).toMatchObject({ travel_fee_cents: 620, travel_distance_km: 8.4, travel_duration_minutes: 14 });
+    // 8.4km is under the 10km free-radius tier, so no fee — even though the
+    // distance is now known and persisted.
+    expect(insertCalls[0]).toMatchObject({ travel_fee_cents: 0, travel_distance_km: 8.4, travel_duration_minutes: 15 });
+  });
+
+  it('createManual applies the matching tier fee once past the free radius', async () => {
+    serviceRepo.findOne.mockResolvedValue(HAIRCUT);
+    noOverlap();
+    distanceService.estimate.mockResolvedValue({ distanceKm: 15, durationMinutes: 30 });
+
+    const insertCalls: Record<string, unknown>[] = [];
+    dataSource.transaction.mockImplementationOnce(async (fn) => {
+      const manager = { insert: jest.fn(async (_entity: unknown, payload: Record<string, unknown>) => (insertCalls.push(payload), { identifiers: [{ id: 203 }] })) };
+      return fn(manager);
+    });
+
+    await service.createManual({
+      serviceId: 1,
+      clientName: 'Test',
+      clientEmail: 'test@example.com',
+      clientPhone: '0600000000',
+      date: '2099-01-01',
+      startTime: '10:00',
+      status: 'confirmed',
+      atClientHome: true,
+      clientAddress: 'Somewhere further away',
+    } as any);
+
+    expect(insertCalls[0]).toMatchObject({ travel_fee_cents: 200, travel_distance_km: 15, travel_duration_minutes: 30 });
   });
 
   it('createManual leaves travel fields null for a studio (non à-domicile) booking', async () => {
@@ -321,7 +351,7 @@ describe('ReservationsService', () => {
   });
 
   describe('estimateTravel', () => {
-    it('reports unavailable and the flat base fee when geocoding fails', async () => {
+    it('reports unavailable and the flat fallback fee when geocoding fails', async () => {
       distanceService.estimate.mockResolvedValue(null);
       await expect(service.estimateTravel('Somewhere unresolvable')).resolves.toEqual({
         available: false,
@@ -331,13 +361,13 @@ describe('ReservationsService', () => {
       });
     });
 
-    it('reports the full estimate when geocoding succeeds', async () => {
-      distanceService.estimate.mockResolvedValue({ distanceKm: 10, durationMinutes: 18 });
+    it('reports the matching tier fee when geocoding succeeds', async () => {
+      distanceService.estimate.mockResolvedValue({ distanceKm: 10, durationMinutes: 30 });
       await expect(service.estimateTravel('12 rue du Test, 59000 Lille')).resolves.toEqual({
         available: true,
-        feeCents: 700,
+        feeCents: 200,
         distanceKm: 10,
-        durationMinutes: 18,
+        durationMinutes: 30,
       });
     });
   });

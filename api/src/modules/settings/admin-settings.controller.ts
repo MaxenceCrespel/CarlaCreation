@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, Put, UseGuards } from '@nestjs/co
 import { AdminAuthGuard } from '../../common/admin-auth.guard';
 import { CsrfGuard } from '../../common/csrf';
 import { SettingsService } from './settings.service';
-import { UpdateDailyHoursDto, UpdateTravelBufferDto, UpdateTravelFeeBaseDto, UpdateTravelFeePerKmDto } from './dto/settings.dto';
+import { UpdateDailyHoursDto, UpdateTravelBufferDto, UpdateTravelFeeFallbackDto, UpdateTravelFeeTiersDto } from './dto/settings.dto';
 
 @UseGuards(AdminAuthGuard)
 @Controller('api/admin/settings')
@@ -43,22 +43,22 @@ export class AdminSettingsController {
   @Get('travel-fee')
   async getTravelFee() {
     return {
-      baseFeeCents: await this.settingsService.getTravelFeeBaseCents(),
-      perKmCents: await this.settingsService.getTravelFeePerKmCents(),
+      fallbackCents: await this.settingsService.getTravelFeeFallbackCents(),
+      tiers: await this.settingsService.getTravelFeeTiers(),
     };
   }
 
   @UseGuards(CsrfGuard)
-  @Put('travel-fee/base')
-  async setTravelFeeBase(@Body() dto: UpdateTravelFeeBaseDto) {
-    await this.settingsService.setTravelFeeBaseCents(dto.feeCents);
+  @Put('travel-fee/fallback')
+  async setTravelFeeFallback(@Body() dto: UpdateTravelFeeFallbackDto) {
+    await this.settingsService.setTravelFeeFallbackCents(dto.feeCents);
     return { success: true };
   }
 
   @UseGuards(CsrfGuard)
-  @Put('travel-fee/per-km')
-  async setTravelFeePerKm(@Body() dto: UpdateTravelFeePerKmDto) {
-    await this.settingsService.setTravelFeePerKmCents(dto.feeCents);
+  @Put('travel-fee/tiers')
+  async setTravelFeeTiers(@Body() dto: UpdateTravelFeeTiersDto) {
+    await this.settingsService.setTravelFeeTiers(dto.tiers);
     return { success: true };
   }
 }

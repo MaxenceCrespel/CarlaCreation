@@ -180,7 +180,7 @@ function BookingSummary({ recapGuests, totalDuration, totalPrice }) {
 let guestKeySeq = 0;
 
 export default function Booking() {
-  const { sitePhone, sitePhoneHref, travelFeeBaseCents } = useSiteConfig();
+  const { sitePhone, sitePhoneHref, travelFeeFallbackCents, travelFreeRadiusKm } = useSiteConfig();
   useSeo({
     title: 'Réserver un rendez-vous à Lille',
     description:
@@ -220,6 +220,11 @@ export default function Booking() {
   const [slotsTooFar, setSlotsTooFar] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState('');
   const [hours, setHours] = useState([]);
+  // { 'YYYY-MM-DD': hasSlots } for the day picker's "Complet" label — an
+  // open day with genuinely nothing left for this prestation reads very
+  // differently from a closed one, and clients shouldn't have to tap every
+  // open-looking day to find out.
+  const [dayAvailability, setDayAvailability] = useState({});
   const [nextAvailable, setNextAvailable] = useState(null); // null | 'loading' | 'none' | { date, startTime }
 
   // Pre-fill from a previous visit so returning clients don't have to
@@ -290,7 +295,7 @@ export default function Booking() {
   // disabled — the client never sees a $0 quote just because the estimate
   // hasn't landed yet.
   const travelFeeCents = atClientHome
-    ? (travelEstimate && typeof travelEstimate === 'object' ? travelEstimate.feeCents : travelFeeBaseCents)
+    ? (travelEstimate && typeof travelEstimate === 'object' ? travelEstimate.feeCents : travelFeeFallbackCents)
     : 0;
   const totalPrice = useMemo(
     () =>
@@ -424,6 +429,29 @@ export default function Booking() {
       })
       .catch(() => {
         if (!cancelled) setNextAvailable(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serviceIds.join(','), allGuestsHaveService, atClientHome, totalAddonMinutes, debouncedAddress]);
+
+  // Powers the "Complet" label on the day picker below — same trigger as
+  // the next-available suggestion above.
+  useEffect(() => {
+    if (!selectedServiceId || !allGuestsHaveService) {
+      setDayAvailability({});
+      return;
+    }
+    let cancelled = false;
+    const addressParam = debouncedAddress ? `&address=${encodeURIComponent(debouncedAddress)}` : '';
+    apiFetch(`/reservations/day-availability?serviceIds=${serviceIds.join(',')}&atClientHome=${atClientHome}&addonMinutes=${totalAddonMinutes}&days=${DAY_PICKER_DAYS}${addressParam}`)
+      .then((result) => {
+        if (cancelled) return;
+        setDayAvailability(Object.fromEntries(result.map((d) => [d.date, d.hasSlots])));
+      })
+      .catch(() => {
+        if (!cancelled) setDayAvailability({});
       });
     return () => {
       cancelled = true;
@@ -769,6 +797,13 @@ export default function Booking() {
                   </button>
                 </div>
 
+                {atClientHome && Number.isFinite(travelFreeRadiusKm) && (
+                  <p className="form-hint">
+                    Déplacement gratuit dans un rayon de {travelFreeRadiusKm} km. Au-delà, des frais de déplacement
+                    peuvent s'appliquer.
+                  </p>
+                )}
+
                 {atClientHome && (
                   <div className="form-row">
                     <label htmlFor="clientAddress">Votre adresse</label>
@@ -786,7 +821,10 @@ export default function Booking() {
                     {travelEstimate === 'loading' && <p className="loading-text travel-estimate-hint">Calcul du trajet…</p>}
                     {travelEstimate && typeof travelEstimate === 'object' && (
                       <p className="travel-estimate-hint">
-                        ≈ {travelEstimate.distanceKm} km · {travelEstimate.durationMinutes} min de route · +{formatPrice(travelEstimate.feeCents)} de frais de déplacement
+                        ≈ {travelEstimate.distanceKm} km · {travelEstimate.durationMinutes} min de route
+                        {travelEstimate.feeCents > 0
+                          ? ` · +${formatPrice(travelEstimate.feeCents)} de frais de déplacement`
+                          : ' · déplacement gratuit'}
                       </p>
                     )}
                   </div>
@@ -822,6 +860,7 @@ export default function Booking() {
                     <div className="day-picker-scroll" role="listbox" aria-label="Choisir une date">
                       {hours.slice(0, DAY_PICKER_DAYS).map((h) => {
                         const isOpen = h.isSet && !h.isClosed && h.ranges.length > 0;
+                        const isFull = isOpen && dayAvailability[h.date] === false;
                         const isSelected = date === h.date;
                         return (
                           <button
@@ -829,13 +868,13 @@ export default function Booking() {
                             type="button"
                             role="option"
                             aria-selected={isSelected}
-                            className={`day-chip ${isOpen ? 'is-open' : 'is-closed'} ${isSelected ? 'is-selected' : ''}`}
-                            disabled={!isOpen}
+                            className={`day-chip ${isOpen ? (isFull ? 'is-full' : 'is-open') : 'is-closed'} ${isSelected ? 'is-selected' : ''}`}
+                            disabled={!isOpen || isFull}
                             onClick={() => setDate(h.date)}
                           >
                             <span className="day-chip-dow">{DAY_NAMES[h.dayOfWeek].slice(0, 3)}</span>
                             <span className="day-chip-num">{formatShortDate(h.date)}</span>
-                            <span className="day-chip-status">{isOpen ? 'Disponible' : 'Fermé'}</span>
+                            <span className="day-chip-status">{!isOpen ? 'Fermé' : isFull ? 'Complet' : 'Disponible'}</span>
                           </button>
                         );
                       })}

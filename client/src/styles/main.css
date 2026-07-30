@@ -380,6 +380,10 @@ img { max-width: 100%; display: block; }
 .day-chip.is-selected .day-chip-status { color: #fff; }
 .day-chip.is-closed { opacity: 0.5; cursor: not-allowed; }
 .day-chip.is-closed .day-chip-status { color: var(--color-muted); }
+/* Open but nothing left for this prestation — distinct from "closed" so
+   the client understands it's a scheduling issue, not a day off. */
+.day-chip.is-full { opacity: 0.65; cursor: not-allowed; border-style: dashed; }
+.day-chip.is-full .day-chip-status { color: #b3413a; }
 .day-chip:disabled { cursor: not-allowed; }
 
 .day-picker-fallback { margin-top: 10px; font-size: 0.85rem; color: var(--color-text-soft); }
@@ -691,6 +695,10 @@ img { max-width: 100%; display: block; }
 .form-row.two-col > div { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .travel-buffer-card { margin-bottom: 24px; }
 .travel-buffer-save { display: flex; align-items: flex-end; }
+.travel-fee-tiers { display: flex; flex-direction: column; gap: 10px; }
+.travel-fee-tier-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.travel-fee-tier-row input { width: 90px; }
+.travel-fee-tier-label { font-size: 0.88rem; color: var(--color-text-soft); white-space: nowrap; }
 
 label { font-size: 0.88rem; font-weight: 600; color: var(--color-text); }
 

@@ -2,7 +2,7 @@ import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, UseGuards } f
 import { Throttle } from '@nestjs/throttler';
 import { CsrfGuard } from '../../common/csrf';
 import { ReservationsService } from './reservations.service';
-import { AvailabilityQueryDto, CreateReservationDto, NextAvailableQueryDto, TravelEstimateQueryDto } from './dto/reservation.dto';
+import { AvailabilityQueryDto, CreateReservationDto, DayAvailabilityQueryDto, NextAvailableQueryDto, TravelEstimateQueryDto } from './dto/reservation.dto';
 
 @Controller('api/reservations')
 export class ReservationsController {
@@ -16,6 +16,12 @@ export class ReservationsController {
   @Get('next-available')
   nextAvailable(@Query() query: NextAvailableQueryDto) {
     return this.reservationsService.findNextAvailable(query.serviceIds, query.atClientHome ?? false, query.addonMinutes ?? 0, query.address);
+  }
+
+  // Powers the "Complet" label on the day picker.
+  @Get('day-availability')
+  dayAvailability(@Query() query: DayAvailabilityQueryDto) {
+    return this.reservationsService.getDayAvailability(query.serviceIds, query.atClientHome ?? false, query.addonMinutes ?? 0, query.address, query.days ?? 30);
   }
 
   // Live distance/duration/fee preview while the client types their

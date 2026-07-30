@@ -10,6 +10,7 @@
 -- one-command bootstrap path for a brand new database (Docker, or a local
 -- Postgres you're setting up by hand).
 
+DROP TABLE IF EXISTS travel_fee_tiers;
 DROP TABLE IF EXISTS app_settings;
 DROP TABLE IF EXISTS daily_hours_ranges;
 DROP TABLE IF EXISTS daily_hours;
@@ -163,11 +164,21 @@ CREATE TABLE
     IF NOT EXISTS app_settings (
         id INTEGER PRIMARY KEY DEFAULT 1,
         travel_buffer_minutes INTEGER NOT NULL DEFAULT 30,
-        travel_fee_base_cents INTEGER NOT NULL DEFAULT 200,
-        travel_fee_per_km_cents INTEGER NOT NULL DEFAULT 50
+        travel_fee_fallback_cents INTEGER NOT NULL DEFAULT 200
     );
 
-INSERT INTO app_settings (id, travel_buffer_minutes, travel_fee_base_cents, travel_fee_per_km_cents) VALUES (1, 30, 200, 50);
+INSERT INTO app_settings (id, travel_buffer_minutes, travel_fee_fallback_cents) VALUES (1, 30, 200);
+
+CREATE TABLE
+    IF NOT EXISTS travel_fee_tiers (
+        id SERIAL PRIMARY KEY,
+        min_km NUMERIC(6, 2) NOT NULL,
+        fee_cents INTEGER NOT NULL DEFAULT 0
+    );
+
+CREATE UNIQUE INDEX IF NOT EXISTS "IDX_travel_fee_tiers_min_km" ON travel_fee_tiers (min_km);
+
+INSERT INTO travel_fee_tiers (min_km, fee_cents) VALUES (0, 0), (10, 200);
 
 -- Records this bootstrap as already-applied so `npm run migration:run`
 -- doesn't try to re-run the (already-executed-via-this-file) InitSchema
@@ -193,7 +204,8 @@ VALUES
     (1784978234901, 'AddServiceCategoryParent1784978234901'),
     (1785012345678, 'AddAdminCalendarToken1785012345678'),
     (1785018765432, 'AddGalleryCategory1785018765432'),
-    (1785100000000, 'AddTravelDistance1785100000000');
+    (1785100000000, 'AddTravelDistance1785100000000'),
+    (1785200000000, 'AddTravelFeeTiers1785200000000');
 
 -- Admin account — username "carla", password "Carla0303!" (bcrypt, cost 12).
 -- Change this password after first login in a real deployment.

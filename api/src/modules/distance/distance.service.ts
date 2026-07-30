@@ -14,6 +14,12 @@ export interface TravelEstimate {
 const GEOCODE_URL = 'https://api.openrouteservice.org/geocode/search';
 const MATRIX_URL = 'https://api.openrouteservice.org/v2/matrix/driving-car';
 const REQUEST_TIMEOUT_MS = 5000;
+// Appointment start times are derived from this duration (as the travel
+// buffer) — a raw "13 minutes" produces an ugly 09:22 start time. Rounding
+// UP to the nearest 15 minutes keeps generated times on the same clean
+// grid as everything else (SLOT_STEP_MINUTES) and never underestimates the
+// actual trip.
+const DURATION_ROUNDING_STEP_MINUTES = 15;
 
 // Driving distance/duration between two French addresses via
 // OpenRouteService (free tier, no card required). Every failure mode
@@ -86,7 +92,7 @@ export class DistanceService {
 
     return {
       distanceKm: Math.round((distanceMeters / 1000) * 10) / 10,
-      durationMinutes: Math.round(durationSeconds / 60),
+      durationMinutes: Math.ceil(durationSeconds / 60 / DURATION_ROUNDING_STEP_MINUTES) * DURATION_ROUNDING_STEP_MINUTES,
     };
   }
 }

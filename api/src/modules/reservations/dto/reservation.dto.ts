@@ -12,6 +12,7 @@ import {
   IsString,
   Length,
   Matches,
+  Max,
   Min,
   ValidateIf,
   ValidateNested,
@@ -95,6 +96,39 @@ export class NextAvailableQueryDto {
   @IsString()
   @Length(5, 300)
   address?: string;
+}
+
+export class DayAvailabilityQueryDto {
+  // Comma-separated list, same convention as AvailabilityQueryDto.
+  @Transform(({ value }) => String(value).split(',').map((v: string) => Number(v.trim())))
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  serviceIds!: number[];
+
+  @IsOptional()
+  @Transform(({ obj }) => obj.atClientHome === true || obj.atClientHome === 'true')
+  @IsBoolean()
+  atClientHome?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }) => (value === undefined ? undefined : Number(value)))
+  @IsInt()
+  @Min(0)
+  addonMinutes?: number;
+
+  @IsOptional()
+  @IsString()
+  @Length(5, 300)
+  address?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => (value === undefined ? undefined : Number(value)))
+  @IsInt()
+  @Min(1)
+  @Max(60)
+  days?: number;
 }
 
 // A person booked alongside the primary contact (e.g. a mother booking for

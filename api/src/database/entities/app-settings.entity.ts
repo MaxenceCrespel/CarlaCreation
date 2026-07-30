@@ -2,7 +2,9 @@ import { Column, Entity, PrimaryColumn } from 'typeorm';
 
 // Single-row table (id is always 1) for the handful of admin-editable
 // global settings that don't belong anywhere else — currently the
-// à-domicile travel buffer and the flat travel/fuel surcharge.
+// à-domicile travel buffer and the fuel surcharge fallback (see
+// TravelFeeTier for the actual distance-based fee schedule; this fallback
+// only applies when the client's distance couldn't be determined at all).
 @Entity('app_settings')
 export class AppSettings {
   @PrimaryColumn({ default: 1 })
@@ -12,8 +14,5 @@ export class AppSettings {
   travel_buffer_minutes: number;
 
   @Column({ default: 200 })
-  travel_fee_base_cents: number;
-
-  @Column({ default: 50 })
-  travel_fee_per_km_cents: number;
+  travel_fee_fallback_cents: number;
 }

@@ -2,6 +2,7 @@ import { Controller, Get } from '@nestjs/common';
 import { config } from '../../config';
 import { siteConfig } from '../../site-config';
 import { SettingsService } from '../settings/settings.service';
+import { freeRadiusKm } from '../reservations/travel-fee.util';
 
 @Controller('api')
 export class MiscController {
@@ -20,11 +21,14 @@ export class MiscController {
     // confirmation email (see MailService), never on the public site or its
     // public API — Carla works from home, not a public storefront.
     const { siteAddress: _siteAddress, ...publicConfig } = siteConfig;
+    const tiers = await this.settingsService.getTravelFeeTiers();
+    const radiusKm = freeRadiusKm(tiers);
     return {
       ...publicConfig,
       siteUrl: config.PUBLIC_ORIGIN,
-      travelFeeBaseCents: await this.settingsService.getTravelFeeBaseCents(),
-      travelFeePerKmCents: await this.settingsService.getTravelFeePerKmCents(),
+      travelFeeFallbackCents: await this.settingsService.getTravelFeeFallbackCents(),
+      // Infinity isn't valid JSON — null means "fees never apply".
+      travelFreeRadiusKm: Number.isFinite(radiusKm) ? radiusKm : null,
     };
   }
 }
