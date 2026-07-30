@@ -380,9 +380,12 @@ img { max-width: 100%; display: block; }
 .day-chip.is-selected .day-chip-status { color: #fff; }
 .day-chip.is-closed { opacity: 0.5; cursor: not-allowed; }
 .day-chip.is-closed .day-chip-status { color: var(--color-muted); }
-/* Open but nothing left for this prestation — distinct from "closed" so
-   the client understands it's a scheduling issue, not a day off. */
-.day-chip.is-full { opacity: 0.65; cursor: not-allowed; border-style: dashed; }
+/* Open but nothing left for this prestation — a solid warm-tinted card
+   (not just dimmed like a day off) so it reads at a glance as "busy", a
+   different situation from "closed", rather than a fainter version of it. */
+.day-chip.is-full { cursor: not-allowed; background: #f6dad7; border-color: #eec3be; }
+.day-chip.is-full .day-chip-dow,
+.day-chip.is-full .day-chip-num { color: #8a2f2f; }
 .day-chip.is-full .day-chip-status { color: #b3413a; }
 .day-chip:disabled { cursor: not-allowed; }
 
