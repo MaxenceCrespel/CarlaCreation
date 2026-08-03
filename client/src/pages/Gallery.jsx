@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import { useSeo } from '../hooks/useSeo';
@@ -34,6 +34,19 @@ export default function Gallery() {
     () => topLevelCategories.filter((c) => usedCategoryIds.has(c.id) || categories.some((sub) => sub.parent_id === c.id && usedCategoryIds.has(sub.id))),
     [topLevelCategories, usedCategoryIds, categories],
   );
+
+  // Defaults to the first category instead of "Toutes" — mixing every
+  // category's photos together on first load reads as a jumble rather
+  // than a coherent set of work. "Toutes" stays one click away, this only
+  // picks the initial state (a ref so it never re-fires and overrides a
+  // client's later, deliberate click on "Toutes").
+  const hasDefaultedCategory = useRef(false);
+  useEffect(() => {
+    if (!hasDefaultedCategory.current && visibleTopLevel.length > 0) {
+      hasDefaultedCategory.current = true;
+      setCategory(visibleTopLevel[0].id);
+    }
+  }, [visibleTopLevel]);
 
   // Same "only show what's actually used" rule for the subcategory pills
   // under the selected top-level category. Guarded on `category` being set:
