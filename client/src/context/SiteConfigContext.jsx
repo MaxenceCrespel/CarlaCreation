@@ -7,7 +7,7 @@ const FALLBACK = {
   sitePhone: '',
   sitePhoneHref: '',
   siteEmail: '',
-  siteAddress: '',
+  sitePublicArea: '',
   siteUrl: '',
   travelFeeFallbackCents: 200,
   travelFreeRadiusKm: 10,

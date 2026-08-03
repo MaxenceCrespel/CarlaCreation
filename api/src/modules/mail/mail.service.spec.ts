@@ -71,6 +71,32 @@ describe('MailService — studio address privacy', () => {
     expect(html).toContain('9 avenue du Test, 59000 Lille');
   });
 
+  it('renders the revealed studio address as a clickable Google Maps link', async () => {
+    await service.sendStatusUpdate({ ...baseInput, status: 'confirmed' });
+    const html = sendMail.mock.calls[0][0].html;
+    expect(html).toContain(
+      `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent('1 rue Georges Clemenceau, 59120 Loos')}"`,
+    );
+  });
+
+  it('renders an à-domicile client\'s address as a clickable Google Maps link too', async () => {
+    const homeInput = { ...baseInput, atClientHome: true, clientAddress: '9 avenue du Test, 59000 Lille' };
+    await service.sendBookingReceived(homeInput);
+    const html = sendMail.mock.calls[0][0].html;
+    expect(html).toContain(
+      `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent('9 avenue du Test, 59000 Lille')}"`,
+    );
+  });
+
+  it('renders the client\'s address as a maps link in the admin new-booking notification too', async () => {
+    const homeInput = { ...baseInput, clientPhone: '0600000000', atClientHome: true, clientAddress: '9 avenue du Test, 59000 Lille' };
+    await service.sendAdminNewBookingNotification(homeInput);
+    const html = sendMail.mock.calls[0][0].html;
+    expect(html).toContain(
+      `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent('9 avenue du Test, 59000 Lille')}"`,
+    );
+  });
+
   it('always sends a plain-text alternative alongside the HTML (avoids an HTML-only spam signal)', async () => {
     await service.sendBookingReceived(baseInput);
     const { html, text } = sendMail.mock.calls[0][0];

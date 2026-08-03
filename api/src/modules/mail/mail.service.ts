@@ -98,7 +98,7 @@ export class MailService {
         <p style="margin:16px 0 4px;"><strong>Date :</strong> ${formatDateFr(input.date)}</p>
         <p style="margin:0 0 4px;"><strong>Lieu :</strong> ${
           input.atClientHome
-            ? `à domicile${input.clientAddress ? ` — ${escapeHtml(input.clientAddress)}` : ''}`
+            ? `à domicile${input.clientAddress ? ` — ${mapsLinkHtml(input.clientAddress)}` : ''}`
             : 'au studio'
         }</p>
         <table style="border-collapse:collapse;width:100%;margin:12px 0;">
@@ -171,9 +171,9 @@ export class MailService {
     // it in themselves. The studio's address is different: it's not shown
     // until the appointment is actually confirmed (see revealAddress).
     const locationLine = input.atClientHome
-      ? `<p style="margin:0 0 4px;"><strong>Lieu :</strong> à votre domicile${input.clientAddress ? ` — ${escapeHtml(input.clientAddress)}` : ''}</p>`
+      ? `<p style="margin:0 0 4px;"><strong>Lieu :</strong> à votre domicile${input.clientAddress ? ` — ${mapsLinkHtml(input.clientAddress)}` : ''}</p>`
       : `<p style="margin:0 0 4px;"><strong>Lieu :</strong> chez ${escapeHtml(siteConfig.siteName)}${
-          revealAddress ? ` — ${escapeHtml(siteConfig.siteAddress)}` : " — l'adresse exacte vous sera communiquée à la confirmation"
+          revealAddress ? ` — ${mapsLinkHtml(siteConfig.siteAddress)}` : " — l'adresse exacte vous sera communiquée à la confirmation"
         }</p>`;
 
     return `
@@ -196,7 +196,7 @@ export class MailService {
         </table>
         ${manageLink}
         <p style="margin-top:24px;">Une question ? Appelez-moi au ${escapeHtml(siteConfig.sitePhone)} ou répondez à cet email.</p>
-        <p style="color:#6B5C51;font-size:0.85em;margin-top:32px;">${escapeHtml(siteConfig.siteName)}${revealAddress ? ` — ${escapeHtml(siteConfig.siteAddress)}` : ''}</p>
+        <p style="color:#6B5C51;font-size:0.85em;margin-top:32px;">${escapeHtml(siteConfig.siteName)}${revealAddress ? ` — ${mapsLinkHtml(siteConfig.siteAddress)}` : ''}</p>
       </div>
     `;
   }
@@ -216,6 +216,15 @@ export class MailService {
       this.logger.error(`Failed to send email to ${to}: ${(err as Error).message}`);
     }
   }
+}
+
+// Turns a plain address into a clickable Google Maps link — recipients can
+// tap straight through instead of copy-pasting into a maps app themselves.
+// Degrades gracefully to plain address text in the plain-text email part
+// (htmlToText strips tags), same as every other link in these templates.
+function mapsLinkHtml(address: string): string {
+  const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+  return `<a href="${url}" style="color:#9A5F4B;">${escapeHtml(address)}</a>`;
 }
 
 function escapeHtml(str: string): string {

@@ -6,7 +6,7 @@ import { useSeo } from '../hooks/useSeo';
 import { getSavedContact, saveContact } from '../utils/contactStorage';
 
 export default function Contact() {
-  const { sitePhone, sitePhoneHref, siteEmail } = useSiteConfig();
+  const { sitePhone, sitePhoneHref, siteEmail, sitePublicArea } = useSiteConfig();
   useSeo({
     title: 'Contact — Studio à Lille',
     description: 'Téléphone, email et formulaire de contact de mon studio coiffure et ongles à Lille (Hauts-de-France).',
@@ -66,6 +66,9 @@ export default function Contact() {
             <ul className="contact-list">
               <li><strong>Téléphone</strong><span><a href={`tel:${sitePhoneHref}`}>{sitePhone}</a></span></li>
               <li><strong>Email</strong><span><a href={`mailto:${siteEmail}`}>{siteEmail}</a></span></li>
+              {sitePublicArea && (
+                <li><strong>Secteur</strong><span>{sitePublicArea} — l'adresse exacte vous sera communiquée à la confirmation de votre rendez-vous</span></li>
+              )}
             </ul>
           </div>
 
