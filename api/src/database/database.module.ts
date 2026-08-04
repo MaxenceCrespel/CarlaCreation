@@ -12,9 +12,12 @@ import { DailyHoursRange } from './entities/daily-hours-range.entity';
 import { AppSettings } from './entities/app-settings.entity';
 import { TravelFeeTier } from './entities/travel-fee-tier.entity';
 import { PushSubscription } from './entities/push-subscription.entity';
+import { Product } from './entities/product.entity';
 import { ServiceAddon } from './entities/service-addon.entity';
 import { ReservationAddon } from './entities/reservation-addon.entity';
 import { ServiceCategory } from './entities/service-category.entity';
+import { Invoice } from './entities/invoice.entity';
+import { InvoiceItem } from './entities/invoice-item.entity';
 
 // `synchronize: false` permanently — even in dev. Migrations
 // (database/migrations/*.ts, run via `npm run migration:run`) are the only
@@ -26,11 +29,11 @@ import { ServiceCategory } from './entities/service-category.entity';
     TypeOrmModule.forRoot({
       type: 'postgres',
       url: config.DATABASE_URL,
-      entities: [Admin, Service, Reservation, Gallery, ContactMessage, Review, DailyHours, DailyHoursRange, AppSettings, ServiceAddon, ReservationAddon, ServiceCategory, TravelFeeTier, PushSubscription],
+      entities: [Admin, Service, Reservation, Gallery, ContactMessage, Review, DailyHours, DailyHoursRange, AppSettings, ServiceAddon, ReservationAddon, ServiceCategory, TravelFeeTier, PushSubscription, Product, Invoice, InvoiceItem],
       synchronize: false,
       migrationsRun: false,
     }),
-    TypeOrmModule.forFeature([Admin, Service, Reservation, Gallery, ContactMessage, Review, DailyHours, DailyHoursRange, AppSettings, ServiceAddon, ReservationAddon, ServiceCategory, TravelFeeTier, PushSubscription]),
+    TypeOrmModule.forFeature([Admin, Service, Reservation, Gallery, ContactMessage, Review, DailyHours, DailyHoursRange, AppSettings, ServiceAddon, ReservationAddon, ServiceCategory, TravelFeeTier, PushSubscription, Product, Invoice, InvoiceItem]),
   ],
   exports: [TypeOrmModule],
 })

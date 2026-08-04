@@ -961,6 +961,41 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
    pinned to the top. */
 .row-actions { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
 
+/* Stock tab: inline-editable product rows */
+.admin-table input[type='text'], .admin-table input[type='number'] {
+  width: 100%;
+  min-width: 90px;
+  padding: 6px 8px;
+  font-size: 0.85rem;
+  border: 1px solid var(--color-bg-alt);
+  border-radius: var(--radius-sm, 6px);
+}
+.stock-quantity-cell { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.stock-quantity-input { width: 64px !important; min-width: 0 !important; text-align: center; }
+.stock-adjust-btn {
+  border: 1px solid var(--color-bg-alt);
+  background: var(--color-white);
+  border-radius: 999px;
+  width: 26px;
+  height: 26px;
+  line-height: 1;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  color: var(--color-accent-dark);
+}
+.stock-row-low { background: #fbf1ee; }
+.stock-low-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: #f6dad7;
+  color: #b3413a;
+  white-space: nowrap;
+}
+
 /* Reservations: list/calendar toggle */
 .view-toggle { display: flex; gap: 4px; background: var(--color-bg-alt); border-radius: 999px; padding: 4px; }
 .view-toggle-btn { padding: 6px 16px; border-radius: 999px; border: none; background: transparent; color: var(--color-text-soft); font-weight: 600; font-size: 0.85rem; cursor: pointer; }

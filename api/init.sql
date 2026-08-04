@@ -10,6 +10,9 @@
 -- one-command bootstrap path for a brand new database (Docker, or a local
 -- Postgres you're setting up by hand).
 
+DROP TABLE IF EXISTS invoice_items;
+DROP TABLE IF EXISTS invoices;
+DROP TABLE IF EXISTS products;
 DROP TABLE IF EXISTS push_subscriptions;
 DROP TABLE IF EXISTS travel_fee_tiers;
 DROP TABLE IF EXISTS app_settings;
@@ -47,6 +50,18 @@ CREATE TABLE
 CREATE UNIQUE INDEX IF NOT EXISTS "IDX_push_subscriptions_endpoint" ON push_subscriptions (endpoint);
 
 CREATE INDEX IF NOT EXISTS "IDX_push_subscriptions_admin_id" ON push_subscriptions (admin_id);
+
+CREATE TABLE
+    IF NOT EXISTS products (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        unit TEXT NOT NULL DEFAULT 'unité',
+        quantity NUMERIC(10, 2) NOT NULL DEFAULT 0,
+        low_stock_threshold NUMERIC(10, 2) NOT NULL DEFAULT 0,
+        notes TEXT NOT NULL DEFAULT '',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
 
 CREATE TABLE
     IF NOT EXISTS service_categories (
@@ -112,6 +127,42 @@ CREATE TABLE
 CREATE INDEX IF NOT EXISTS "IDX_reservations_reservation_date" ON reservations (reservation_date);
 
 CREATE INDEX IF NOT EXISTS "IDX_reservations_group_id" ON reservations (group_id);
+
+CREATE TABLE
+    IF NOT EXISTS invoices (
+        id SERIAL PRIMARY KEY,
+        number TEXT NOT NULL,
+        reservation_id INTEGER REFERENCES reservations (id) ON DELETE SET NULL,
+        client_name TEXT NOT NULL,
+        client_email TEXT NOT NULL DEFAULT '',
+        client_phone TEXT NOT NULL DEFAULT '',
+        client_address TEXT NOT NULL DEFAULT '',
+        issue_date DATE NOT NULL,
+        status TEXT NOT NULL DEFAULT 'unpaid',
+        payment_method TEXT,
+        paid_at TIMESTAMPTZ,
+        total_cents INTEGER NOT NULL DEFAULT 0,
+        notes TEXT NOT NULL DEFAULT '',
+        legal_mentions TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+CREATE UNIQUE INDEX IF NOT EXISTS "IDX_invoices_number" ON invoices (number);
+
+CREATE INDEX IF NOT EXISTS "IDX_invoices_reservation_id" ON invoices (reservation_id);
+
+CREATE TABLE
+    IF NOT EXISTS invoice_items (
+        id SERIAL PRIMARY KEY,
+        invoice_id INTEGER NOT NULL REFERENCES invoices (id) ON DELETE CASCADE,
+        description TEXT NOT NULL,
+        quantity NUMERIC(10, 2) NOT NULL DEFAULT 1,
+        unit_price_cents INTEGER NOT NULL DEFAULT 0,
+        sort_order INTEGER NOT NULL DEFAULT 0
+    );
+
+CREATE INDEX IF NOT EXISTS "IDX_invoice_items_invoice_id" ON invoice_items (invoice_id);
 
 CREATE TABLE
     IF NOT EXISTS reservation_addons (
@@ -221,7 +272,9 @@ VALUES
     (1785018765432, 'AddGalleryCategory1785018765432'),
     (1785100000000, 'AddTravelDistance1785100000000'),
     (1785200000000, 'AddTravelFeeTiers1785200000000'),
-    (1785300000000, 'AddPushSubscriptions1785300000000');
+    (1785300000000, 'AddPushSubscriptions1785300000000'),
+    (1785400000000, 'AddProducts1785400000000'),
+    (1785500000000, 'AddInvoices1785500000000');
 
 -- Admin account — username "carla", password "Carla0303!" (bcrypt, cost 12).
 -- Change this password after first login in a real deployment.

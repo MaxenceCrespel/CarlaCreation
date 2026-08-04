@@ -8,6 +8,8 @@ import HoursTab from './HoursTab';
 import ServicesTab from './ServicesTab';
 import AvisTab from './AvisTab';
 import AccountTab from './AccountTab';
+import StockTab from './StockTab';
+import FacturationTab from './FacturationTab';
 
 const TABS = [
   { key: 'dashboard', label: 'Tableau de bord', Component: DashboardTab },
@@ -15,6 +17,8 @@ const TABS = [
   { key: 'gallery', label: 'Galerie', Component: GalleryTab },
   { key: 'services', label: 'Prestations', Component: ServicesTab },
   { key: 'hours', label: 'Horaires', Component: HoursTab },
+  { key: 'stock', label: 'Stock', Component: StockTab },
+  { key: 'facturation', label: 'Facturation', Component: FacturationTab },
   { key: 'reviews', label: 'Avis', Component: AvisTab },
   { key: 'account', label: 'Mon compte', Component: AccountTab },
 ];

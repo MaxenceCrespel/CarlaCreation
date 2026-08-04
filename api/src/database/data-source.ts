@@ -16,6 +16,9 @@ import { ReservationAddon } from './entities/reservation-addon.entity';
 import { ServiceCategory } from './entities/service-category.entity';
 import { TravelFeeTier } from './entities/travel-fee-tier.entity';
 import { PushSubscription } from './entities/push-subscription.entity';
+import { Product } from './entities/product.entity';
+import { Invoice } from './entities/invoice.entity';
+import { InvoiceItem } from './entities/invoice-item.entity';
 
 // Standalone DataSource used by the TypeORM CLI (migrations) and by
 // standalone scripts (seedAdmin.ts, seed.ts) that run outside the Nest DI
@@ -24,7 +27,7 @@ import { PushSubscription } from './entities/push-subscription.entity';
 export const AppDataSource = new DataSource({
   type: 'postgres',
   url: config.DATABASE_URL,
-  entities: [Admin, Service, Reservation, Gallery, ContactMessage, Review, DailyHours, DailyHoursRange, AppSettings, ServiceAddon, ReservationAddon, ServiceCategory, TravelFeeTier, PushSubscription],
+  entities: [Admin, Service, Reservation, Gallery, ContactMessage, Review, DailyHours, DailyHoursRange, AppSettings, ServiceAddon, ReservationAddon, ServiceCategory, TravelFeeTier, PushSubscription, Product, Invoice, InvoiceItem],
   migrations: [__dirname + '/migrations/*.{ts,js}'],
   synchronize: false,
 });
