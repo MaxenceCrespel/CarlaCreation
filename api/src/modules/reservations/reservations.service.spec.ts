@@ -8,6 +8,7 @@ import { ServiceAddon } from '../../database/entities/service-addon.entity';
 import { MailService } from '../mail/mail.service';
 import { SettingsService } from '../settings/settings.service';
 import { DistanceService } from '../distance/distance.service';
+import { PushService } from '../push/push.service';
 
 describe('ReservationsService', () => {
   let service: ReservationsService;
@@ -23,6 +24,7 @@ describe('ReservationsService', () => {
   };
   let settingsService: { getTravelBufferMinutes: jest.Mock; getTravelFeeFallbackCents: jest.Mock; getTravelFeeTiers: jest.Mock };
   let distanceService: { estimate: jest.Mock };
+  let pushService: { notifyAdmins: jest.Mock };
 
   const HAIRCUT = { id: 1, name: 'Coupe Femme', duration_minutes: 45, active: true };
   const MANICURE = { id: 7, name: 'Manucure Classique', duration_minutes: 30, active: true };
@@ -67,6 +69,7 @@ describe('ReservationsService', () => {
     // No address geocoded by default — most tests don't care about travel
     // distance, so this keeps them on the "flat fallback fee only" path.
     distanceService = { estimate: jest.fn().mockResolvedValue(null) };
+    pushService = { notifyAdmins: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -78,6 +81,7 @@ describe('ReservationsService', () => {
         { provide: MailService, useValue: mailService },
         { provide: SettingsService, useValue: settingsService },
         { provide: DistanceService, useValue: distanceService },
+        { provide: PushService, useValue: pushService },
       ],
     }).compile();
 

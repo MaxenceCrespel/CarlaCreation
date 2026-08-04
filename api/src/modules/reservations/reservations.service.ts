@@ -14,6 +14,7 @@ import { AdditionalGuestDto, AdminCreateReservationDto, CreateReservationDto, Up
 import { MailService } from '../mail/mail.service';
 import { SettingsService } from '../settings/settings.service';
 import { DistanceService } from '../distance/distance.service';
+import { PushService } from '../push/push.service';
 import { siteConfig } from '../../site-config';
 
 interface Guest {
@@ -78,6 +79,7 @@ export class ReservationsService {
     private readonly mailService: MailService,
     private readonly settingsService: SettingsService,
     private readonly distanceService: DistanceService,
+    private readonly pushService: PushService,
   ) {}
 
   // The fee schedule is a step function of distance (free under the admin's
@@ -262,6 +264,13 @@ export class ReservationsService {
       guests: result.guests,
       atClientHome,
       clientAddress: result.clientAddress,
+    });
+    // Same event as the email above, just also surfaced instantly if she's
+    // enabled notifications — neither channel depends on the other.
+    await this.pushService.notifyAdmins({
+      title: 'Nouvelle demande de rendez-vous',
+      body: `${dto.clientName} — ${result.date} à ${result.startTime}`,
+      url: '/admin',
     });
 
     return result;

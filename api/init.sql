@@ -10,6 +10,7 @@
 -- one-command bootstrap path for a brand new database (Docker, or a local
 -- Postgres you're setting up by hand).
 
+DROP TABLE IF EXISTS push_subscriptions;
 DROP TABLE IF EXISTS travel_fee_tiers;
 DROP TABLE IF EXISTS app_settings;
 DROP TABLE IF EXISTS daily_hours_ranges;
@@ -32,6 +33,20 @@ CREATE TABLE
         calendar_token TEXT UNIQUE,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+
+CREATE TABLE
+    IF NOT EXISTS push_subscriptions (
+        id SERIAL PRIMARY KEY,
+        admin_id INTEGER NOT NULL REFERENCES admins (id) ON DELETE CASCADE,
+        endpoint TEXT NOT NULL,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+CREATE UNIQUE INDEX IF NOT EXISTS "IDX_push_subscriptions_endpoint" ON push_subscriptions (endpoint);
+
+CREATE INDEX IF NOT EXISTS "IDX_push_subscriptions_admin_id" ON push_subscriptions (admin_id);
 
 CREATE TABLE
     IF NOT EXISTS service_categories (
@@ -205,7 +220,8 @@ VALUES
     (1785012345678, 'AddAdminCalendarToken1785012345678'),
     (1785018765432, 'AddGalleryCategory1785018765432'),
     (1785100000000, 'AddTravelDistance1785100000000'),
-    (1785200000000, 'AddTravelFeeTiers1785200000000');
+    (1785200000000, 'AddTravelFeeTiers1785200000000'),
+    (1785300000000, 'AddPushSubscriptions1785300000000');
 
 -- Admin account — username "carla", password "Carla0303!" (bcrypt, cost 12).
 -- Change this password after first login in a real deployment.

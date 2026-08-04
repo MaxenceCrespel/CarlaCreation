@@ -78,6 +78,18 @@ const MAIL_ENABLED = Boolean(SMTP_HOST);
 const GEOCODING_API_KEY = process.env.ORS_API_KEY || '';
 const GEOCODING_ENABLED = Boolean(GEOCODING_API_KEY);
 
+// Also entirely optional, same pattern. Without both keys, the admin's
+// "Activer les notifications" button in Mon compte just stays hidden/
+// disabled — new-booking emails still go out regardless, push is purely an
+// addition on top. Generate once with `web-push generate-vapid-keys` (or
+// `node -e "console.log(require('web-push').generateVAPIDKeys())"`) and
+// never regenerate — that would invalidate every admin's existing
+// subscription.
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || '';
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '';
+const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:carlacreation59@gmail.com';
+const PUSH_ENABLED = Boolean(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY);
+
 export const config = {
   NODE_ENV,
   isProd,
@@ -95,4 +107,8 @@ export const config = {
   MAIL_ENABLED,
   GEOCODING_API_KEY,
   GEOCODING_ENABLED,
+  VAPID_PUBLIC_KEY,
+  VAPID_PRIVATE_KEY,
+  VAPID_SUBJECT,
+  PUSH_ENABLED,
 };

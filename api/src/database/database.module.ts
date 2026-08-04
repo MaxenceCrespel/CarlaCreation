@@ -11,6 +11,7 @@ import { DailyHours } from './entities/daily-hours.entity';
 import { DailyHoursRange } from './entities/daily-hours-range.entity';
 import { AppSettings } from './entities/app-settings.entity';
 import { TravelFeeTier } from './entities/travel-fee-tier.entity';
+import { PushSubscription } from './entities/push-subscription.entity';
 import { ServiceAddon } from './entities/service-addon.entity';
 import { ReservationAddon } from './entities/reservation-addon.entity';
 import { ServiceCategory } from './entities/service-category.entity';
@@ -25,11 +26,11 @@ import { ServiceCategory } from './entities/service-category.entity';
     TypeOrmModule.forRoot({
       type: 'postgres',
       url: config.DATABASE_URL,
-      entities: [Admin, Service, Reservation, Gallery, ContactMessage, Review, DailyHours, DailyHoursRange, AppSettings, ServiceAddon, ReservationAddon, ServiceCategory, TravelFeeTier],
+      entities: [Admin, Service, Reservation, Gallery, ContactMessage, Review, DailyHours, DailyHoursRange, AppSettings, ServiceAddon, ReservationAddon, ServiceCategory, TravelFeeTier, PushSubscription],
       synchronize: false,
       migrationsRun: false,
     }),
-    TypeOrmModule.forFeature([Admin, Service, Reservation, Gallery, ContactMessage, Review, DailyHours, DailyHoursRange, AppSettings, ServiceAddon, ReservationAddon, ServiceCategory, TravelFeeTier]),
+    TypeOrmModule.forFeature([Admin, Service, Reservation, Gallery, ContactMessage, Review, DailyHours, DailyHoursRange, AppSettings, ServiceAddon, ReservationAddon, ServiceCategory, TravelFeeTier, PushSubscription]),
   ],
   exports: [TypeOrmModule],
 })

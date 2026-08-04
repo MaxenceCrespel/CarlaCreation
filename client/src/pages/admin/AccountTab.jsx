@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
+import { disablePushNotifications, enablePushNotifications, getExistingSubscription, pushSupported } from '../../utils/push';
 
 // Publishes reservations as a subscribable .ics feed (Apple/Google/Outlook
 // Calendar can all subscribe to a plain https:// or webcal:// URL) — one
@@ -77,6 +78,115 @@ function CalendarSyncCard() {
             {working ? 'Génération…' : 'Régénérer le lien'}
           </button>
         </>
+      )}
+    </div>
+  );
+}
+
+// 'checking' | 'unsupported' | 'unavailable' (server has no VAPID keys
+// configured) | 'off' | 'on'.
+function PushNotificationCard() {
+  const showToast = useToast();
+  const [status, setStatus] = useState('checking');
+  const [working, setWorking] = useState(false);
+
+  async function refresh() {
+    if (!pushSupported()) {
+      setStatus('unsupported');
+      return;
+    }
+    try {
+      const { publicKey } = await apiFetch('/admin/push/public-key');
+      if (!publicKey) {
+        setStatus('unavailable');
+        return;
+      }
+      const subscription = await getExistingSubscription();
+      if (!subscription) {
+        setStatus('off');
+        return;
+      }
+      // The browser can still hold a subscription object the server has
+      // since pruned (e.g. it went stale and got cleaned up on a failed
+      // send) — trust the server's record, not just local state.
+      const { subscribed } = await apiFetch(`/admin/push/status?endpoint=${encodeURIComponent(subscription.endpoint)}`);
+      setStatus(subscribed ? 'on' : 'off');
+    } catch {
+      setStatus('off');
+    }
+  }
+
+  useEffect(() => {
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function enable() {
+    setWorking(true);
+    try {
+      await enablePushNotifications();
+      setStatus('on');
+      showToast('Notifications activées.', 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function disable() {
+    setWorking(true);
+    try {
+      await disablePushNotifications();
+      setStatus('off');
+      showToast('Notifications désactivées.', 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function sendTest() {
+    setWorking(true);
+    try {
+      await apiFetch('/admin/push/test', { method: 'POST' });
+      showToast('Notification de test envoyée.', 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  if (status === 'unsupported' || status === 'unavailable') return null;
+
+  return (
+    <div className="card" style={{ marginTop: 24 }}>
+      <h2>Notifications</h2>
+      <p className="section-lead">
+        Recevez une notification sur cet appareil dès qu'une nouvelle demande de rendez-vous arrive — en plus de
+        l'email, pas à la place. Fonctionne même app fermée, à condition d'avoir ajouté le site à l'écran d'accueil
+        (sur iPhone : Safari → Partager → Sur l'écran d'accueil).
+      </p>
+
+      {status === 'checking' && <p className="loading-text">Vérification…</p>}
+
+      {status === 'off' && (
+        <button type="button" className="btn btn-primary" onClick={enable} disabled={working}>
+          {working ? 'Activation…' : 'Activer les notifications'}
+        </button>
+      )}
+
+      {status === 'on' && (
+        <div className="manual-reservation-form-actions">
+          <button type="button" className="btn btn-outline" onClick={sendTest} disabled={working}>
+            Envoyer une notification de test
+          </button>
+          <button type="button" className="btn btn-outline-danger" onClick={disable} disabled={working}>
+            {working ? 'Désactivation…' : 'Désactiver'}
+          </button>
+        </div>
       )}
     </div>
   );
@@ -207,6 +317,7 @@ export default function AccountTab({ username, onCredentialsUpdated }) {
     <div style={{ marginTop: 24 }}>
       <CalendarSyncCard />
     </div>
+    <PushNotificationCard />
     </>
   );
 }
