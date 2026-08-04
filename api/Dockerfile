@@ -38,19 +38,23 @@ RUN apk add --no-cache postgresql-client
 # waiting on a base image rebuild.
 RUN npm install -g npm@latest
 
-# Even the latest npm still vendors a vulnerable brace-expansion copy
-# internally (CVE-2026-14257, DoS via crafted pattern — fixed upstream in
-# 5.0.8, npm just hasn't picked it up yet). `npm install --prefix` can't
-# patch a single nested dependency in place (it tries to resolve npm's own
-# *private* internal package.json against the public registry and 404s),
-# so fetch the fixed tarball and swap the vendored copy directly.
+# Even the latest npm still vendors vulnerable copies of a few
+# dependencies internally — each fixed upstream, npm just hasn't picked up
+# the bump yet. `npm install --prefix` can't patch a single nested
+# dependency in place (it tries to resolve npm's own *private* internal
+# package.json against the public registry and 404s), so fetch each fixed
+# tarball and swap the vendored copy directly.
+#   - brace-expansion: CVE-2026-14257 (fixed 5.0.8), then CVE-2026-69152
+#     found in that very 5.0.8 fix (fixed 5.0.9) — re-check this pin
+#     whenever Trivy flags it again, this package has had two CVEs in a row.
+#   - ip-address: CVE-2026-69192, Address4 leading-zero octets decoded as
+#     decimal while resolvers treat them as octal (fixed 10.3.1).
 RUN NPM_DIR="$(npm root -g)/npm" \
   && cd /tmp \
-  && npm pack brace-expansion@5.0.8 \
-  && tar -xzf brace-expansion-5.0.8.tgz \
-  && rm -rf "$NPM_DIR/node_modules/brace-expansion" \
-  && mv package "$NPM_DIR/node_modules/brace-expansion" \
-  && rm -f brace-expansion-5.0.8.tgz
+  && npm pack brace-expansion@5.0.9 ip-address@10.3.1 \
+  && tar -xzf brace-expansion-5.0.9.tgz && rm -rf "$NPM_DIR/node_modules/brace-expansion" && mv package "$NPM_DIR/node_modules/brace-expansion" \
+  && tar -xzf ip-address-10.3.1.tgz && rm -rf "$NPM_DIR/node_modules/ip-address" && mv package "$NPM_DIR/node_modules/ip-address" \
+  && rm -f brace-expansion-5.0.9.tgz ip-address-10.3.1.tgz
 
 COPY --from=api-build /build/api/node_modules ./node_modules
 COPY --from=api-build /build/api/dist ./dist
