@@ -4,10 +4,14 @@ import { Repository } from 'typeorm';
 import { Review } from '../../database/entities/review.entity';
 import type { ReviewStatus } from '../../database/entities/review.entity';
 import { CreateReviewDto } from './dto/review.dto';
+import { PushService } from '../push/push.service';
 
 @Injectable()
 export class ReviewsService {
-  constructor(@InjectRepository(Review) private readonly reviewRepo: Repository<Review>) {}
+  constructor(
+    @InjectRepository(Review) private readonly reviewRepo: Repository<Review>,
+    private readonly pushService: PushService,
+  ) {}
 
   async findApprovedWithSummary(): Promise<{ average: number | null; count: number; reviews: Review[] }> {
     const reviews = await this.reviewRepo.find({
@@ -40,6 +44,12 @@ export class ReviewsService {
       status: 'pending',
     });
     await this.reviewRepo.save(review);
+
+    await this.pushService.notifyAdmins({
+      title: 'Nouvel avis à modérer',
+      body: `${dto.clientName} — ${dto.rating}/5`,
+      url: '/admin',
+    });
   }
 
   findAll(): Promise<Review[]> {

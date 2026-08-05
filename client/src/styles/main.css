@@ -972,6 +972,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
 }
 .stock-quantity-cell { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .stock-quantity-input { width: 64px !important; min-width: 0 !important; text-align: center; }
+.stock-price-input { width: 90px !important; min-width: 0 !important; }
 .stock-adjust-btn {
   border: 1px solid var(--color-bg-alt);
   background: var(--color-white);

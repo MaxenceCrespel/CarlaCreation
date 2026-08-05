@@ -32,6 +32,12 @@ export class Product {
   @Column({ type: 'numeric', precision: 10, scale: 2, default: 0, transformer: numericTransformer })
   low_stock_threshold: number;
 
+  // Unit purchase cost — lets the Stock tab show a total stock value
+  // (quantity × purchase_price_cents) for a rough financial snapshot. Only
+  // the current price is kept, no purchase history (per Carla's choice).
+  @Column({ type: 'int', default: 0 })
+  purchase_price_cents: number;
+
   @Column({ type: 'text', default: '' })
   notes: string;
 

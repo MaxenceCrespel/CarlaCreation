@@ -18,6 +18,7 @@ export class ProductsService {
       unit: dto.unit?.trim() || 'unité',
       quantity: dto.quantity ?? 0,
       low_stock_threshold: dto.lowStockThreshold ?? 0,
+      purchase_price_cents: dto.purchasePriceCents ?? 0,
       notes: dto.notes?.trim() ?? '',
     });
     return this.productRepo.save(product);
@@ -31,6 +32,7 @@ export class ProductsService {
     if (dto.unit !== undefined) product.unit = dto.unit.trim() || 'unité';
     if (dto.quantity !== undefined) product.quantity = dto.quantity;
     if (dto.lowStockThreshold !== undefined) product.low_stock_threshold = dto.lowStockThreshold;
+    if (dto.purchasePriceCents !== undefined) product.purchase_price_cents = dto.purchasePriceCents;
     if (dto.notes !== undefined) product.notes = dto.notes.trim();
 
     return this.productRepo.save(product);

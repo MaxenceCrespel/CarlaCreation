@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
+import { formatPrice } from '../../utils/format';
 
-const EMPTY_FORM = { name: '', unit: 'unité', quantity: '0', lowStockThreshold: '0', notes: '' };
+const EMPTY_FORM = { name: '', unit: 'unité', quantity: '0', lowStockThreshold: '0', purchasePriceEuros: '0.00', notes: '' };
 
 function AddProductForm({ onCreated }) {
   const showToast = useToast();
@@ -25,6 +26,7 @@ function AddProductForm({ onCreated }) {
           unit: form.unit.trim() || 'unité',
           quantity: Number(form.quantity) || 0,
           lowStockThreshold: Number(form.lowStockThreshold) || 0,
+          purchasePriceCents: Math.round(Number(form.purchasePriceEuros) * 100) || 0,
           notes: form.notes.trim(),
         },
       });
@@ -60,8 +62,14 @@ function AddProductForm({ onCreated }) {
         </div>
       </div>
       <div className="form-row">
-        <label htmlFor="product-notes">Note (optionnel)</label>
-        <input type="text" id="product-notes" maxLength={500} placeholder="Ex : fournisseur, référence…" value={form.notes} onChange={update('notes')} />
+        <div>
+          <label htmlFor="product-price">Prix d'achat unitaire (€)</label>
+          <input type="number" id="product-price" min={0} step="0.01" value={form.purchasePriceEuros} onChange={update('purchasePriceEuros')} />
+        </div>
+        <div>
+          <label htmlFor="product-notes">Note (optionnel)</label>
+          <input type="text" id="product-notes" maxLength={500} placeholder="Ex : fournisseur, référence…" value={form.notes} onChange={update('notes')} />
+        </div>
       </div>
       <button type="submit" className="btn btn-primary" disabled={submitting}>
         {submitting ? 'Ajout…' : 'Ajouter'}
@@ -75,11 +83,13 @@ function ProductRow({ product, onAdjust, onSave, onRemove }) {
   const [name, setName] = useState(product.name);
   const [unit, setUnit] = useState(product.unit);
   const [threshold, setThreshold] = useState(product.low_stock_threshold.toString());
+  const [priceEuros, setPriceEuros] = useState((product.purchase_price_cents / 100).toFixed(2));
   const [notes, setNotes] = useState(product.notes);
   const [quantityInput, setQuantityInput] = useState(product.quantity.toString());
   const [saving, setSaving] = useState(false);
 
   const isLow = product.low_stock_threshold > 0 && product.quantity <= product.low_stock_threshold;
+  const stockValueCents = Math.round(product.quantity * product.purchase_price_cents);
 
   async function adjust(delta) {
     const next = Math.max(0, product.quantity + delta);
@@ -100,6 +110,7 @@ function ProductRow({ product, onAdjust, onSave, onRemove }) {
         unit: unit.trim(),
         quantity: Number(quantityInput) || 0,
         lowStockThreshold: Number(threshold) || 0,
+        purchasePriceCents: Math.round(Number(priceEuros) * 100) || 0,
         notes: notes.trim(),
       });
       showToast('Produit mis à jour.', 'success');
@@ -128,6 +139,10 @@ function ProductRow({ product, onAdjust, onSave, onRemove }) {
       </td>
       <td><input type="text" value={unit} maxLength={30} onChange={(e) => setUnit(e.target.value)} /></td>
       <td><input type="number" min={0} step="0.5" value={threshold} onChange={(e) => setThreshold(e.target.value)} /></td>
+      <td>
+        <input type="number" min={0} step="0.01" className="stock-price-input" value={priceEuros} onChange={(e) => setPriceEuros(e.target.value)} />
+        <div className="row-addons">{formatPrice(stockValueCents)} au total</div>
+      </td>
       <td><input type="text" value={notes} maxLength={500} onChange={(e) => setNotes(e.target.value)} /></td>
       <td className="row-actions">
         <button type="button" className="save-btn" onClick={save} disabled={saving}>{saving ? '…' : 'Enregistrer'}</button>
@@ -173,10 +188,17 @@ export default function StockTab() {
   }
 
   const lowStockCount = (products ?? []).filter((p) => p.low_stock_threshold > 0 && p.quantity <= p.low_stock_threshold).length;
+  const totalStockValueCents = (products ?? []).reduce((sum, p) => sum + Math.round(p.quantity * p.purchase_price_cents), 0);
 
   return (
     <>
       <AddProductForm onCreated={(created) => setProducts((rows) => [...(rows ?? []), created])} />
+
+      {products !== null && products.length > 0 && (
+        <div className="card" style={{ marginBottom: 24 }}>
+          <h2 style={{ marginBottom: 0 }}>Valeur totale du stock : {formatPrice(totalStockValueCents)}</h2>
+        </div>
+      )}
 
       {lowStockCount > 0 && (
         <p className="form-feedback error" style={{ marginBottom: 16 }}>
@@ -197,6 +219,7 @@ export default function StockTab() {
                 <th>Quantité</th>
                 <th>Unité</th>
                 <th>Seuil d'alerte</th>
+                <th>Prix d'achat</th>
                 <th>Note</th>
                 <th>Actions</th>
               </tr>

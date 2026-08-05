@@ -718,9 +718,9 @@ describe('ReservationsService', () => {
     await expect(service.cancelByGroupId('some-group')).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('cancelByGroupId cancels a pending booking and notifies the client', async () => {
+  it('cancelByGroupId cancels a pending booking, notifies the client and pushes to the admin', async () => {
     dataSource.query.mockImplementation(async (sql: string) => {
-      if (sql.includes('SELECT status')) return [{ status: 'pending' }];
+      if (sql.includes('SELECT status')) return [{ status: 'pending', client_name: 'Mother', reservation_date: '2099-01-01' }];
       return [
         {
           client_name: 'Mother',
@@ -738,6 +738,9 @@ describe('ReservationsService', () => {
 
     expect(reservationRepo.update).toHaveBeenCalledWith({ group_id: 'some-group' }, { status: 'cancelled' });
     expect(mailService.sendStatusUpdate).toHaveBeenCalledWith(expect.objectContaining({ status: 'cancelled' }));
+    expect(pushService.notifyAdmins).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Rendez-vous annulé par le client' }),
+    );
   });
 
   describe('updateReservation', () => {

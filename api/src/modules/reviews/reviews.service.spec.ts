@@ -3,6 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException } from '@nestjs/common';
 import { ReviewsService } from './reviews.service';
 import { Review } from '../../database/entities/review.entity';
+import { PushService } from '../push/push.service';
 
 describe('ReviewsService', () => {
   let service: ReviewsService;
@@ -14,6 +15,7 @@ describe('ReviewsService', () => {
     delete: jest.Mock;
     createQueryBuilder: jest.Mock;
   };
+  let pushService: { notifyAdmins: jest.Mock };
 
   beforeEach(async () => {
     repo = {
@@ -24,9 +26,14 @@ describe('ReviewsService', () => {
       delete: jest.fn(),
       createQueryBuilder: jest.fn(),
     };
+    pushService = { notifyAdmins: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [ReviewsService, { provide: getRepositoryToken(Review), useValue: repo }],
+      providers: [
+        ReviewsService,
+        { provide: getRepositoryToken(Review), useValue: repo },
+        { provide: PushService, useValue: pushService },
+      ],
     }).compile();
 
     service = module.get(ReviewsService);
@@ -73,5 +80,13 @@ describe('ReviewsService', () => {
   it('updateStatus throws NotFoundException for a missing review', async () => {
     repo.findOne.mockResolvedValue(null);
     await expect(service.updateStatus(999, 'approved')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('create notifies admins of the new review to moderate', async () => {
+    await service.create({ clientName: 'Test', rating: 5, comment: 'Great!' } as any);
+
+    expect(pushService.notifyAdmins).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Nouvel avis à modérer' }),
+    );
   });
 });

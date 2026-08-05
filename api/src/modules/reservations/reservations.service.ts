@@ -835,8 +835,8 @@ export class ReservationsService {
   }
 
   async cancelByGroupId(groupId: string): Promise<void> {
-    const rows: { status: ReservationStatus }[] = await this.dataSource.query(
-      `SELECT status FROM reservations WHERE group_id = $1 LIMIT 1`,
+    const rows: { status: ReservationStatus; client_name: string; reservation_date: string }[] = await this.dataSource.query(
+      `SELECT status, client_name, reservation_date FROM reservations WHERE group_id = $1 LIMIT 1`,
       [groupId],
     );
     if (rows.length === 0) {
@@ -850,6 +850,15 @@ export class ReservationsService {
     }
 
     await this.updateGroupStatus(groupId, 'cancelled');
+
+    // Only the client-initiated path notifies — an admin changing the
+    // status herself (updateGroupStatus called elsewhere) doesn't need a
+    // push telling her about her own action.
+    await this.pushService.notifyAdmins({
+      title: 'Rendez-vous annulé par le client',
+      body: `${rows[0].client_name} — ${rows[0].reservation_date}`,
+      url: '/admin',
+    });
   }
 
   // Runs every 10 minutes so a reservation crossing the "24h before" mark

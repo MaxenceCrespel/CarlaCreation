@@ -58,6 +58,7 @@ CREATE TABLE
         unit TEXT NOT NULL DEFAULT 'unité',
         quantity NUMERIC(10, 2) NOT NULL DEFAULT 0,
         low_stock_threshold NUMERIC(10, 2) NOT NULL DEFAULT 0,
+        purchase_price_cents INTEGER NOT NULL DEFAULT 0,
         notes TEXT NOT NULL DEFAULT '',
         created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -274,7 +275,8 @@ VALUES
     (1785200000000, 'AddTravelFeeTiers1785200000000'),
     (1785300000000, 'AddPushSubscriptions1785300000000'),
     (1785400000000, 'AddProducts1785400000000'),
-    (1785500000000, 'AddInvoices1785500000000');
+    (1785500000000, 'AddInvoices1785500000000'),
+    (1785600000000, 'AddProductPurchasePrice1785600000000');
 
 -- Admin account — username "carla", password "Carla0303!" (bcrypt, cost 12).
 -- Change this password after first login in a real deployment.

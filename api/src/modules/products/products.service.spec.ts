@@ -30,14 +30,14 @@ describe('ProductsService', () => {
     expect(repo.find).toHaveBeenCalledWith({ order: { name: 'ASC' } });
   });
 
-  it('create defaults unit to "unité" and quantity/threshold to 0 when omitted', async () => {
+  it('create defaults unit to "unité" and quantity/threshold/price to 0 when omitted', async () => {
     const result = await service.create({ name: '  Oxydant 20 vol  ' } as any);
-    expect(result).toMatchObject({ name: 'Oxydant 20 vol', unit: 'unité', quantity: 0, low_stock_threshold: 0, notes: '' });
+    expect(result).toMatchObject({ name: 'Oxydant 20 vol', unit: 'unité', quantity: 0, low_stock_threshold: 0, purchase_price_cents: 0, notes: '' });
   });
 
-  it('create trims text fields and keeps provided quantity/threshold/unit', async () => {
-    const result = await service.create({ name: 'Vernis rouge', unit: 'flacon', quantity: 12, lowStockThreshold: 3, notes: ' commande mensuelle ' } as any);
-    expect(result).toMatchObject({ name: 'Vernis rouge', unit: 'flacon', quantity: 12, low_stock_threshold: 3, notes: 'commande mensuelle' });
+  it('create trims text fields and keeps provided quantity/threshold/unit/price', async () => {
+    const result = await service.create({ name: 'Vernis rouge', unit: 'flacon', quantity: 12, lowStockThreshold: 3, purchasePriceCents: 450, notes: ' commande mensuelle ' } as any);
+    expect(result).toMatchObject({ name: 'Vernis rouge', unit: 'flacon', quantity: 12, low_stock_threshold: 3, purchase_price_cents: 450, notes: 'commande mensuelle' });
   });
 
   it('update throws NotFoundException for a missing product', async () => {
@@ -46,9 +46,15 @@ describe('ProductsService', () => {
   });
 
   it('update only changes provided fields', async () => {
-    repo.findOne.mockResolvedValue({ id: 1, name: 'Vernis rouge', unit: 'flacon', quantity: 12, low_stock_threshold: 3, notes: '' });
+    repo.findOne.mockResolvedValue({ id: 1, name: 'Vernis rouge', unit: 'flacon', quantity: 12, low_stock_threshold: 3, purchase_price_cents: 450, notes: '' });
     await service.update(1, { quantity: 8 } as any);
-    expect(repo.save).toHaveBeenCalledWith(expect.objectContaining({ quantity: 8, name: 'Vernis rouge', unit: 'flacon' }));
+    expect(repo.save).toHaveBeenCalledWith(expect.objectContaining({ quantity: 8, name: 'Vernis rouge', unit: 'flacon', purchase_price_cents: 450 }));
+  });
+
+  it('update changes the purchase price when provided', async () => {
+    repo.findOne.mockResolvedValue({ id: 1, name: 'Vernis rouge', unit: 'flacon', quantity: 12, low_stock_threshold: 3, purchase_price_cents: 450, notes: '' });
+    await service.update(1, { purchasePriceCents: 600 } as any);
+    expect(repo.save).toHaveBeenCalledWith(expect.objectContaining({ purchase_price_cents: 600 }));
   });
 
   it("update falls back to 'unité' if the unit is cleared to an empty string", async () => {
