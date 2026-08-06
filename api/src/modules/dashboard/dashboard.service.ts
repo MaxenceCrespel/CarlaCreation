@@ -166,6 +166,19 @@ export class DashboardService {
     const projectedFullCapacityCents = Math.round(avgRevenuePerHourCents * (openMinutes / 60));
     const avgBasketCents = confirmedOrCompletedCount > 0 ? Math.round((generatedCents + upcomingCents) / confirmedOrCompletedCount) : 0;
 
+    // Expenses logged for the period (Expense.expense_date, not created_at —
+    // an expense entered late for an earlier purchase still counts against
+    // that purchase's month). Net margin compares against generatedCents
+    // only (revenue already earned so far), not the upcoming/pending
+    // buckets — an expense already happened, a future booking hasn't.
+    const expenseRows: { category: string; total: string }[] = await this.dataSource.query(
+      `SELECT category, SUM(amount_cents) AS total FROM expenses WHERE expense_date BETWEEN $1 AND $2 GROUP BY category ORDER BY total DESC`,
+      [from, to],
+    );
+    const expensesByCategory = expenseRows.map((row) => ({ category: row.category, amountCents: Number(row.total) }));
+    const expensesTotalCents = expensesByCategory.reduce((sum, row) => sum + row.amountCents, 0);
+    const netCents = generatedCents - expensesTotalCents;
+
     return {
       period: { from, to },
       revenue: {
@@ -176,6 +189,11 @@ export class DashboardService {
         projectedFullCapacityCents,
         avgBasketCents,
       },
+      expenses: {
+        totalCents: expensesTotalCents,
+        byCategory: expensesByCategory,
+      },
+      netCents,
       hours: {
         bookedHours: round1(bookedMinutes / 60),
         openHours: round1(openMinutes / 60),

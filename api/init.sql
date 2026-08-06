@@ -10,6 +10,7 @@
 -- one-command bootstrap path for a brand new database (Docker, or a local
 -- Postgres you're setting up by hand).
 
+DROP TABLE IF EXISTS expenses;
 DROP TABLE IF EXISTS invoice_items;
 DROP TABLE IF EXISTS invoices;
 DROP TABLE IF EXISTS products;
@@ -63,6 +64,19 @@ CREATE TABLE
         created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+
+CREATE TABLE
+    IF NOT EXISTS expenses (
+        id SERIAL PRIMARY KEY,
+        expense_date DATE NOT NULL,
+        category TEXT NOT NULL DEFAULT 'Autre',
+        description TEXT NOT NULL DEFAULT '',
+        amount_cents INTEGER NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+CREATE INDEX IF NOT EXISTS "IDX_expenses_expense_date" ON expenses (expense_date);
 
 CREATE TABLE
     IF NOT EXISTS service_categories (
@@ -276,7 +290,8 @@ VALUES
     (1785300000000, 'AddPushSubscriptions1785300000000'),
     (1785400000000, 'AddProducts1785400000000'),
     (1785500000000, 'AddInvoices1785500000000'),
-    (1785600000000, 'AddProductPurchasePrice1785600000000');
+    (1785600000000, 'AddProductPurchasePrice1785600000000'),
+    (1785700000000, 'AddExpenses1785700000000');
 
 -- Admin account — username "carla", password "Carla0303!" (bcrypt, cost 12).
 -- Change this password after first login in a real deployment.

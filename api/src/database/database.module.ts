@@ -18,6 +18,7 @@ import { ReservationAddon } from './entities/reservation-addon.entity';
 import { ServiceCategory } from './entities/service-category.entity';
 import { Invoice } from './entities/invoice.entity';
 import { InvoiceItem } from './entities/invoice-item.entity';
+import { Expense } from './entities/expense.entity';
 
 // `synchronize: false` permanently — even in dev. Migrations
 // (database/migrations/*.ts, run via `npm run migration:run`) are the only
@@ -29,11 +30,11 @@ import { InvoiceItem } from './entities/invoice-item.entity';
     TypeOrmModule.forRoot({
       type: 'postgres',
       url: config.DATABASE_URL,
-      entities: [Admin, Service, Reservation, Gallery, ContactMessage, Review, DailyHours, DailyHoursRange, AppSettings, ServiceAddon, ReservationAddon, ServiceCategory, TravelFeeTier, PushSubscription, Product, Invoice, InvoiceItem],
+      entities: [Admin, Service, Reservation, Gallery, ContactMessage, Review, DailyHours, DailyHoursRange, AppSettings, ServiceAddon, ReservationAddon, ServiceCategory, TravelFeeTier, PushSubscription, Product, Invoice, InvoiceItem, Expense],
       synchronize: false,
       migrationsRun: false,
     }),
-    TypeOrmModule.forFeature([Admin, Service, Reservation, Gallery, ContactMessage, Review, DailyHours, DailyHoursRange, AppSettings, ServiceAddon, ReservationAddon, ServiceCategory, TravelFeeTier, PushSubscription, Product, Invoice, InvoiceItem]),
+    TypeOrmModule.forFeature([Admin, Service, Reservation, Gallery, ContactMessage, Review, DailyHours, DailyHoursRange, AppSettings, ServiceAddon, ReservationAddon, ServiceCategory, TravelFeeTier, PushSubscription, Product, Invoice, InvoiceItem, Expense]),
   ],
   exports: [TypeOrmModule],
 })

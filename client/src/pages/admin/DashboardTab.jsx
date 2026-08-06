@@ -122,6 +122,24 @@ function TopServicesBars({ services }) {
   );
 }
 
+// Same horizontal-bars pattern as TopServicesBars, for expenses by category.
+function ExpensesByCategoryBars({ categories }) {
+  const max = Math.max(1, ...categories.map((c) => c.amountCents));
+  return (
+    <div className="top-services-bars">
+      {categories.map((c) => (
+        <div key={c.category} className="top-service-row">
+          <span className="top-service-name">{c.category}</span>
+          <div className="top-service-bar-track">
+            <div className="top-service-bar" style={{ width: `${Math.max(4, Math.round((c.amountCents / max) * 100))}%` }} />
+          </div>
+          <span className="top-service-value">{formatPrice(c.amountCents)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // Running total of the daily revenue across the month, with a dashed
 // reference line at the projected-100%-fill figure — shows at a glance
 // whether the month is tracking toward that projection.
@@ -283,6 +301,12 @@ export default function DashboardTab() {
             <KpiCard label="CA généré" value={formatPrice(data.revenue.generatedCents)} hint="Rendez-vous confirmés/terminés déjà passés" />
             <KpiCard label="CA à venir" value={formatPrice(data.revenue.upcomingCents)} hint="Rendez-vous confirmés à venir" />
             <KpiCard label="CA en attente" value={formatPrice(data.revenue.pendingCents)} hint="Non confirmé, non comptabilisé ci-dessus" />
+            <KpiCard label="Dépenses" value={formatPrice(data.expenses.totalCents)} hint="Dépenses enregistrées sur la période" />
+            <KpiCard
+              label="Marge nette"
+              value={formatPrice(data.netCents)}
+              hint="CA généré − dépenses de la période"
+            />
             <KpiCard
               label="Panier moyen"
               value={formatPrice(data.revenue.avgBasketCents)}
@@ -354,6 +378,15 @@ export default function DashboardTab() {
               <p className="loading-text">Aucune réservation confirmée sur cette période.</p>
             ) : (
               <TopServicesBars services={data.topServices} />
+            )}
+          </div>
+
+          <div className="card" style={{ marginTop: 24 }}>
+            <h2>Dépenses par catégorie</h2>
+            {data.expenses.byCategory.length === 0 ? (
+              <p className="loading-text">Aucune dépense enregistrée sur cette période.</p>
+            ) : (
+              <ExpensesByCategoryBars categories={data.expenses.byCategory} />
             )}
           </div>
         </>

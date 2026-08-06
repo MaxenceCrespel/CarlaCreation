@@ -22,6 +22,7 @@ import { CalendarFeedModule } from './modules/calendar-feed/calendar-feed.module
 import { PushModule } from './modules/push/push.module';
 import { ProductsModule } from './modules/products/products.module';
 import { InvoicesModule } from './modules/invoices/invoices.module';
+import { ExpensesModule } from './modules/expenses/expenses.module';
 
 // Rate limiting (global + the tighter per-route @Throttle overrides on
 // login/booking/contact/reviews) would make the integration test suite
@@ -70,6 +71,7 @@ class NoopThrottlerGuard implements CanActivate {
     PushModule,
     ProductsModule,
     InvoicesModule,
+    ExpensesModule,
   ],
   providers: [
     {

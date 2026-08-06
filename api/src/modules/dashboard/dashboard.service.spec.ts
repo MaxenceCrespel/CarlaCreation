@@ -74,6 +74,9 @@ describe('DashboardService', () => {
       if (sql.includes('COUNT(*)::int')) {
         return Promise.resolve([{ count: 2 }]);
       }
+      if (sql.includes('FROM expenses')) {
+        return Promise.resolve([{ category: 'Produits', total: '1200' }]);
+      }
       throw new Error(`Unexpected query: ${sql}`);
     });
     getEffectiveHoursForDate.mockResolvedValue({
@@ -109,6 +112,8 @@ describe('DashboardService', () => {
     expect(result.newReservationsCount).toBe(2);
     expect(result.topServices).toEqual([{ serviceId: 1, name: 'Coupe Femme', count: 1, revenueCents: 3500 }]);
     expect(result.dailyBreakdown).toEqual([{ date: '2026-01-01', revenueCents: 3500, bookedHours: 0.5, isClosed: false }]);
+    expect(result.expenses).toEqual({ totalCents: 1200, byCategory: [{ category: 'Produits', amountCents: 1200 }] });
+    expect(result.netCents).toBe(2300); // 3500 generated - 1200 expenses
   });
 
   it('skips closed days when computing open/available hours', async () => {
@@ -116,6 +121,7 @@ describe('DashboardService', () => {
       if (sql.includes('FROM reservations r')) return Promise.resolve([]);
       if (sql.includes('GROUP BY status')) return Promise.resolve([]);
       if (sql.includes('COUNT(*)::int')) return Promise.resolve([{ count: 0 }]);
+      if (sql.includes('FROM expenses')) return Promise.resolve([]);
       throw new Error(`Unexpected query: ${sql}`);
     });
     getEffectiveHoursForDate.mockResolvedValue({
