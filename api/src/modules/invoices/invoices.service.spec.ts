@@ -7,6 +7,7 @@ import { InvoiceItem } from '../../database/entities/invoice-item.entity';
 import { Reservation } from '../../database/entities/reservation.entity';
 import { Service } from '../../database/entities/service.entity';
 import { ReservationAddon } from '../../database/entities/reservation-addon.entity';
+import { Promotion } from '../../database/entities/promotion.entity';
 
 describe('InvoicesService', () => {
   let service: InvoicesService;
@@ -14,6 +15,7 @@ describe('InvoicesService', () => {
   let reservationRepo: { findOne: jest.Mock };
   let serviceRepo: { findOne: jest.Mock };
   let addonRepo: { find: jest.Mock };
+  let promotionRepo: { findOne: jest.Mock };
   let dataSource: { transaction: jest.Mock };
 
   beforeEach(async () => {
@@ -21,6 +23,7 @@ describe('InvoicesService', () => {
     reservationRepo = { findOne: jest.fn() };
     serviceRepo = { findOne: jest.fn() };
     addonRepo = { find: jest.fn() };
+    promotionRepo = { findOne: jest.fn() };
     dataSource = {
       transaction: jest.fn(async (fn) => {
         const manager = {
@@ -41,6 +44,7 @@ describe('InvoicesService', () => {
         { provide: getRepositoryToken(Reservation), useValue: reservationRepo },
         { provide: getRepositoryToken(Service), useValue: serviceRepo },
         { provide: getRepositoryToken(ReservationAddon), useValue: addonRepo },
+        { provide: getRepositoryToken(Promotion), useValue: promotionRepo },
         { provide: getDataSourceToken(), useValue: dataSource },
       ],
     }).compile();
@@ -83,6 +87,33 @@ describe('InvoicesService', () => {
     expect(draft.items).toEqual([
       { description: 'Manucure Classique', quantity: 1, unitPriceCents: 3500 },
       { description: 'Nail art', quantity: 1, unitPriceCents: 500 },
+      { description: 'Frais de déplacement', quantity: 1, unitPriceCents: 200 },
+    ]);
+  });
+
+  it('draftFromReservation adds a negative discount line labelled with the promotion, computed on the service+addons subtotal only', async () => {
+    reservationRepo.findOne.mockResolvedValue({
+      id: 5,
+      client_name: 'Julie Martin',
+      client_email: 'julie@example.com',
+      client_phone: '0600000000',
+      client_address: null,
+      service_id: 1,
+      travel_fee_cents: 200,
+      promotion_id: 3,
+      discount_percent: 10,
+    });
+    serviceRepo.findOne.mockResolvedValue({ name: 'Manucure Classique', price_cents: 3500 });
+    addonRepo.find.mockResolvedValue([{ name: 'Nail art', extra_price_cents: 500 }]);
+    promotionRepo.findOne.mockResolvedValue({ id: 3, label: 'Tarif étudiant' });
+
+    const draft = await service.draftFromReservation(5);
+
+    // (3500 + 500) * 10% = 400, travel fee untouched
+    expect(draft.items).toEqual([
+      { description: 'Manucure Classique', quantity: 1, unitPriceCents: 3500 },
+      { description: 'Nail art', quantity: 1, unitPriceCents: 500 },
+      { description: 'Réduction (Tarif étudiant, -10%)', quantity: 1, unitPriceCents: -400 },
       { description: 'Frais de déplacement', quantity: 1, unitPriceCents: 200 },
     ]);
   });

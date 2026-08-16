@@ -210,6 +210,20 @@ export class CreateReservationDto {
   @ValidateNested({ each: true })
   @Type(() => AdditionalGuestDto)
   additionalGuests?: AdditionalGuestDto[];
+
+  // At most one of these two — the "tarif spécial" dropdown (promotionId,
+  // must be an active non-code promotion) or a typed "code promo"
+  // (promoCode, must be an active code-based promotion). See
+  // ReservationsService.resolvePublicPromotion for validation.
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  promotionId?: number;
+
+  @IsOptional()
+  @IsString()
+  @Length(3, 30)
+  promoCode?: string;
 }
 
 export class UpdateReservationStatusDto {
@@ -281,6 +295,13 @@ export class UpdateReservationDto {
   @IsOptional()
   @IsBoolean()
   allowOverlap?: boolean;
+
+  // null clears the promotion, a number switches to a different one (any
+  // active promotion — same admin-picker rule as AdminCreateReservationDto).
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  promotionId?: number | null;
 }
 
 // Used by the admin to manually log a reservation (walk-in, phone booking…).
@@ -348,4 +369,12 @@ export class AdminCreateReservationDto {
   @IsOptional()
   @IsBoolean()
   allowOverlap?: boolean;
+
+  // Admin picks directly from the full promotion list (any active
+  // promotion, code-based or not — she doesn't need to type a code she
+  // already sees) — see ReservationsService.resolveAdminPromotion.
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  promotionId?: number;
 }

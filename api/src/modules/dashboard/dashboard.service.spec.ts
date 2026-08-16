@@ -47,6 +47,7 @@ describe('DashboardService', () => {
             reservation_date: '2026-01-01',
             status: 'confirmed',
             at_client_home: true,
+            discount_percent: 0,
           },
           {
             id: 2,
@@ -58,6 +59,7 @@ describe('DashboardService', () => {
             reservation_date: '2026-01-01',
             status: 'pending',
             at_client_home: false,
+            discount_percent: 0,
           },
         ]);
       }
@@ -114,6 +116,45 @@ describe('DashboardService', () => {
     expect(result.dailyBreakdown).toEqual([{ date: '2026-01-01', revenueCents: 3500, bookedHours: 0.5, isClosed: false }]);
     expect(result.expenses).toEqual({ totalCents: 1200, byCategory: [{ category: 'Produits', amountCents: 1200 }] });
     expect(result.netCents).toBe(2300); // 3500 generated - 1200 expenses
+  });
+
+  it('applies a reservation\'s discount_percent to its contribution to CA (mère qui prend rdv à tarif réduit ne fausse pas le CA)', async () => {
+    dataSource.query.mockImplementation((sql: string) => {
+      if (sql.includes('FROM reservations r')) {
+        return Promise.resolve([
+          {
+            id: 1,
+            service_id: 1,
+            service_name: 'Coupe Femme',
+            price_cents: 4000,
+            start_time: '09:00',
+            end_time: '09:30',
+            reservation_date: '2026-01-01',
+            status: 'confirmed',
+            at_client_home: false,
+            discount_percent: 10, // -10% tarif étudiant
+          },
+        ]);
+      }
+      if (sql.includes('reservation_addons')) return Promise.resolve([]);
+      if (sql.includes('GROUP BY status')) return Promise.resolve([{ status: 'confirmed', count: 1 }]);
+      if (sql.includes('COUNT(*)::int')) return Promise.resolve([{ count: 1 }]);
+      if (sql.includes('FROM expenses')) return Promise.resolve([]);
+      throw new Error(`Unexpected query: ${sql}`);
+    });
+    getEffectiveHoursForDate.mockResolvedValue({
+      date: '2026-01-01',
+      dayOfWeek: 4,
+      isClosed: false,
+      isSet: true,
+      ranges: [{ openTime: '09:00', closeTime: '12:00' }],
+    });
+
+    const result = await service.getDashboard('2026-01-01', '2026-01-01');
+
+    // 4000 * 0.9 = 3600, not the full 4000
+    expect(result.revenue.generatedCents).toBe(3600);
+    expect(result.topServices).toEqual([{ serviceId: 1, name: 'Coupe Femme', count: 1, revenueCents: 3600 }]);
   });
 
   it('skips closed days when computing open/available hours', async () => {

@@ -244,6 +244,16 @@ export default function Booking() {
   const [showRecap, setShowRecap] = useState(false);
   const [showAddonNudge, setShowAddonNudge] = useState(false);
 
+  // "Tarif spécial" (dropdown, e.g. tarif étudiant) and "code promo" (typed
+  // + validated) are mutually exclusive — picking one clears the other, see
+  // selectPromotion()/applyPromoCode() below. Only one ever reaches the
+  // server, as either promotionId or promoCode.
+  const [promotions, setPromotions] = useState([]);
+  const [selectedPromotionId, setSelectedPromotionId] = useState('');
+  const [promoCodeInput, setPromoCodeInput] = useState('');
+  const [promoCodeState, setPromoCodeState] = useState('idle'); // idle | loading | valid | invalid
+  const [appliedPromoCode, setAppliedPromoCode] = useState(null); // { code, label, discount_percent } once validated
+
   const formTopRef = useRef(null);
   const addonsSectionRef = useRef(null);
   const isFirstRender = useRef(true);
@@ -259,8 +269,33 @@ export default function Booking() {
     apiFetch('/hours')
       .then((data) => setHours(data.days))
       .catch(() => {});
+    apiFetch('/promotions/selectable')
+      .then(setPromotions)
+      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function selectPromotion(id) {
+    setSelectedPromotionId(id);
+    setPromoCodeInput('');
+    setPromoCodeState('idle');
+    setAppliedPromoCode(null);
+  }
+
+  async function applyPromoCode() {
+    const code = promoCodeInput.trim();
+    if (!code) return;
+    setSelectedPromotionId('');
+    setPromoCodeState('loading');
+    try {
+      const promo = await apiFetch(`/promotions/by-code/${encodeURIComponent(code)}`);
+      setAppliedPromoCode({ code, label: promo.label, discount_percent: promo.discount_percent });
+      setPromoCodeState('valid');
+    } catch {
+      setAppliedPromoCode(null);
+      setPromoCodeState('invalid');
+    }
+  }
 
   // Every step change scrolls the card back into view — steps vary a lot
   // in height, so without this the client could land mid-page after
@@ -299,13 +334,20 @@ export default function Booking() {
   const travelFeeCents = atClientHome
     ? (travelEstimate && typeof travelEstimate === 'object' ? travelEstimate.feeCents : travelFeeFallbackCents)
     : 0;
-  const totalPrice = useMemo(
-    () =>
-      serviceIds.reduce((sum, id) => sum + (services.find((s) => s.id === id)?.price_cents ?? 0), 0) +
-      totalAddonPrice +
-      travelFeeCents,
-    [serviceIds, services, totalAddonPrice, travelFeeCents],
+  const servicesSubtotal = useMemo(
+    () => serviceIds.reduce((sum, id) => sum + (services.find((s) => s.id === id)?.price_cents ?? 0), 0) + totalAddonPrice,
+    [serviceIds, services, totalAddonPrice],
   );
+  const totalPrice = useMemo(() => servicesSubtotal + travelFeeCents, [servicesSubtotal, travelFeeCents]);
+
+  // Discount only ever applies to the prestations+suppléments subtotal, not
+  // the travel fee — same basis as the backend (ReservationsService /
+  // DashboardService / InvoicesService all agree on this).
+  const activeDiscountPercent = selectedPromotionId
+    ? promotions.find((p) => p.id === Number(selectedPromotionId))?.discount_percent ?? 0
+    : appliedPromoCode?.discount_percent ?? 0;
+  const discountCents = Math.round(servicesSubtotal * (activeDiscountPercent / 100));
+  const finalPrice = totalPrice - discountCents;
   const recapGuests = useMemo(
     () => [
       { name: form.clientName, service: selectedService, addons: selectedService?.addons?.filter((a) => selectedAddonIds.includes(a.id)) ?? [] },
@@ -667,6 +709,8 @@ export default function Booking() {
           ...form,
           atClientHome,
           clientAddress: atClientHome ? form.clientAddress.trim() : undefined,
+          promotionId: selectedPromotionId ? Number(selectedPromotionId) : undefined,
+          promoCode: promoCodeState === 'valid' ? appliedPromoCode?.code : undefined,
         },
       });
       const totalPeople = guests.length + 1;
@@ -683,6 +727,7 @@ export default function Booking() {
       setForm((f) => ({ ...f, notes: '', website: '' }));
       setSelectedAddonIds([]);
       setGuests([]);
+      selectPromotion('');
       setSelectedSlot('');
       setSlots([]);
       setSlotsState('idle');
@@ -748,7 +793,7 @@ export default function Booking() {
               ))}
             </div>
 
-            {step > 1 && <BookingSummary recapGuests={recapGuests} totalDuration={totalDuration} totalPrice={totalPrice} />}
+            {step > 1 && <BookingSummary recapGuests={recapGuests} totalDuration={totalDuration} totalPrice={finalPrice} />}
 
             {step === 1 && (
               <>
@@ -997,6 +1042,56 @@ export default function Booking() {
                   <textarea id="notes" rows={3} maxLength={500} placeholder="Précisions sur votre demande…" value={form.notes} onChange={updateField('notes')} />
                 </div>
 
+                {promotions.length > 0 && (
+                  <div className="form-row">
+                    <label htmlFor="promotion-select">Tarif spécial (optionnel)</label>
+                    <select id="promotion-select" value={selectedPromotionId} onChange={(e) => selectPromotion(e.target.value)}>
+                      <option value="">Tarif standard</option>
+                      {promotions.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.label} (-{p.discount_percent}%)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className="form-row">
+                  <label htmlFor="promo-code">Code promo (optionnel)</label>
+                  <div className="promo-code-row">
+                    <input
+                      type="text"
+                      id="promo-code"
+                      placeholder="Ex : BIENVENUE10"
+                      value={promoCodeInput}
+                      disabled={Boolean(selectedPromotionId)}
+                      onChange={(e) => {
+                        setPromoCodeInput(e.target.value);
+                        setPromoCodeState('idle');
+                        setAppliedPromoCode(null);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-sm"
+                      disabled={!promoCodeInput.trim() || promoCodeState === 'loading' || Boolean(selectedPromotionId)}
+                      onClick={applyPromoCode}
+                    >
+                      {promoCodeState === 'loading' ? 'Vérification…' : 'Appliquer'}
+                    </button>
+                  </div>
+                  {promoCodeState === 'valid' && (
+                    <p className="form-feedback success">Code appliqué : {appliedPromoCode.label} (-{appliedPromoCode.discount_percent}%)</p>
+                  )}
+                  {promoCodeState === 'invalid' && <p className="form-feedback error">Code promo invalide ou expiré.</p>}
+                </div>
+
+                {discountCents > 0 && (
+                  <p className="form-hint">
+                    Réduction appliquée : -{formatPrice(discountCents)} — total après réduction : {formatPrice(finalPrice)}
+                  </p>
+                )}
+
                 <div className="honeypot" aria-hidden="true">
                   <label htmlFor="website">Ne pas remplir ce champ</label>
                   <input type="text" id="website" tabIndex={-1} autoComplete="off" value={form.website} onChange={updateField('website')} />
@@ -1090,7 +1185,16 @@ export default function Booking() {
               <div>
                 <dt>Durée / prix total</dt>
                 <dd>
-                  {formatDuration(totalDuration)} — {formatPrice(totalPrice)}
+                  {formatDuration(totalDuration)} — {formatPrice(finalPrice)}
+                  {discountCents > 0 && (
+                    <>
+                      <br />
+                      <span className="recap-note">
+                        {formatPrice(totalPrice)} - {formatPrice(discountCents)} de réduction
+                        {appliedPromoCode ? ` (${appliedPromoCode.label})` : selectedPromotionId ? ` (${promotions.find((p) => p.id === Number(selectedPromotionId))?.label})` : ''}
+                      </span>
+                    </>
+                  )}
                   {atClientHome && travelFeeCents > 0 && (
                     <>
                       <br />

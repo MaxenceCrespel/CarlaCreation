@@ -15,6 +15,7 @@ import { MailService } from '../mail/mail.service';
 import { SettingsService } from '../settings/settings.service';
 import { DistanceService } from '../distance/distance.service';
 import { PushService } from '../push/push.service';
+import { PromotionsService } from '../promotions/promotions.service';
 import { siteConfig } from '../../site-config';
 
 interface Guest {
@@ -51,6 +52,10 @@ interface ReservationWithServiceRow {
   travel_distance_km: number | null;
   travel_duration_minutes: number | null;
   travel_fee_cents: number | null;
+  client_id: number | null;
+  promotion_id: number | null;
+  discount_percent: number;
+  promotion_label: string | null;
   addons: { name: string; extra_price_cents: number; extra_duration_minutes: number }[];
 }
 
@@ -80,7 +85,38 @@ export class ReservationsService {
     private readonly settingsService: SettingsService,
     private readonly distanceService: DistanceService,
     private readonly pushService: PushService,
+    private readonly promotionsService: PromotionsService,
   ) {}
+
+  // The dropdown-selectable "tarif spécial" path: promotionId must point at
+  // an active, non-code promotion (a code-based one can only be applied via
+  // its actual code, see resolvePublicPromotion below).
+  private async resolvePublicPromotion(
+    promotionId: number | undefined,
+    promoCode: string | undefined,
+  ): Promise<{ id: number; discountPercent: number } | null> {
+    if (promotionId) {
+      const selectable = await this.promotionsService.findSelectable();
+      const promo = selectable.find((p) => p.id === promotionId);
+      if (!promo) throw new BadRequestException('Tarif spécial invalide.');
+      return { id: promo.id, discountPercent: promo.discount_percent };
+    }
+    if (promoCode) {
+      const promo = await this.promotionsService.findByCode(promoCode);
+      return { id: promo.id, discountPercent: promo.discount_percent };
+    }
+    return null;
+  }
+
+  // Admin picker: any active promotion (rate or code) can be applied
+  // directly by id — she already sees the label, no need to type a code.
+  private async resolveAdminPromotion(promotionId: number | undefined | null): Promise<{ id: number; discountPercent: number } | null> {
+    if (!promotionId) return null;
+    const promotions = await this.promotionsService.findAll();
+    const promo = promotions.find((p) => p.id === promotionId && p.active);
+    if (!promo) throw new BadRequestException('Promotion invalide.');
+    return { id: promo.id, discountPercent: promo.discount_percent };
+  }
 
   // The fee schedule is a step function of distance (free under the admin's
   // configured radius, then whatever tier the actual distance falls into —
@@ -233,6 +269,8 @@ export class ReservationsService {
       throw new ConflictException("Ce créneau n'est plus disponible. Merci d'en choisir un autre.");
     }
 
+    const promotion = await this.resolvePublicPromotion(dto.promotionId, dto.promoCode);
+
     const result = await this.insertGroup(guests, services, addonsPerGuest, {
       date: dto.date,
       startTime: dto.startTime,
@@ -245,6 +283,8 @@ export class ReservationsService {
       travelDistanceKm: travel.distanceKm,
       travelDurationMinutes: travel.durationMinutes,
       travelFeeCents: travel.feeCents,
+      promotionId: promotion?.id ?? null,
+      discountPercent: promotion?.discountPercent ?? 0,
     });
 
     await this.mailService.sendBookingReceived({
@@ -331,6 +371,7 @@ export class ReservationsService {
     }
 
     const status = dto.status || 'confirmed';
+    const promotion = await this.resolveAdminPromotion(dto.promotionId);
 
     const result = await this.insertGroup(guests, services, addonsPerGuest, {
       date: dto.date,
@@ -344,6 +385,8 @@ export class ReservationsService {
       travelDistanceKm: travel.distanceKm,
       travelDurationMinutes: travel.durationMinutes,
       travelFeeCents: travel.feeCents,
+      promotionId: promotion?.id ?? null,
+      discountPercent: promotion?.discountPercent ?? 0,
     });
 
     // A manual booking is usually entered as already-confirmed, so send the
@@ -432,6 +475,8 @@ export class ReservationsService {
       travelDistanceKm: number | null;
       travelDurationMinutes: number | null;
       travelFeeCents: number | null;
+      promotionId: number | null;
+      discountPercent: number;
     },
   ): Promise<{ groupId: string; date: string; startTime: string; endTime: string; guests: BookedGuest[]; atClientHome: boolean; clientAddress: string | null }> {
     const groupId = crypto.randomUUID();
@@ -464,6 +509,8 @@ export class ReservationsService {
           travel_distance_km: common.travelDistanceKm,
           travel_duration_minutes: common.travelDurationMinutes,
           travel_fee_cents: common.travelFeeCents,
+          promotion_id: common.promotionId,
+          discount_percent: common.discountPercent,
         });
         const reservationId = Number(inserted.identifiers[0].id);
 
@@ -507,12 +554,14 @@ export class ReservationsService {
   async findAllForAdmin(): Promise<ReservationWithServiceRow[]> {
     const rows: Omit<ReservationWithServiceRow, 'addons'>[] = await this.dataSource.query(
       `SELECT r.id, r.group_id, r.client_name, r.client_email, r.client_phone, r.reservation_date,
-              r.start_time, r.end_time, r.notes, r.status, r.created_at, r.service_id,
+              r.start_time, r.end_time, r.notes, r.status, r.created_at, r.service_id, r.client_id,
               r.at_client_home, r.client_address,
               r.travel_distance_km::float8 AS travel_distance_km, r.travel_duration_minutes, r.travel_fee_cents,
+              r.promotion_id, r.discount_percent, p.label AS promotion_label,
               s.name AS service_name
        FROM reservations r
        JOIN services s ON s.id = r.service_id
+       LEFT JOIN promotions p ON p.id = r.promotion_id
        ORDER BY r.reservation_date ASC, r.start_time ASC`,
     );
     if (rows.length === 0) return [];
@@ -608,6 +657,14 @@ export class ReservationsService {
       }
     }
 
+    let promotionId = existing.promotion_id;
+    let discountPercent = existing.discount_percent;
+    if (dto.promotionId !== undefined) {
+      const promotion = await this.resolveAdminPromotion(dto.promotionId);
+      promotionId = promotion?.id ?? null;
+      discountPercent = promotion?.discountPercent ?? 0;
+    }
+
     await this.dataSource.transaction(async (manager) => {
       await manager.update(Reservation, id, {
         service_id: serviceId,
@@ -623,6 +680,8 @@ export class ReservationsService {
         travel_distance_km: travel.distanceKm,
         travel_duration_minutes: travel.durationMinutes,
         travel_fee_cents: travel.feeCents,
+        promotion_id: promotionId,
+        discount_percent: discountPercent,
       });
 
       if (dto.addonIds !== undefined) {

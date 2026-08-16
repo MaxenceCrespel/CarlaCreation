@@ -9,6 +9,7 @@ import { MailService } from '../mail/mail.service';
 import { SettingsService } from '../settings/settings.service';
 import { DistanceService } from '../distance/distance.service';
 import { PushService } from '../push/push.service';
+import { PromotionsService } from '../promotions/promotions.service';
 
 describe('ReservationsService', () => {
   let service: ReservationsService;
@@ -25,6 +26,7 @@ describe('ReservationsService', () => {
   let settingsService: { getTravelBufferMinutes: jest.Mock; getTravelFeeFallbackCents: jest.Mock; getTravelFeeTiers: jest.Mock };
   let distanceService: { estimate: jest.Mock };
   let pushService: { notifyAdmins: jest.Mock };
+  let promotionsService: { findSelectable: jest.Mock; findByCode: jest.Mock; findAll: jest.Mock };
 
   const HAIRCUT = { id: 1, name: 'Coupe Femme', duration_minutes: 45, active: true };
   const MANICURE = { id: 7, name: 'Manucure Classique', duration_minutes: 30, active: true };
@@ -70,6 +72,13 @@ describe('ReservationsService', () => {
     // distance, so this keeps them on the "flat fallback fee only" path.
     distanceService = { estimate: jest.fn().mockResolvedValue(null) };
     pushService = { notifyAdmins: jest.fn() };
+    // No promotion applied by default — tests that care about discounts
+    // set up their own findSelectable/findByCode/findAll return values.
+    promotionsService = {
+      findSelectable: jest.fn().mockResolvedValue([]),
+      findByCode: jest.fn().mockRejectedValue(new NotFoundException('Code promo invalide ou expiré.')),
+      findAll: jest.fn().mockResolvedValue([]),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -82,6 +91,7 @@ describe('ReservationsService', () => {
         { provide: SettingsService, useValue: settingsService },
         { provide: DistanceService, useValue: distanceService },
         { provide: PushService, useValue: pushService },
+        { provide: PromotionsService, useValue: promotionsService },
       ],
     }).compile();
 
@@ -743,6 +753,107 @@ describe('ReservationsService', () => {
     );
   });
 
+  describe('promotions', () => {
+    const STUDENT_RATE = { id: 1, label: 'Tarif étudiant', discount_percent: 10, requires_code: false, code: null, active: true };
+    const WELCOME_CODE = { id: 2, label: 'Bienvenue', discount_percent: 20, requires_code: true, code: 'BIENVENUE20', active: true };
+
+    it('resolvePublicPromotion applies a selectable rate by id', async () => {
+      promotionsService.findSelectable.mockResolvedValue([STUDENT_RATE]);
+      const result = await (service as any).resolvePublicPromotion(1, undefined);
+      expect(result).toEqual({ id: 1, discountPercent: 10 });
+    });
+
+    it('resolvePublicPromotion rejects a promotionId not in the selectable list', async () => {
+      promotionsService.findSelectable.mockResolvedValue([STUDENT_RATE]);
+      await expect((service as any).resolvePublicPromotion(999, undefined)).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('resolvePublicPromotion applies a valid promo code', async () => {
+      promotionsService.findByCode.mockResolvedValue(WELCOME_CODE);
+      const result = await (service as any).resolvePublicPromotion(undefined, 'bienvenue20');
+      expect(result).toEqual({ id: 2, discountPercent: 20 });
+    });
+
+    it('resolvePublicPromotion returns null when neither a rate nor a code is given', async () => {
+      const result = await (service as any).resolvePublicPromotion(undefined, undefined);
+      expect(result).toBeNull();
+    });
+
+    it('resolveAdminPromotion applies any active promotion by id, code-based or not', async () => {
+      promotionsService.findAll.mockResolvedValue([STUDENT_RATE, WELCOME_CODE]);
+      const result = await (service as any).resolveAdminPromotion(2);
+      expect(result).toEqual({ id: 2, discountPercent: 20 });
+    });
+
+    it('resolveAdminPromotion rejects an inactive promotion', async () => {
+      promotionsService.findAll.mockResolvedValue([{ ...STUDENT_RATE, active: false }]);
+      await expect((service as any).resolveAdminPromotion(1)).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('resolveAdminPromotion returns null when no id is given', async () => {
+      expect(await (service as any).resolveAdminPromotion(undefined)).toBeNull();
+      expect(await (service as any).resolveAdminPromotion(null)).toBeNull();
+    });
+
+    it('createManual stores the resolved promotion_id and discount_percent on the reservation', async () => {
+      serviceRepo.findOne.mockResolvedValue(HAIRCUT);
+      noOverlap();
+      promotionsService.findAll.mockResolvedValue([STUDENT_RATE]);
+
+      const inserts: any[] = [];
+      dataSource.transaction.mockImplementationOnce(async (fn) => {
+        const manager = {
+          insert: jest.fn(async (entity: unknown, payload: unknown) => {
+            inserts.push({ entity, payload });
+            return { identifiers: [{ id: 300 }] };
+          }),
+        };
+        return fn(manager);
+      });
+
+      await service.createManual({
+        serviceId: 1,
+        clientName: 'Test',
+        clientEmail: 'test@example.com',
+        clientPhone: '0600000000',
+        date: '2099-01-01',
+        startTime: '10:00',
+        promotionId: 1,
+      } as any);
+
+      const reservationInsert = inserts.find((i) => !Array.isArray(i.payload));
+      expect(reservationInsert.payload).toMatchObject({ promotion_id: 1, discount_percent: 10 });
+    });
+
+    it('createManual defaults to no discount when no promotion is given', async () => {
+      serviceRepo.findOne.mockResolvedValue(HAIRCUT);
+      noOverlap();
+
+      const inserts: any[] = [];
+      dataSource.transaction.mockImplementationOnce(async (fn) => {
+        const manager = {
+          insert: jest.fn(async (entity: unknown, payload: unknown) => {
+            inserts.push({ entity, payload });
+            return { identifiers: [{ id: 301 }] };
+          }),
+        };
+        return fn(manager);
+      });
+
+      await service.createManual({
+        serviceId: 1,
+        clientName: 'Test',
+        clientEmail: 'test@example.com',
+        clientPhone: '0600000000',
+        date: '2099-01-01',
+        startTime: '10:00',
+      } as any);
+
+      const reservationInsert = inserts.find((i) => !Array.isArray(i.payload));
+      expect(reservationInsert.payload).toMatchObject({ promotion_id: null, discount_percent: 0 });
+    });
+  });
+
   describe('updateReservation', () => {
     it('throws NotFoundException when the reservation does not exist', async () => {
       reservationRepo.findOne.mockResolvedValue(null);
@@ -789,6 +900,101 @@ describe('ReservationsService', () => {
       await service.updateReservation(1, { serviceId: 7, clientName: 'Alice Updated' });
 
       expect(dataSource.transaction).toHaveBeenCalled();
+    });
+
+    it('applies a new promotion when promotionId is provided', async () => {
+      reservationRepo.findOne.mockResolvedValue({
+        id: 1,
+        service_id: 1,
+        client_name: 'Alice',
+        client_email: 'a@example.com',
+        client_phone: '0600000000',
+        reservation_date: '2099-01-01',
+        start_time: '10:00',
+        end_time: '10:45',
+        notes: '',
+        at_client_home: false,
+        client_address: null,
+        promotion_id: null,
+        discount_percent: 0,
+      });
+      serviceRepo.findOne.mockResolvedValue(HAIRCUT);
+      dataSource.query.mockResolvedValue([]);
+      noOverlap();
+      promotionsService.findAll.mockResolvedValue([{ id: 5, active: true, discount_percent: 15 }]);
+
+      let updatePayload: any = null;
+      dataSource.transaction.mockImplementationOnce(async (fn) => {
+        const manager = { update: jest.fn((_entity, _id, payload) => (updatePayload = payload)), delete: jest.fn(), insert: jest.fn() };
+        return fn(manager);
+      });
+
+      await service.updateReservation(1, { promotionId: 5 });
+
+      expect(updatePayload).toMatchObject({ promotion_id: 5, discount_percent: 15 });
+    });
+
+    it('clears the promotion when promotionId is explicitly null', async () => {
+      reservationRepo.findOne.mockResolvedValue({
+        id: 1,
+        service_id: 1,
+        client_name: 'Alice',
+        client_email: 'a@example.com',
+        client_phone: '0600000000',
+        reservation_date: '2099-01-01',
+        start_time: '10:00',
+        end_time: '10:45',
+        notes: '',
+        at_client_home: false,
+        client_address: null,
+        promotion_id: 5,
+        discount_percent: 15,
+      });
+      serviceRepo.findOne.mockResolvedValue(HAIRCUT);
+      dataSource.query.mockResolvedValue([]);
+      noOverlap();
+
+      let updatePayload: any = null;
+      dataSource.transaction.mockImplementationOnce(async (fn) => {
+        const manager = { update: jest.fn((_entity, _id, payload) => (updatePayload = payload)), delete: jest.fn(), insert: jest.fn() };
+        return fn(manager);
+      });
+
+      await service.updateReservation(1, { promotionId: null });
+
+      expect(updatePayload).toMatchObject({ promotion_id: null, discount_percent: 0 });
+    });
+
+    it('keeps the existing promotion untouched when promotionId is omitted', async () => {
+      reservationRepo.findOne.mockResolvedValue({
+        id: 1,
+        service_id: 1,
+        client_name: 'Alice',
+        client_email: 'a@example.com',
+        client_phone: '0600000000',
+        reservation_date: '2099-01-01',
+        start_time: '10:00',
+        end_time: '10:45',
+        notes: '',
+        at_client_home: false,
+        client_address: null,
+        promotion_id: 5,
+        discount_percent: 15,
+      });
+      serviceRepo.findOne.mockResolvedValue(HAIRCUT);
+      dataSource.query.mockResolvedValue([]);
+      noOverlap();
+
+      let updatePayload: any = null;
+      dataSource.transaction.mockImplementationOnce(async (fn) => {
+        const manager = { update: jest.fn((_entity, _id, payload) => (updatePayload = payload)), delete: jest.fn(), insert: jest.fn() };
+        return fn(manager);
+      });
+
+      await service.updateReservation(1, { notes: 'unrelated change' });
+
+      expect(updatePayload).toMatchObject({ promotion_id: 5, discount_percent: 15 });
+      expect(promotionsService.findAll).not.toHaveBeenCalled();
     });
 
     it('does not conflict with itself when saved unchanged (same slot)', async () => {

@@ -24,9 +24,11 @@ DROP TABLE IF EXISTS contact_messages;
 DROP TABLE IF EXISTS gallery;
 DROP TABLE IF EXISTS reservation_addons;
 DROP TABLE IF EXISTS reservations;
+DROP TABLE IF EXISTS promotions;
 DROP TABLE IF EXISTS service_addons;
 DROP TABLE IF EXISTS services;
 DROP TABLE IF EXISTS service_categories;
+DROP TABLE IF EXISTS clients;
 DROP TABLE IF EXISTS admins;
 
 CREATE TABLE
@@ -37,6 +39,20 @@ CREATE TABLE
         calendar_token TEXT UNIQUE,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+
+CREATE TABLE
+    IF NOT EXISTS clients (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        normalized_name TEXT NOT NULL,
+        phone TEXT NOT NULL DEFAULT '',
+        email TEXT NOT NULL DEFAULT '',
+        notes TEXT NOT NULL DEFAULT '',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+CREATE INDEX IF NOT EXISTS "IDX_clients_normalized_name" ON clients (normalized_name);
 
 CREATE TABLE
     IF NOT EXISTS push_subscriptions (
@@ -118,6 +134,20 @@ CREATE TABLE
 CREATE INDEX IF NOT EXISTS "IDX_service_addons_service_id" ON service_addons (service_id);
 
 CREATE TABLE
+    IF NOT EXISTS promotions (
+        id SERIAL PRIMARY KEY,
+        label TEXT NOT NULL,
+        discount_percent INTEGER NOT NULL,
+        requires_code BOOLEAN NOT NULL DEFAULT false,
+        code TEXT,
+        active BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+CREATE INDEX IF NOT EXISTS "IDX_promotions_code" ON promotions (code);
+
+CREATE TABLE
     IF NOT EXISTS reservations (
         id SERIAL PRIMARY KEY,
         group_id TEXT,
@@ -136,12 +166,17 @@ CREATE TABLE
         travel_distance_km NUMERIC(6, 2),
         travel_duration_minutes INTEGER,
         travel_fee_cents INTEGER,
+        client_id INTEGER REFERENCES clients (id) ON DELETE SET NULL,
+        promotion_id INTEGER REFERENCES promotions (id) ON DELETE SET NULL,
+        discount_percent INTEGER NOT NULL DEFAULT 0,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
 CREATE INDEX IF NOT EXISTS "IDX_reservations_reservation_date" ON reservations (reservation_date);
 
 CREATE INDEX IF NOT EXISTS "IDX_reservations_group_id" ON reservations (group_id);
+
+CREATE INDEX IF NOT EXISTS "IDX_reservations_client_id" ON reservations (client_id);
 
 CREATE TABLE
     IF NOT EXISTS invoices (
@@ -291,7 +326,9 @@ VALUES
     (1785400000000, 'AddProducts1785400000000'),
     (1785500000000, 'AddInvoices1785500000000'),
     (1785600000000, 'AddProductPurchasePrice1785600000000'),
-    (1785700000000, 'AddExpenses1785700000000');
+    (1785700000000, 'AddExpenses1785700000000'),
+    (1785800000000, 'AddClients1785800000000'),
+    (1785900000000, 'AddPromotions1785900000000');
 
 -- Admin account — username "carla", password "Carla0303!" (bcrypt, cost 12).
 -- Change this password after first login in a real deployment.

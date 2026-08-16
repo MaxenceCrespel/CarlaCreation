@@ -16,6 +16,7 @@ interface ReservationRow {
   reservation_date: string;
   status: 'pending' | 'confirmed' | 'completed';
   at_client_home: boolean;
+  discount_percent: number;
 }
 
 @Injectable()
@@ -27,6 +28,10 @@ export class DashboardService {
   // below excluding cancelled/refused entirely. No price snapshot exists on
   // a reservation, so revenue uses the service's *current* price — a
   // simplification: a later price change also reshapes past figures.
+  // discount_percent IS a per-reservation snapshot though (see
+  // Reservation.discount_percent), so a promotion applied at booking time
+  // keeps reducing that reservation's contribution to CA even if the
+  // promotion is later edited or deleted.
   async getDashboard(from: string, to: string) {
     if (!isValidDateString(from) || !isValidDateString(to) || from > to) {
       throw new BadRequestException('Période invalide.');
@@ -39,7 +44,7 @@ export class DashboardService {
     const today = localDateString(new Date());
 
     const reservations: ReservationRow[] = await this.dataSource.query(
-      `SELECT r.id, r.service_id, s.name AS service_name, s.price_cents, r.start_time, r.end_time, r.reservation_date, r.status, r.at_client_home
+      `SELECT r.id, r.service_id, s.name AS service_name, s.price_cents, r.start_time, r.end_time, r.reservation_date, r.status, r.at_client_home, r.discount_percent
        FROM reservations r
        JOIN services s ON s.id = r.service_id
        WHERE r.reservation_date BETWEEN $1 AND $2 AND r.status NOT IN ('cancelled', 'refused')`,
@@ -71,7 +76,8 @@ export class DashboardService {
     const dailyBookedMinutes = new Map<string, number>();
 
     for (const r of reservations) {
-      const total = r.price_cents + (addonSums.get(r.id) ?? 0);
+      const fullPrice = r.price_cents + (addonSums.get(r.id) ?? 0);
+      const total = Math.round(fullPrice * (1 - r.discount_percent / 100));
       statusCounts[r.status] = (statusCounts[r.status] ?? 0) + 1;
 
       if (r.status === 'pending') {

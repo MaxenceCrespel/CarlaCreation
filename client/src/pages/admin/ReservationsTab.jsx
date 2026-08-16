@@ -25,6 +25,7 @@ const EMPTY_MANUAL_FORM = {
   status: 'confirmed',
   atClientHome: false,
   allowOverlap: false,
+  promotionId: '',
 };
 
 // Same checkbox pattern as the public booking page's AddonCheckboxes, so
@@ -60,12 +61,14 @@ function AddReservationForm({ onCreated, onCancel }) {
   const [addonIds, setAddonIds] = useState([]);
   const [categories, setCategories] = useState([]);
   const [guests, setGuests] = useState([]);
+  const [promotions, setPromotions] = useState([]);
   const [feedback, setFeedback] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     apiFetch('/admin/services').then(setServices).catch(() => showToast('Impossible de charger les prestations.', 'error'));
     apiFetch('/admin/service-categories').then(setCategories).catch(() => {});
+    apiFetch('/admin/promotions').then(setPromotions).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -137,6 +140,7 @@ function AddReservationForm({ onCreated, onCancel }) {
           addonIds,
           clientAddress: form.atClientHome ? form.clientAddress.trim() : undefined,
           additionalGuests: guests.map((g) => ({ name: g.name.trim(), serviceId: Number(g.serviceId), addonIds: g.addonIds })),
+          promotionId: form.promotionId ? Number(form.promotionId) : undefined,
         },
       });
       showToast('Réservation ajoutée.', 'success');
@@ -294,6 +298,20 @@ function AddReservationForm({ onCreated, onCancel }) {
         </div>
       </div>
 
+      {promotions.length > 0 && (
+        <div className="form-row">
+          <label htmlFor="manual-promotion">Promotion (optionnel)</label>
+          <select id="manual-promotion" value={form.promotionId} onChange={update('promotionId')}>
+            <option value="">Aucune</option>
+            {promotions.filter((p) => p.active).map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label} (-{p.discount_percent}%){p.requires_code ? ` — code ${p.code}` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {feedback && <div className="form-feedback error">{feedback}</div>}
 
       <div className="manual-reservation-form-actions">
@@ -324,9 +342,11 @@ function EditReservationModal({ reservation, onClose, onSaved }) {
     atClientHome: reservation.at_client_home,
     clientAddress: reservation.client_address || '',
     allowOverlap: false,
+    promotionId: reservation.promotion_id ? String(reservation.promotion_id) : '',
   });
   const [feedback, setFeedback] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [promotions, setPromotions] = useState([]);
 
   // reservation_addons only stores a name/price/duration snapshot, not an
   // addon id (see updateReservation on the API side) — so on open, we
@@ -342,6 +362,7 @@ function EditReservationModal({ reservation, onClose, onSaved }) {
   useEffect(() => {
     apiFetch('/admin/services').then(setServices).catch(() => showToast('Impossible de charger les prestations.', 'error'));
     apiFetch('/admin/service-categories').then(setCategories).catch(() => {});
+    apiFetch('/admin/promotions').then(setPromotions).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -399,6 +420,7 @@ function EditReservationModal({ reservation, onClose, onSaved }) {
           clientAddress: form.atClientHome ? form.clientAddress.trim() : undefined,
           addonIds: addonsDirty ? addonIds : undefined,
           allowOverlap: form.allowOverlap,
+          promotionId: form.promotionId ? Number(form.promotionId) : null,
         },
       });
       showToast('Réservation modifiée.', 'success');
@@ -486,6 +508,20 @@ function EditReservationModal({ reservation, onClose, onSaved }) {
           <input type="text" id="edit-notes" maxLength={500} value={form.notes} onChange={update('notes')} />
         </div>
 
+        {promotions.length > 0 && (
+          <div className="form-row">
+            <label htmlFor="edit-promotion">Promotion (optionnel)</label>
+            <select id="edit-promotion" value={form.promotionId} onChange={update('promotionId')}>
+              <option value="">Aucune</option>
+              {promotions.filter((p) => p.active || String(p.id) === form.promotionId).map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label} (-{p.discount_percent}%){p.requires_code ? ` — code ${p.code}` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         <div className="form-row checkbox-row">
           <label htmlFor="edit-allow-overlap">
             <input
@@ -510,6 +546,178 @@ function EditReservationModal({ reservation, onClose, onSaved }) {
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+// Proposes existing "fiche client" profiles matching this reservation's
+// name (normalized match only — never auto-linked, see ClientsService).
+// The admin always makes the final call, since two different people can
+// share a name (e.g. a mother booking for herself, then later her child).
+function ClientMatchModal({ reservation, onClose, onLinked }) {
+  const showToast = useToast();
+  const [candidates, setCandidates] = useState(null);
+  const [error, setError] = useState(null);
+  const [linkingId, setLinkingId] = useState(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    name: reservation.client_name,
+    phone: reservation.client_phone || '',
+    email: reservation.client_email || '',
+    notes: '',
+  });
+  const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    apiFetch(`/admin/clients/match?name=${encodeURIComponent(reservation.client_name)}`)
+      .then((rows) => {
+        setCandidates(rows);
+        setShowCreateForm(rows.length === 0);
+      })
+      .catch((err) => setError(err.message));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function linkTo(clientId) {
+    setLinkingId(clientId);
+    try {
+      await apiFetch('/admin/clients/link', { method: 'POST', body: { reservationId: reservation.id, clientId } });
+      onLinked(reservation.id, clientId);
+      showToast('Fiche client liée.', 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setLinkingId(null);
+    }
+  }
+
+  async function handleCreate(e) {
+    e.preventDefault();
+    if (!createForm.name.trim()) return;
+    setCreating(true);
+    try {
+      const client = await apiFetch('/admin/clients/create-and-link', {
+        method: 'POST',
+        body: { reservationId: reservation.id, ...createForm },
+      });
+      onLinked(reservation.id, client.id);
+      showToast('Fiche client créée et liée.', 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-card" role="dialog" aria-modal="true" aria-label="Fiche client" onClick={(e) => e.stopPropagation()}>
+        <h2>Fiche client</h2>
+        <p className="form-hint">
+          Rendez-vous actuel — {reservation.client_name} · {reservation.client_phone || '—'} · {reservation.client_email || '—'} · {reservation.service_name}
+        </p>
+
+        {error && <p className="form-feedback error">{error}</p>}
+        {!error && candidates === null && <p className="loading-text">Recherche de fiches existantes…</p>}
+
+        {!error && candidates !== null && candidates.length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <label>Fiches existantes correspondant à ce nom</label>
+            {candidates.map((c) => (
+              <div key={c.id} className="card" style={{ marginTop: 8, marginBottom: 0 }}>
+                <strong>{c.name}</strong>
+                <div className="row-addons">{c.phone || '—'} · {c.email || '—'}</div>
+                {c.notes && <div className="row-addons">Note : {c.notes}</div>}
+                {c.history.length > 0 ? (
+                  <div className="row-addons">
+                    Historique : {c.history.map((h) => `${h.service_name} (${h.reservation_date})`).join(', ')}
+                  </div>
+                ) : (
+                  <div className="row-addons">Aucun rendez-vous précédent enregistré sur cette fiche.</div>
+                )}
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  style={{ marginTop: 8 }}
+                  disabled={linkingId === c.id}
+                  onClick={() => linkTo(c.id)}
+                >
+                  {linkingId === c.id ? 'Liaison…' : 'Lier à cette fiche'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!error && candidates !== null && !showCreateForm && (
+          <button type="button" className="btn btn-outline" style={{ marginTop: 16 }} onClick={() => setShowCreateForm(true)}>
+            + Créer une nouvelle fiche
+          </button>
+        )}
+
+        {!error && candidates !== null && showCreateForm && (
+          <form onSubmit={handleCreate} style={{ marginTop: 16 }}>
+            <label>Nouvelle fiche client</label>
+            <div className="form-row two-col">
+              <div>
+                <label htmlFor="client-create-name">Nom</label>
+                <input
+                  type="text"
+                  id="client-create-name"
+                  required
+                  maxLength={200}
+                  value={createForm.name}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label htmlFor="client-create-phone">Téléphone</label>
+                <input
+                  type="text"
+                  id="client-create-phone"
+                  maxLength={50}
+                  value={createForm.phone}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, phone: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="form-row">
+              <label htmlFor="client-create-email">Email</label>
+              <input
+                type="email"
+                id="client-create-email"
+                maxLength={200}
+                value={createForm.email}
+                onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))}
+              />
+            </div>
+            <div className="form-row">
+              <label htmlFor="client-create-notes">Note (optionnel)</label>
+              <input
+                type="text"
+                id="client-create-notes"
+                maxLength={500}
+                value={createForm.notes}
+                onChange={(e) => setCreateForm((f) => ({ ...f, notes: e.target.value }))}
+              />
+            </div>
+            <div className="modal-actions">
+              {candidates.length > 0 && (
+                <button type="button" className="btn btn-outline" onClick={() => setShowCreateForm(false)} disabled={creating}>
+                  Annuler
+                </button>
+              )}
+              <button type="submit" className="btn btn-primary" disabled={creating}>
+                {creating ? 'Création…' : 'Créer et lier'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        <div className="modal-actions" style={{ marginTop: 16 }}>
+          <button type="button" className="btn btn-outline" onClick={onClose}>Fermer</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -579,6 +787,7 @@ export default function ReservationsTab() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [editTarget, setEditTarget] = useState(null); // the reservation row being edited, or null
+  const [clientModalTarget, setClientModalTarget] = useState(null); // the reservation row being matched to a "fiche client", or null
 
   function load() {
     setReservations(null);
@@ -623,6 +832,22 @@ export default function ReservationsTab() {
       showToast(err.message, 'error');
     } finally {
       setDeleting(false);
+    }
+  }
+
+  function handleClientLinked(reservationId, clientId) {
+    setReservations((rows) => rows.map((r) => (r.id === reservationId ? { ...r, client_id: clientId } : r)));
+    setClientModalTarget(null);
+  }
+
+  async function unlinkClient(id) {
+    if (!window.confirm('Délier cette fiche client de ce rendez-vous ?')) return;
+    try {
+      await apiFetch('/admin/clients/unlink', { method: 'POST', body: { reservationId: id } });
+      setReservations((rows) => rows.map((r) => (r.id === id ? { ...r, client_id: null } : r)));
+      showToast('Fiche déliée.', 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
     }
   }
 
@@ -770,8 +995,23 @@ export default function ReservationsTab() {
                           {r.addons && r.addons.length > 0 && (
                             <div className="row-addons">+ {r.addons.map((a) => a.name).join(', ')}</div>
                           )}
+                          {r.discount_percent > 0 && (
+                            <div className="row-addons">-{r.discount_percent}% {r.promotion_label ? `(${r.promotion_label})` : ''}</div>
+                          )}
                         </td>
-                        <td>{r.client_name}</td>
+                        <td>
+                          {r.client_name}
+                          <div className="row-addons">
+                            {r.client_id ? (
+                              <>
+                                <span className="status-badge status-confirmed">Fiche liée</span>{' '}
+                                <button type="button" className="link-btn" onClick={() => unlinkClient(r.id)}>Délier</button>
+                              </>
+                            ) : (
+                              <button type="button" className="link-btn" onClick={() => setClientModalTarget(r)}>+ Fiche client</button>
+                            )}
+                          </div>
+                        </td>
                         <td>{r.client_email}<br />{r.client_phone}</td>
                         <td>
                           {r.at_client_home ? (
@@ -864,6 +1104,14 @@ export default function ReservationsTab() {
             setEditTarget(null);
             load();
           }}
+        />
+      )}
+
+      {clientModalTarget && (
+        <ClientMatchModal
+          reservation={clientModalTarget}
+          onClose={() => setClientModalTarget(null)}
+          onLinked={handleClientLinked}
         />
       )}
     </>

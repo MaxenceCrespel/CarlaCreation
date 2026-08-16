@@ -10,8 +10,11 @@ export class InvoiceItemDto {
   @Min(0.01)
   quantity: number;
 
+  // Can be negative — a discount/promotion line is added as a negative
+  // amount rather than shrinking another line's unit price, so it stays
+  // visible on the invoice (see InvoicesService.draftFromReservation).
   @IsInt()
-  @Min(0)
+  @Min(-1_000_000)
   unitPriceCents: number;
 }
 

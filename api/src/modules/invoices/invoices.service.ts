@@ -6,6 +6,7 @@ import { InvoiceItem } from '../../database/entities/invoice-item.entity';
 import { Reservation } from '../../database/entities/reservation.entity';
 import { Service } from '../../database/entities/service.entity';
 import { ReservationAddon } from '../../database/entities/reservation-addon.entity';
+import { Promotion } from '../../database/entities/promotion.entity';
 import { CreateInvoiceDto, UpdateInvoiceStatusDto } from './dto/invoice.dto';
 
 function computeTotalCents(items: { quantity: number; unitPriceCents: number }[]): number {
@@ -19,6 +20,7 @@ export class InvoicesService {
     @InjectRepository(Reservation) private readonly reservationRepo: Repository<Reservation>,
     @InjectRepository(Service) private readonly serviceRepo: Repository<Service>,
     @InjectRepository(ReservationAddon) private readonly reservationAddonRepo: Repository<ReservationAddon>,
+    @InjectRepository(Promotion) private readonly promotionRepo: Repository<Promotion>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -40,14 +42,29 @@ export class InvoicesService {
     if (!reservation) throw new NotFoundException('Réservation introuvable.');
 
     const items: { description: string; quantity: number; unitPriceCents: number }[] = [];
+    let subtotalCents = 0;
     const service = await this.serviceRepo.findOne({ where: { id: reservation.service_id } });
     if (service) {
       items.push({ description: service.name, quantity: 1, unitPriceCents: service.price_cents });
+      subtotalCents += service.price_cents;
     }
     const addons = await this.reservationAddonRepo.find({ where: { reservation_id: reservation.id } });
     for (const addon of addons) {
       items.push({ description: addon.name, quantity: 1, unitPriceCents: addon.extra_price_cents });
+      subtotalCents += addon.extra_price_cents;
     }
+
+    // A negative line rather than discounting the unit prices above —
+    // keeps the applied promotion visible and transparent on the PDF.
+    // Discount only applies to the service+addons subtotal, not the travel
+    // fee below (same basis as DashboardService.getDashboard).
+    if (reservation.discount_percent > 0) {
+      const promotion = reservation.promotion_id ? await this.promotionRepo.findOne({ where: { id: reservation.promotion_id } }) : null;
+      const discountCents = Math.round(subtotalCents * (reservation.discount_percent / 100));
+      const label = promotion ? `Réduction (${promotion.label}, -${reservation.discount_percent}%)` : `Réduction (-${reservation.discount_percent}%)`;
+      items.push({ description: label, quantity: 1, unitPriceCents: -discountCents });
+    }
+
     if (reservation.travel_fee_cents) {
       items.push({ description: 'Frais de déplacement', quantity: 1, unitPriceCents: reservation.travel_fee_cents });
     }

@@ -77,6 +77,23 @@ export class Reservation {
   @Column({ type: 'int', nullable: true })
   travel_fee_cents: number | null;
 
+  // Set explicitly by the admin via the "fiche client" match/create flow —
+  // never inferred automatically from client_name, since two different
+  // people can share a name (see Client). Null until she confirms a link.
+  @Column({ type: 'int', nullable: true })
+  client_id: number | null;
+
+  // discount_percent is a snapshot of the Promotion's percentage at
+  // booking time (like ReservationAddon's name/price snapshot) — so a
+  // later edit to the promotion's percent never reshapes a past booking's
+  // revenue. 0 when no promotion applies (not nullable, so every revenue
+  // sum can multiply by it unconditionally).
+  @Column({ type: 'int', nullable: true })
+  promotion_id: number | null;
+
+  @Column({ type: 'int', default: 0 })
+  discount_percent: number;
+
   @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;
 }
