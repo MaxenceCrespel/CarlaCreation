@@ -32,12 +32,24 @@ const TABS = [
 export default function AdminApp() {
   const [session, setSession] = useState('checking'); // 'checking' | null | { username }
   const [activeTab, setActiveTab] = useState('dashboard');
+  // Sidebar on desktop is always visible; on mobile it becomes a slide-in
+  // drawer toggled by the burger button, and this same flag controls it.
+  const [navOpen, setNavOpen] = useState(false);
 
   useEffect(() => {
     apiFetch('/auth/me')
       .then((data) => setSession({ username: data.username }))
       .catch(() => setSession(null));
   }, []);
+
+  // Lock background scroll while the mobile drawer is open — otherwise the
+  // page behind it scrolls along with a touch drag on the overlay.
+  useEffect(() => {
+    document.body.style.overflow = navOpen ? 'hidden' : '';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [navOpen]);
 
   async function handleLogout() {
     try {
@@ -66,7 +78,20 @@ export default function AdminApp() {
     <div className="admin-body">
       <header className="admin-header">
         <div className="container admin-header-inner">
-          <h1>Administration</h1>
+          <div className="admin-header-left">
+            <button
+              type="button"
+              className="admin-burger"
+              aria-label="Ouvrir le menu"
+              aria-expanded={navOpen}
+              onClick={() => setNavOpen(true)}
+            >
+              <span />
+              <span />
+              <span />
+            </button>
+            <h1>Administration</h1>
+          </div>
           <div className="admin-header-actions">
             <span className="admin-username">{session.username}</span>
             <button type="button" className="btn btn-outline" onClick={handleLogout}>Se déconnecter</button>
@@ -74,24 +99,34 @@ export default function AdminApp() {
         </div>
       </header>
 
-      <div className="container admin-tabs" role="tablist" aria-label="Sections de l'administration">
-        {TABS.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            role="tab"
-            aria-selected={activeTab === tab.key}
-            className={`admin-tab ${activeTab === tab.key ? 'is-active' : ''}`}
-            onClick={() => setActiveTab(tab.key)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <div className="container admin-layout">
+        {navOpen && <div className="admin-sidebar-backdrop" onClick={() => setNavOpen(false)} />}
 
-      <main className="container admin-main">
-        <ActiveComponent username={session.username} onCredentialsUpdated={(newUsername) => setSession({ username: newUsername })} />
-      </main>
+        <nav className={`admin-sidebar ${navOpen ? 'is-open' : ''}`} aria-label="Sections de l'administration">
+          <div className="admin-sidebar-header">
+            <span>Menu</span>
+            <button type="button" className="admin-sidebar-close" aria-label="Fermer le menu" onClick={() => setNavOpen(false)}>✕</button>
+          </div>
+          {TABS.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              aria-current={activeTab === tab.key ? 'page' : undefined}
+              className={`admin-nav-link ${activeTab === tab.key ? 'is-active' : ''}`}
+              onClick={() => {
+                setActiveTab(tab.key);
+                setNavOpen(false);
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+
+        <main className="admin-main">
+          <ActiveComponent username={session.username} onCredentialsUpdated={(newUsername) => setSession({ username: newUsername })} />
+        </main>
+      </div>
     </div>
   );
 }

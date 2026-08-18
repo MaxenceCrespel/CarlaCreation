@@ -14,7 +14,7 @@ describe('Reviews', () => {
 
   it('admin approves it, and it becomes publicly visible', () => {
     cy.adminLogin();
-    cy.contains('button.admin-tab', 'Avis').click();
+    cy.contains('button.admin-nav-link', 'Avis').click();
 
     cy.contains('.admin-review-card', reviewerName).within(() => {
       cy.contains('button', 'Approuver').click();

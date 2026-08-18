@@ -10,6 +10,69 @@ const STATUS_LABELS = {
   refused: 'Refusée',
 };
 
+const EMPTY_CLIENT_FORM = { name: '', phone: '', email: '', notes: '' };
+
+function AddClientForm({ onCreated }) {
+  const showToast = useToast();
+  const [form, setForm] = useState(EMPTY_CLIENT_FORM);
+  const [submitting, setSubmitting] = useState(false);
+
+  function update(field) {
+    return (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!form.name.trim()) return;
+    setSubmitting(true);
+    try {
+      const created = await apiFetch('/admin/clients', {
+        method: 'POST',
+        body: {
+          name: form.name.trim(),
+          phone: form.phone.trim(),
+          email: form.email.trim(),
+          notes: form.notes.trim(),
+        },
+      });
+      onCreated(created);
+      setForm(EMPTY_CLIENT_FORM);
+      showToast('Fiche client créée.', 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form className="card" onSubmit={handleSubmit} style={{ marginBottom: 24 }}>
+      <h2>Ajouter un client</h2>
+      <div className="form-row two-col">
+        <div>
+          <label htmlFor="client-add-name">Nom</label>
+          <input type="text" id="client-add-name" required maxLength={200} value={form.name} onChange={update('name')} />
+        </div>
+        <div>
+          <label htmlFor="client-add-phone">Téléphone</label>
+          <input type="text" id="client-add-phone" maxLength={50} value={form.phone} onChange={update('phone')} />
+        </div>
+      </div>
+      <div className="form-row">
+        <label htmlFor="client-add-email">Email</label>
+        <input type="email" id="client-add-email" maxLength={200} value={form.email} onChange={update('email')} />
+      </div>
+      <div className="form-row">
+        <label htmlFor="client-add-notes">Notes (optionnel)</label>
+        <textarea id="client-add-notes" rows={3} maxLength={5000} placeholder="Ex : a fait un 4.1 au dernier rdv…" value={form.notes} onChange={update('notes')} />
+      </div>
+      <button type="submit" className="btn btn-primary" disabled={submitting}>
+        {submitting ? 'Création…' : 'Créer la fiche'}
+      </button>
+    </form>
+  );
+}
+
 function ClientDetail({ client, onClose, onUpdated, onDeleted }) {
   const showToast = useToast();
   const [detail, setDetail] = useState(null);
@@ -158,6 +221,8 @@ export default function ClientsTab() {
 
   return (
     <>
+      <AddClientForm onCreated={(created) => setClients((rows) => [...(rows ?? []), created].sort((a, b) => a.name.localeCompare(b.name)))} />
+
       <div className="card" style={{ marginBottom: 24 }}>
         <label htmlFor="client-search">Rechercher</label>
         <input
@@ -174,7 +239,7 @@ export default function ClientsTab() {
       {!error && clients !== null && filtered.length === 0 && (
         <p className="loading-text">
           {clients.length === 0
-            ? 'Aucune fiche client pour le moment — elles se créent depuis l\'onglet Réservations.'
+            ? 'Aucune fiche client pour le moment — ajoutez-en une ci-dessus, ou liez-en une depuis l\'onglet Réservations.'
             : 'Aucun résultat pour cette recherche.'}
         </p>
       )}

@@ -4,7 +4,7 @@ describe('Booking flow', () => {
     cy.intercept('PUT', '/api/admin/settings/daily-hours/*').as('saveDay');
 
     cy.adminLogin();
-    cy.contains('button.admin-tab', 'Horaires').click();
+    cy.contains('button.admin-nav-link', 'Horaires').click();
 
     // Pick an unset day slightly in the future (index 3) to avoid "today" expiring slots 
     cy.get('.day-chip.is-unset').eq(3).click();
