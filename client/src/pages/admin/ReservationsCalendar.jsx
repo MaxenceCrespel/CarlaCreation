@@ -95,6 +95,38 @@ export default function ReservationsCalendar({ reservations, selectedDate, onSel
         <button type="button" className="btn btn-outline btn-sm" onClick={nextWeek} aria-label="Semaine suivante">&rarr;</button>
       </div>
 
+      {/* Phone-width stand-in for the hour-by-hour grid below — 7 small
+          tiles that fit on one screen with no horizontal scroll, showing
+          just a status dot per reservation. Both are always rendered; a
+          CSS breakpoint shows only one (see .agenda-week-mobile /
+          .agenda-scroll in main.css). */}
+      <div className="agenda-week-mobile">
+        {days.map((d) => {
+          const dateStr = toDateStr(d);
+          const isToday = dateStr === todayStr;
+          const isSelected = dateStr === selectedDate;
+          const dayReservations = byDate.get(dateStr) ?? [];
+          return (
+            <button
+              type="button"
+              key={dateStr}
+              className={`agenda-mobile-tile ${isToday ? 'is-today' : ''} ${isSelected ? 'is-selected' : ''}`}
+              onClick={() => onSelectDate(dateStr)}
+            >
+              <span className="agenda-mobile-day-name">{DAY_NAMES[(d.getDay() + 6) % 7].slice(0, 1)}</span>
+              <span className="agenda-mobile-day-num">{d.getDate()}</span>
+              {dayReservations.length > 0 && (
+                <span className="agenda-mobile-dots">
+                  {dayReservations.slice(0, 4).map((r) => (
+                    <span key={r.id} className={`agenda-mobile-dot status-${r.status}`} />
+                  ))}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
       <div className="agenda-scroll">
         <div className="agenda-grid" style={{ '--agenda-rows': ROWS, '--agenda-row-height': `${ROW_HEIGHT}px` }}>
           <div className="agenda-corner" />

@@ -78,7 +78,7 @@ const EMPTY_FORM = {
   notes: '',
 };
 
-function NewInvoiceForm({ onCreated }) {
+function NewInvoiceForm({ onCreated, onCancel }) {
   const showToast = useToast();
   const [form, setForm] = useState(EMPTY_FORM);
   const [items, setItems] = useState([emptyItem()]);
@@ -195,9 +195,12 @@ function NewInvoiceForm({ onCreated }) {
         <input type="text" id="invoice-notes" maxLength={2000} value={form.notes} onChange={update('notes')} />
       </div>
 
-      <button type="submit" className="btn btn-primary" disabled={submitting}>
-        {submitting ? 'Création…' : 'Créer la facture'}
-      </button>
+      <div className="manual-reservation-form-actions">
+        <button type="submit" className="btn btn-primary" disabled={submitting}>
+          {submitting ? 'Création…' : 'Créer la facture'}
+        </button>
+        <button type="button" className="btn btn-outline" onClick={onCancel}>Annuler</button>
+      </div>
     </form>
   );
 }
@@ -233,14 +236,14 @@ function InvoiceRow({ invoice, onStatusChange, onRemove }) {
 
   return (
     <tr>
-      <td>{invoice.number}</td>
-      <td>{new Date(invoice.issue_date).toLocaleDateString('fr-FR')}</td>
-      <td>
+      <td data-label="N°">{invoice.number}</td>
+      <td data-label="Date">{new Date(invoice.issue_date).toLocaleDateString('fr-FR')}</td>
+      <td data-label="Client">
         {invoice.client_name}
         {invoice.client_email && <div className="row-addons">{invoice.client_email}</div>}
       </td>
-      <td>{formatPrice(invoice.total_cents)}</td>
-      <td className="status-cell">
+      <td data-label="Total">{formatPrice(invoice.total_cents)}</td>
+      <td className="status-cell" data-label="Statut">
         <span className={`status-badge ${invoice.status === 'paid' ? 'status-confirmed' : 'status-pending'}`}>
           {invoice.status === 'paid' ? 'Payée' : 'Non payée'}
         </span>
@@ -251,7 +254,7 @@ function InvoiceRow({ invoice, onStatusChange, onRemove }) {
               placeholder="Moyen de paiement"
               value={paymentMethod}
               onChange={(e) => setPaymentMethod(e.target.value)}
-              style={{ width: 130 }}
+              style={{ width: '100%', maxWidth: 180 }}
             />
             <button type="button" className="save-btn" disabled={updating} onClick={markPaid}>Marquer payée</button>
           </>
@@ -273,6 +276,7 @@ export default function FacturationTab() {
   const showToast = useToast();
   const [invoices, setInvoices] = useState(null);
   const [error, setError] = useState(null);
+  const [showAddForm, setShowAddForm] = useState(false);
 
   function load() {
     setError(null);
@@ -301,7 +305,21 @@ export default function FacturationTab() {
 
   return (
     <>
-      <NewInvoiceForm onCreated={(created) => setInvoices((rows) => [created, ...(rows ?? [])])} />
+      {!showAddForm && (
+        <button type="button" className="btn btn-primary btn-sm" style={{ marginBottom: 24 }} onClick={() => setShowAddForm(true)}>
+          + Nouvelle facture
+        </button>
+      )}
+
+      {showAddForm && (
+        <NewInvoiceForm
+          onCreated={(created) => {
+            setInvoices((rows) => [created, ...(rows ?? [])]);
+            setShowAddForm(false);
+          }}
+          onCancel={() => setShowAddForm(false)}
+        />
+      )}
 
       {error && <p className="loading-text">Erreur : {error}</p>}
       {!error && invoices === null && <p className="loading-text">Chargement…</p>}

@@ -11,7 +11,7 @@ function todayStr() {
 
 const EMPTY_FORM = { expenseDate: todayStr(), category: '', description: '', amountEuros: '' };
 
-function AddExpenseForm({ onCreated }) {
+function AddExpenseForm({ onCreated, onCancel }) {
   const showToast = useToast();
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
@@ -74,9 +74,12 @@ function AddExpenseForm({ onCreated }) {
           <input type="text" id="expense-description" maxLength={300} placeholder="Ex : vernis, loyer août…" value={form.description} onChange={update('description')} />
         </div>
       </div>
-      <button type="submit" className="btn btn-primary" disabled={submitting}>
-        {submitting ? 'Ajout…' : 'Ajouter'}
-      </button>
+      <div className="manual-reservation-form-actions">
+        <button type="submit" className="btn btn-primary" disabled={submitting}>
+          {submitting ? 'Ajout…' : 'Ajouter'}
+        </button>
+        <button type="button" className="btn btn-outline" onClick={onCancel}>Annuler</button>
+      </div>
     </form>
   );
 }
@@ -108,10 +111,10 @@ function ExpenseRow({ expense, onSave, onRemove }) {
 
   return (
     <tr>
-      <td><input type="date" value={expenseDate} onChange={(e) => setExpenseDate(e.target.value)} /></td>
-      <td><input type="text" value={category} maxLength={50} list="expense-category-suggestions" onChange={(e) => setCategory(e.target.value)} /></td>
-      <td><input type="text" value={description} maxLength={300} onChange={(e) => setDescription(e.target.value)} /></td>
-      <td><input type="number" min={0.01} step="0.01" className="stock-price-input" value={amountEuros} onChange={(e) => setAmountEuros(e.target.value)} /></td>
+      <td data-label="Date"><input type="date" value={expenseDate} onChange={(e) => setExpenseDate(e.target.value)} /></td>
+      <td data-label="Catégorie"><input type="text" value={category} maxLength={50} list="expense-category-suggestions" onChange={(e) => setCategory(e.target.value)} /></td>
+      <td data-label="Description"><input type="text" value={description} maxLength={300} onChange={(e) => setDescription(e.target.value)} /></td>
+      <td data-label="Montant"><input type="number" min={0.01} step="0.01" className="stock-price-input" value={amountEuros} onChange={(e) => setAmountEuros(e.target.value)} /></td>
       <td className="row-actions">
         <button type="button" className="save-btn" onClick={save} disabled={saving}>{saving ? '…' : 'Enregistrer'}</button>
         <button type="button" className="danger" onClick={() => onRemove(expense.id)}>Supprimer</button>
@@ -124,6 +127,7 @@ export default function DepensesTab() {
   const showToast = useToast();
   const [expenses, setExpenses] = useState(null);
   const [error, setError] = useState(null);
+  const [showAddForm, setShowAddForm] = useState(false);
 
   function load() {
     setError(null);
@@ -160,7 +164,21 @@ export default function DepensesTab() {
         ))}
       </datalist>
 
-      <AddExpenseForm onCreated={(created) => setExpenses((rows) => [created, ...(rows ?? [])])} />
+      {!showAddForm && (
+        <button type="button" className="btn btn-primary btn-sm" style={{ marginBottom: 24 }} onClick={() => setShowAddForm(true)}>
+          + Ajouter une dépense
+        </button>
+      )}
+
+      {showAddForm && (
+        <AddExpenseForm
+          onCreated={(created) => {
+            setExpenses((rows) => [created, ...(rows ?? [])]);
+            setShowAddForm(false);
+          }}
+          onCancel={() => setShowAddForm(false)}
+        />
+      )}
 
       {expenses !== null && expenses.length > 0 && (
         <div className="card" style={{ marginBottom: 24 }}>

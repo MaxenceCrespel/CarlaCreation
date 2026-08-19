@@ -28,6 +28,7 @@ export default function GalleryTab() {
   const [uploadMode, setUploadMode] = useState('pair'); // 'pair' | 'single' — e.g. nail art rarely has a meaningful "before"
   const [uploading, setUploading] = useState(false);
   const [uploadFeedback, setUploadFeedback] = useState(null);
+  const [showAddForm, setShowAddForm] = useState(false);
   const beforeInputRef = useRef(null);
   const afterInputRef = useRef(null);
 
@@ -66,6 +67,7 @@ export default function GalleryTab() {
       if (beforeInputRef.current) beforeInputRef.current.value = '';
       if (afterInputRef.current) afterInputRef.current.value = '';
       setUploadFeedback({ type: 'success', text: 'Photo ajoutée avec succès.' });
+      setShowAddForm(false);
       showToast('Photo ajoutée.', 'success');
     } catch (err) {
       setUploadFeedback({ type: 'error', text: err.message });
@@ -128,6 +130,13 @@ export default function GalleryTab() {
 
   return (
     <>
+      {!showAddForm && (
+        <button type="button" className="btn btn-primary btn-sm" style={{ marginBottom: 24 }} onClick={() => setShowAddForm(true)}>
+          + Ajouter une photo
+        </button>
+      )}
+
+      {showAddForm && (
       <form className="card upload-form" noValidate onSubmit={handleUpload}>
         <h2>Ajouter une photo</h2>
 
@@ -185,10 +194,14 @@ export default function GalleryTab() {
         {uploadFeedback && (
           <div className={`form-feedback ${uploadFeedback.type}`} role="status" aria-live="polite">{uploadFeedback.text}</div>
         )}
-        <button type="submit" className="btn btn-primary" disabled={uploading}>
-          {uploading ? 'Envoi en cours…' : uploadMode === 'pair' ? 'Téléverser les photos' : 'Téléverser la photo'}
-        </button>
+        <div className="manual-reservation-form-actions">
+          <button type="submit" className="btn btn-primary" disabled={uploading}>
+            {uploading ? 'Envoi en cours…' : uploadMode === 'pair' ? 'Téléverser les photos' : 'Téléverser la photo'}
+          </button>
+          <button type="button" className="btn btn-outline" onClick={() => setShowAddForm(false)}>Annuler</button>
+        </div>
       </form>
+      )}
 
       {error && <p className="loading-text">Erreur : {error}</p>}
       {!error && items === null && <p className="loading-text">Chargement…</p>}

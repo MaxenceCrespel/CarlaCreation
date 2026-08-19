@@ -5,7 +5,7 @@ import { formatPrice } from '../../utils/format';
 
 const EMPTY_FORM = { name: '', unit: 'unité', quantity: '0', lowStockThreshold: '0', purchasePriceEuros: '0.00', notes: '' };
 
-function AddProductForm({ onCreated }) {
+function AddProductForm({ onCreated, onCancel }) {
   const showToast = useToast();
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
@@ -71,9 +71,12 @@ function AddProductForm({ onCreated }) {
           <input type="text" id="product-notes" maxLength={500} placeholder="Ex : fournisseur, référence…" value={form.notes} onChange={update('notes')} />
         </div>
       </div>
-      <button type="submit" className="btn btn-primary" disabled={submitting}>
-        {submitting ? 'Ajout…' : 'Ajouter'}
-      </button>
+      <div className="manual-reservation-form-actions">
+        <button type="submit" className="btn btn-primary" disabled={submitting}>
+          {submitting ? 'Ajout…' : 'Ajouter'}
+        </button>
+        <button type="button" className="btn btn-outline" onClick={onCancel}>Annuler</button>
+      </div>
     </form>
   );
 }
@@ -123,8 +126,8 @@ function ProductRow({ product, onAdjust, onSave, onRemove }) {
 
   return (
     <tr className={isLow ? 'stock-row-low' : ''}>
-      <td><input type="text" value={name} maxLength={150} onChange={(e) => setName(e.target.value)} /></td>
-      <td className="stock-quantity-cell">
+      <td data-label="Nom"><input type="text" value={name} maxLength={150} onChange={(e) => setName(e.target.value)} /></td>
+      <td className="stock-quantity-cell" data-label="Quantité">
         <button type="button" className="stock-adjust-btn" onClick={() => adjust(-1)} aria-label="Retirer 1">−</button>
         <input
           type="number"
@@ -137,13 +140,13 @@ function ProductRow({ product, onAdjust, onSave, onRemove }) {
         <button type="button" className="stock-adjust-btn" onClick={() => adjust(1)} aria-label="Ajouter 1">+</button>
         {isLow && <span className="stock-low-badge">Stock bas</span>}
       </td>
-      <td><input type="text" value={unit} maxLength={30} onChange={(e) => setUnit(e.target.value)} /></td>
-      <td><input type="number" min={0} step="0.5" value={threshold} onChange={(e) => setThreshold(e.target.value)} /></td>
-      <td>
+      <td data-label="Unité"><input type="text" value={unit} maxLength={30} onChange={(e) => setUnit(e.target.value)} /></td>
+      <td data-label="Seuil d'alerte"><input type="number" min={0} step="0.5" value={threshold} onChange={(e) => setThreshold(e.target.value)} /></td>
+      <td data-label="Prix d'achat">
         <input type="number" min={0} step="0.01" className="stock-price-input" value={priceEuros} onChange={(e) => setPriceEuros(e.target.value)} />
         <div className="row-addons">{formatPrice(stockValueCents)} au total</div>
       </td>
-      <td><input type="text" value={notes} maxLength={500} onChange={(e) => setNotes(e.target.value)} /></td>
+      <td data-label="Note"><input type="text" value={notes} maxLength={500} onChange={(e) => setNotes(e.target.value)} /></td>
       <td className="row-actions">
         <button type="button" className="save-btn" onClick={save} disabled={saving}>{saving ? '…' : 'Enregistrer'}</button>
         <button type="button" className="danger" onClick={() => onRemove(product.id)}>Supprimer</button>
@@ -156,6 +159,7 @@ export default function StockTab() {
   const showToast = useToast();
   const [products, setProducts] = useState(null);
   const [error, setError] = useState(null);
+  const [showAddForm, setShowAddForm] = useState(false);
 
   function load() {
     setError(null);
@@ -192,7 +196,21 @@ export default function StockTab() {
 
   return (
     <>
-      <AddProductForm onCreated={(created) => setProducts((rows) => [...(rows ?? []), created])} />
+      {!showAddForm && (
+        <button type="button" className="btn btn-primary btn-sm" style={{ marginBottom: 24 }} onClick={() => setShowAddForm(true)}>
+          + Ajouter un produit
+        </button>
+      )}
+
+      {showAddForm && (
+        <AddProductForm
+          onCreated={(created) => {
+            setProducts((rows) => [...(rows ?? []), created]);
+            setShowAddForm(false);
+          }}
+          onCancel={() => setShowAddForm(false)}
+        />
+      )}
 
       {products !== null && products.length > 0 && (
         <div className="card" style={{ marginBottom: 24 }}>

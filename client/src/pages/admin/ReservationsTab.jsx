@@ -722,6 +722,111 @@ function ClientMatchModal({ reservation, onClose, onLinked }) {
   );
 }
 
+// Phone-width stand-in for the desktop table row: the mobile list only
+// shows a compact summary (heure, client, prestation, statut) — tapping it
+// opens this modal with everything the table row normally shows inline
+// (contact, lieu, note, statut modifiable, actions). Delegates every
+// mutation back to the parent's existing handlers so there's no duplicated
+// business logic, only a different presentation of the same row.
+function ReservationDetailModal({ reservation: r, onClose, onUpdateStatus, onEdit, onRefuse, onDelete, onLinkClient, onUnlinkClient }) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-card" role="dialog" aria-modal="true" aria-label="Détail de la réservation" onClick={(e) => e.stopPropagation()}>
+        <h2>{r.client_name}</h2>
+
+        <dl className="recap-list">
+          <div>
+            <dt>Date</dt>
+            <dd>{formatDayHeading(r.reservation_date)} · {r.start_time} – {r.end_time}</dd>
+          </div>
+          <div>
+            <dt>Prestation</dt>
+            <dd>
+              {r.service_name}
+              {r.addons && r.addons.length > 0 && (
+                <div className="row-addons">+ {r.addons.map((a) => a.name).join(', ')}</div>
+              )}
+              {r.discount_percent > 0 && (
+                <div className="row-addons">-{r.discount_percent}% {r.promotion_label ? `(${r.promotion_label})` : ''}</div>
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt>Fiche client</dt>
+            <dd>
+              {r.client_id ? (
+                <>
+                  <span className="status-badge status-confirmed">Fiche liée</span>{' '}
+                  <button type="button" className="link-btn" onClick={() => onUnlinkClient(r.id)}>Délier</button>
+                </>
+              ) : (
+                <button type="button" className="link-btn" onClick={() => onLinkClient(r)}>+ Fiche client</button>
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt>Contact</dt>
+            <dd>{r.client_email}<br />{r.client_phone}</dd>
+          </div>
+          <div>
+            <dt>Lieu</dt>
+            <dd>
+              {r.at_client_home ? (
+                <>
+                  <span className="location-badge">Domicile</span><br />
+                  {r.client_address}
+                  <div className="location-links">
+                    <a href={mapsUrl(r.client_address)} target="_blank" rel="noopener noreferrer">Maps</a>
+                    {' · '}
+                    <a href={wazeUrl(r.client_address)} target="_blank" rel="noopener noreferrer">Waze</a>
+                  </div>
+                  {r.travel_distance_km != null && (
+                    <div className="location-travel">
+                      ≈ {r.travel_distance_km} km · {r.travel_duration_minutes} min
+                      {r.travel_fee_cents != null && ` · ${(r.travel_fee_cents / 100).toFixed(2).replace('.', ',')} €`}
+                    </div>
+                  )}
+                </>
+              ) : (
+                'Studio'
+              )}
+            </dd>
+          </div>
+          {r.notes && (
+            <div>
+              <dt>Note</dt>
+              <dd>{r.notes}</dd>
+            </div>
+          )}
+          <div>
+            <dt>Statut</dt>
+            <dd className="status-cell">
+              <span className={`status-badge status-${r.status}`}>{STATUS_LABELS[r.status] || r.status}</span>
+              <select className="status-select" value={r.status} onChange={(e) => onUpdateStatus(r.id, e.target.value)}>
+                {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </dd>
+          </div>
+        </dl>
+
+        <div className="modal-actions" style={{ flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-outline" onClick={() => onEdit(r)}>Modifier</button>
+          {r.status !== 'refused' && r.status !== 'cancelled' && (
+            <button type="button" className="btn btn-outline" onClick={() => onRefuse(r.id)}>Refuser</button>
+          )}
+          <button type="button" className="btn btn-outline-danger" onClick={() => onDelete(r)}>Supprimer</button>
+        </div>
+
+        <div className="modal-actions" style={{ marginTop: 12 }}>
+          <button type="button" className="btn btn-outline" onClick={onClose}>Fermer</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Consecutive rows sharing a group_id (e.g. mother + daughter booked
 // together) are shown as one visual group with bulk actions, while each
 // member keeps its own row and status control for granular changes.
@@ -788,6 +893,7 @@ export default function ReservationsTab() {
   const [deleting, setDeleting] = useState(false);
   const [editTarget, setEditTarget] = useState(null); // the reservation row being edited, or null
   const [clientModalTarget, setClientModalTarget] = useState(null); // the reservation row being matched to a "fiche client", or null
+  const [detailTarget, setDetailTarget] = useState(null); // the reservation row shown in the mobile detail modal, or null
 
   function load() {
     setReservations(null);
@@ -937,7 +1043,47 @@ export default function ReservationsTab() {
         />
       )}
 
-      <div className="table-wrap">
+      {/* Phone-width stand-in for the table below — one compact row per
+          reservation, tap to open the full detail in a modal. Both are
+          always rendered; a CSS breakpoint shows only one at a time (see
+          .reservations-mobile-list / .table-wrap in main.css). */}
+      <div className="reservations-mobile-list">
+        {error && <p className="loading-text">Erreur : {error}</p>}
+        {!error && reservations === null && <p className="loading-text">Chargement…</p>}
+        {!error && reservations !== null && rows.length === 0 && (
+          <p className="loading-text">
+            {viewMode === 'calendar' && !selectedCalendarDate
+              ? 'Touchez une date du calendrier pour voir le détail.'
+              : 'Aucune réservation trouvée.'}
+          </p>
+        )}
+        {!error && days.map((day) => (
+          <Fragment key={day.date ?? 'calendar-mobile'}>
+            {day.date && (
+              <div className="mobile-day-heading">{formatDayHeading(day.date)} · {day.rows.length} réservation{day.rows.length > 1 ? 's' : ''}</div>
+            )}
+            {groupRows(day.rows).map((group) => (
+              <Fragment key={group.key}>
+                {group.rows.length > 1 && (
+                  <div className="mobile-group-badge">Rendez-vous groupé · {group.rows.length} personnes</div>
+                )}
+                {group.rows.map((r) => (
+                  <button type="button" key={r.id} className="reservation-summary-row" onClick={() => setDetailTarget(r)}>
+                    <span className="reservation-summary-time">{r.start_time}</span>
+                    <span className="reservation-summary-main">
+                      <span className="reservation-summary-name">{r.client_name}</span>
+                      <span className="reservation-summary-service">{r.service_name}</span>
+                    </span>
+                    <span className={`status-badge status-${r.status}`}>{STATUS_LABELS[r.status] || r.status}</span>
+                  </button>
+                ))}
+              </Fragment>
+            ))}
+          </Fragment>
+        ))}
+      </div>
+
+      <div className="table-wrap reservations-table-wrap">
         <table className="admin-table">
           <thead>
             <tr>
@@ -1112,6 +1258,37 @@ export default function ReservationsTab() {
           reservation={clientModalTarget}
           onClose={() => setClientModalTarget(null)}
           onLinked={handleClientLinked}
+        />
+      )}
+
+      {detailTarget && (
+        <ReservationDetailModal
+          reservation={detailTarget}
+          onClose={() => setDetailTarget(null)}
+          onUpdateStatus={(id, status) => {
+            updateStatus(id, status);
+            setDetailTarget((t) => (t ? { ...t, status } : t));
+          }}
+          onEdit={(r) => {
+            setDetailTarget(null);
+            setEditTarget(r);
+          }}
+          onRefuse={(id) => {
+            refuse(id);
+            setDetailTarget(null);
+          }}
+          onDelete={(r) => {
+            setDetailTarget(null);
+            setDeleteTarget({ kind: 'single', id: r.id, clientName: r.client_name, willNotify: r.status === 'pending' || r.status === 'confirmed' });
+          }}
+          onLinkClient={(r) => {
+            setDetailTarget(null);
+            setClientModalTarget(r);
+          }}
+          onUnlinkClient={(id) => {
+            unlinkClient(id);
+            setDetailTarget(null);
+          }}
         />
       )}
     </>

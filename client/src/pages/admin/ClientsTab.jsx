@@ -12,7 +12,7 @@ const STATUS_LABELS = {
 
 const EMPTY_CLIENT_FORM = { name: '', phone: '', email: '', notes: '' };
 
-function AddClientForm({ onCreated }) {
+function AddClientForm({ onCreated, onCancel }) {
   const showToast = useToast();
   const [form, setForm] = useState(EMPTY_CLIENT_FORM);
   const [submitting, setSubmitting] = useState(false);
@@ -66,9 +66,12 @@ function AddClientForm({ onCreated }) {
         <label htmlFor="client-add-notes">Notes (optionnel)</label>
         <textarea id="client-add-notes" rows={3} maxLength={5000} placeholder="Ex : a fait un 4.1 au dernier rdv…" value={form.notes} onChange={update('notes')} />
       </div>
-      <button type="submit" className="btn btn-primary" disabled={submitting}>
-        {submitting ? 'Création…' : 'Créer la fiche'}
-      </button>
+      <div className="manual-reservation-form-actions">
+        <button type="submit" className="btn btn-primary" disabled={submitting}>
+          {submitting ? 'Création…' : 'Créer la fiche'}
+        </button>
+        <button type="button" className="btn btn-outline" onClick={onCancel}>Annuler</button>
+      </div>
     </form>
   );
 }
@@ -176,10 +179,10 @@ function ClientDetail({ client, onClose, onUpdated, onDeleted }) {
                     <tbody>
                       {detail.history.map((h) => (
                         <tr key={h.id}>
-                          <td>{h.reservation_date}</td>
-                          <td>{h.start_time}</td>
-                          <td>{h.service_name}</td>
-                          <td><span className={`status-badge status-${h.status}`}>{STATUS_LABELS[h.status] || h.status}</span></td>
+                          <td data-label="Date">{h.reservation_date}</td>
+                          <td data-label="Heure">{h.start_time}</td>
+                          <td data-label="Prestation">{h.service_name}</td>
+                          <td data-label="Statut"><span className={`status-badge status-${h.status}`}>{STATUS_LABELS[h.status] || h.status}</span></td>
                         </tr>
                       ))}
                     </tbody>
@@ -203,6 +206,7 @@ export default function ClientsTab() {
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(null);
+  const [showAddForm, setShowAddForm] = useState(false);
 
   function load() {
     setError(null);
@@ -221,7 +225,21 @@ export default function ClientsTab() {
 
   return (
     <>
-      <AddClientForm onCreated={(created) => setClients((rows) => [...(rows ?? []), created].sort((a, b) => a.name.localeCompare(b.name)))} />
+      {!showAddForm && (
+        <button type="button" className="btn btn-primary btn-sm" style={{ marginBottom: 24 }} onClick={() => setShowAddForm(true)}>
+          + Ajouter un client
+        </button>
+      )}
+
+      {showAddForm && (
+        <AddClientForm
+          onCreated={(created) => {
+            setClients((rows) => [...(rows ?? []), created].sort((a, b) => a.name.localeCompare(b.name)));
+            setShowAddForm(false);
+          }}
+          onCancel={() => setShowAddForm(false)}
+        />
+      )}
 
       <div className="card" style={{ marginBottom: 24 }}>
         <label htmlFor="client-search">Rechercher</label>
@@ -260,11 +278,11 @@ export default function ClientsTab() {
             <tbody>
               {filtered.map((c) => (
                 <tr key={c.id}>
-                  <td>{c.name}</td>
-                  <td>{c.phone || '—'}</td>
-                  <td>{c.email || '—'}</td>
-                  <td>{c.reservationCount}</td>
-                  <td>{c.notes ? c.notes.slice(0, 60) + (c.notes.length > 60 ? '…' : '') : '—'}</td>
+                  <td data-label="Nom">{c.name}</td>
+                  <td data-label="Téléphone">{c.phone || '—'}</td>
+                  <td data-label="Email">{c.email || '—'}</td>
+                  <td data-label="Rendez-vous">{c.reservationCount}</td>
+                  <td data-label="Note">{c.notes ? c.notes.slice(0, 60) + (c.notes.length > 60 ? '…' : '') : '—'}</td>
                   <td className="row-actions">
                     <button type="button" onClick={() => setSelected(c)}>Voir la fiche</button>
                   </td>

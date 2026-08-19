@@ -4,7 +4,7 @@ import { useToast } from '../../context/ToastContext';
 
 const EMPTY_FORM = { label: '', discountPercent: '10', requiresCode: false, code: '' };
 
-function AddPromotionForm({ onCreated }) {
+function AddPromotionForm({ onCreated, onCancel }) {
   const showToast = useToast();
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
@@ -75,9 +75,12 @@ function AddPromotionForm({ onCreated }) {
         Sans code : le client choisit ce tarif dans un menu au moment de réserver (ex : tarif étudiant).
         Avec code : le client doit saisir ce code exact pour que la réduction s'applique.
       </p>
-      <button type="submit" className="btn btn-primary" disabled={submitting}>
-        {submitting ? 'Ajout…' : 'Ajouter'}
-      </button>
+      <div className="manual-reservation-form-actions">
+        <button type="submit" className="btn btn-primary" disabled={submitting}>
+          {submitting ? 'Ajout…' : 'Ajouter'}
+        </button>
+        <button type="button" className="btn btn-outline" onClick={onCancel}>Annuler</button>
+      </div>
     </form>
   );
 }
@@ -115,17 +118,17 @@ function PromotionRow({ promotion, onSave, onRemove }) {
 
   return (
     <tr>
-      <td><input type="text" value={label} maxLength={100} onChange={(e) => setLabel(e.target.value)} /></td>
-      <td>{promotion.requires_code ? 'Code promo' : 'Tarif sélectionnable'}</td>
-      <td>
+      <td data-label="Libellé"><input type="text" value={label} maxLength={100} onChange={(e) => setLabel(e.target.value)} /></td>
+      <td data-label="Type">{promotion.requires_code ? 'Code promo' : 'Tarif sélectionnable'}</td>
+      <td data-label="Code">
         {promotion.requires_code ? (
           <input type="text" value={code} maxLength={30} onChange={(e) => setCode(e.target.value)} />
         ) : (
           '—'
         )}
       </td>
-      <td><input type="number" min={1} max={100} className="stock-price-input" value={discountPercent} onChange={(e) => setDiscountPercent(e.target.value)} /></td>
-      <td>
+      <td data-label="Réduction"><input type="number" min={1} max={100} className="stock-price-input" value={discountPercent} onChange={(e) => setDiscountPercent(e.target.value)} /></td>
+      <td data-label="Statut">
         <span className={`status-badge ${promotion.active ? 'status-confirmed' : 'status-cancelled'}`}>
           {promotion.active ? 'Active' : 'Désactivée'}
         </span>
@@ -143,6 +146,7 @@ export default function PromotionsTab() {
   const showToast = useToast();
   const [promotions, setPromotions] = useState(null);
   const [error, setError] = useState(null);
+  const [showAddForm, setShowAddForm] = useState(false);
 
   function load() {
     setError(null);
@@ -171,7 +175,21 @@ export default function PromotionsTab() {
 
   return (
     <>
-      <AddPromotionForm onCreated={(created) => setPromotions((rows) => [created, ...(rows ?? [])])} />
+      {!showAddForm && (
+        <button type="button" className="btn btn-primary btn-sm" style={{ marginBottom: 24 }} onClick={() => setShowAddForm(true)}>
+          + Ajouter une promotion
+        </button>
+      )}
+
+      {showAddForm && (
+        <AddPromotionForm
+          onCreated={(created) => {
+            setPromotions((rows) => [created, ...(rows ?? [])]);
+            setShowAddForm(false);
+          }}
+          onCancel={() => setShowAddForm(false)}
+        />
+      )}
 
       {error && <p className="loading-text">Erreur : {error}</p>}
       {!error && promotions === null && <p className="loading-text">Chargement…</p>}
