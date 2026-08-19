@@ -10,7 +10,7 @@ const STATUS_LABELS = {
   refused: 'Refusée',
 };
 
-const EMPTY_CLIENT_FORM = { name: '', phone: '', email: '', notes: '' };
+const EMPTY_CLIENT_FORM = { name: '', phone: '', notes: '' };
 
 function AddClientForm({ onCreated, onCancel }) {
   const showToast = useToast();
@@ -31,7 +31,6 @@ function AddClientForm({ onCreated, onCancel }) {
         body: {
           name: form.name.trim(),
           phone: form.phone.trim(),
-          email: form.email.trim(),
           notes: form.notes.trim(),
         },
       });
@@ -59,10 +58,6 @@ function AddClientForm({ onCreated, onCancel }) {
         </div>
       </div>
       <div className="form-row">
-        <label htmlFor="client-add-email">Email</label>
-        <input type="email" id="client-add-email" maxLength={200} value={form.email} onChange={update('email')} />
-      </div>
-      <div className="form-row">
         <label htmlFor="client-add-notes">Notes (optionnel)</label>
         <textarea id="client-add-notes" rows={3} maxLength={5000} placeholder="Ex : a fait un 4.1 au dernier rdv…" value={form.notes} onChange={update('notes')} />
       </div>
@@ -82,7 +77,6 @@ function ClientDetail({ client, onClose, onUpdated, onDeleted }) {
   const [error, setError] = useState(null);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -92,7 +86,6 @@ function ClientDetail({ client, onClose, onUpdated, onDeleted }) {
         setDetail(data);
         setName(data.name);
         setPhone(data.phone);
-        setEmail(data.email);
         setNotes(data.notes);
       })
       .catch((err) => setError(err.message));
@@ -103,7 +96,7 @@ function ClientDetail({ client, onClose, onUpdated, onDeleted }) {
     try {
       const updated = await apiFetch(`/admin/clients/${client.id}`, {
         method: 'PATCH',
-        body: { name: name.trim(), phone: phone.trim(), email: email.trim(), notes: notes.trim() },
+        body: { name: name.trim(), phone: phone.trim(), notes: notes.trim() },
       });
       onUpdated(updated);
       showToast('Fiche mise à jour.', 'success');
@@ -144,10 +137,6 @@ function ClientDetail({ client, onClose, onUpdated, onDeleted }) {
                 <label htmlFor="client-detail-phone">Téléphone</label>
                 <input type="text" id="client-detail-phone" maxLength={50} value={phone} onChange={(e) => setPhone(e.target.value)} />
               </div>
-            </div>
-            <div className="form-row">
-              <label htmlFor="client-detail-email">Email</label>
-              <input type="email" id="client-detail-email" maxLength={200} value={email} onChange={(e) => setEmail(e.target.value)} />
             </div>
             <div className="form-row">
               <label htmlFor="client-detail-notes">Notes</label>
@@ -220,7 +209,7 @@ export default function ClientsTab() {
   const filtered = (clients ?? []).filter((c) => {
     const needle = search.trim().toLowerCase();
     if (!needle) return true;
-    return [c.name, c.phone, c.email].filter(Boolean).some((v) => v.toLowerCase().includes(needle));
+    return [c.name, c.phone].filter(Boolean).some((v) => v.toLowerCase().includes(needle));
   });
 
   return (
@@ -246,7 +235,7 @@ export default function ClientsTab() {
         <input
           type="text"
           id="client-search"
-          placeholder="Nom, téléphone, email…"
+          placeholder="Nom, téléphone…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -269,7 +258,6 @@ export default function ClientsTab() {
               <tr>
                 <th>Nom</th>
                 <th>Téléphone</th>
-                <th>Email</th>
                 <th>Rendez-vous</th>
                 <th>Note</th>
                 <th>Actions</th>
@@ -280,7 +268,6 @@ export default function ClientsTab() {
                 <tr key={c.id}>
                   <td data-label="Nom">{c.name}</td>
                   <td data-label="Téléphone">{c.phone || '—'}</td>
-                  <td data-label="Email">{c.email || '—'}</td>
                   <td data-label="Rendez-vous">{c.reservationCount}</td>
                   <td data-label="Note">{c.notes ? c.notes.slice(0, 60) + (c.notes.length > 60 ? '…' : '') : '—'}</td>
                   <td className="row-actions">
