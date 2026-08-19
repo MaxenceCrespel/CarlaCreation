@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
+import CollapsibleCard from './CollapsibleCard';
 
 const EMPTY_FORM = { name: '', description: '', categoryId: '', durationMinutes: 30, priceCents: 0, addons: [] };
 
@@ -195,8 +196,7 @@ function CategoriesManager({ categories, setCategories }) {
   }
 
   return (
-    <div className="card categories-manager">
-      <h2>Catégories de prestations</h2>
+    <div className="categories-manager">
       <p className="section-lead">
         Organisez vos prestations par catégorie (ex : Coiffure, Ongles, Homme…) — elles apparaissent dans cet ordre
         sur le site et dans la réservation. Chaque catégorie peut avoir des sous-catégories (ex : "Hommes" dans
@@ -257,6 +257,7 @@ export default function ServicesTab() {
   const [newService, setNewService] = useState(EMPTY_FORM);
   const [creating, setCreating] = useState(false);
   const [createFeedback, setCreateFeedback] = useState(null);
+  const [showAddForm, setShowAddForm] = useState(false);
 
   function load() {
     setError(null);
@@ -298,6 +299,7 @@ export default function ServicesTab() {
       });
       setServices((rows) => [...(rows ?? []), created]);
       setNewService(EMPTY_FORM);
+      setShowAddForm(false);
       showToast('Prestation ajoutée.', 'success');
     } catch (err) {
       setCreateFeedback(err.message);
@@ -330,8 +332,17 @@ export default function ServicesTab() {
 
   return (
     <>
-      <CategoriesManager categories={categories} setCategories={setCategories} />
+      <CollapsibleCard title="Catégories de prestations" hint="Créer, renommer, réorganiser ou ajouter des sous-catégories.">
+        <CategoriesManager categories={categories} setCategories={setCategories} />
+      </CollapsibleCard>
 
+      {!showAddForm && (
+        <button type="button" className="btn btn-primary btn-sm" style={{ marginBottom: 24 }} onClick={() => setShowAddForm(true)}>
+          + Ajouter une prestation
+        </button>
+      )}
+
+      {showAddForm && (
       <form className="card upload-form" style={{ maxWidth: 640 }} noValidate onSubmit={handleCreate}>
         <h2>Ajouter une prestation</h2>
         <div className="form-row">
@@ -397,10 +408,14 @@ export default function ServicesTab() {
         </div>
         <AddonEditor addons={newService.addons} onChange={(addons) => setNewService((f) => ({ ...f, addons }))} />
         {createFeedback && <div className="form-feedback error">{createFeedback}</div>}
-        <button type="submit" className="btn btn-primary" disabled={creating}>
-          {creating ? 'Ajout en cours…' : 'Ajouter la prestation'}
-        </button>
+        <div className="manual-reservation-form-actions">
+          <button type="submit" className="btn btn-primary" disabled={creating}>
+            {creating ? 'Ajout en cours…' : 'Ajouter la prestation'}
+          </button>
+          <button type="button" className="btn btn-outline" onClick={() => setShowAddForm(false)}>Annuler</button>
+        </div>
       </form>
+      )}
 
       {error && <p className="loading-text">Erreur : {error}</p>}
       {!error && services === null && <p className="loading-text">Chargement…</p>}

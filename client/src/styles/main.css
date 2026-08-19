@@ -681,6 +681,27 @@ img { max-width: 100%; display: block; }
 
 .card { background: var(--color-white); border-radius: var(--radius-lg); padding: 32px; box-shadow: var(--shadow-md); }
 
+/* Secondary/fallback settings — deliberately lighter than .card (border
+   instead of shadow, muted title) so it reads as "open only if you need
+   it" rather than competing with the primary content above it. */
+.collapsible-card { border: 1px solid var(--color-bg-alt); border-radius: var(--radius-lg); background: var(--color-white); margin-top: 24px; }
+.collapsible-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: none;
+  border: none;
+  padding: 18px 24px;
+  cursor: pointer;
+  text-align: left;
+}
+.collapsible-toggle-title { font-weight: 700; color: var(--color-text-soft); }
+.collapsible-toggle-chevron { color: var(--color-text-soft); font-size: 0.75rem; flex-shrink: 0; }
+.collapsible-toggle-hint { margin: 0 24px 18px; font-size: 0.85rem; color: var(--color-text-soft); }
+.collapsible-card-body { padding: 0 24px 24px; }
+
 .form-row { margin-bottom: 18px; display: flex; flex-direction: column; gap: 6px; }
 .checkbox-row label { display: flex; flex-direction: row; align-items: center; gap: 8px; font-weight: 600; }
 .form-hint { font-size: 0.8rem; color: var(--color-text-soft); margin: 4px 0 0; }
@@ -840,8 +861,50 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
 .admin-header-inner { display: flex; justify-content: space-between; align-items: center; }
 .admin-header-left { display: flex; align-items: center; gap: 12px; }
 .admin-header h1 { margin: 0; font-size: 1.4rem; }
-.admin-header-actions { display: flex; align-items: center; gap: 20px; }
-.admin-username { font-weight: 600; color: var(--color-text-soft); }
+.admin-header-actions { display: flex; align-items: center; gap: 12px; }
+.admin-username { font-weight: 600; color: var(--color-text-soft); white-space: nowrap; }
+
+/* A compact pill (icon + label) instead of the old full-text outline
+   button — collapses to an icon-only circle on narrow screens (see the
+   480px query below) so it never wraps onto its own line next to the
+   username. */
+.admin-logout-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  border: 1px solid var(--color-bg-alt);
+  background: var(--color-white);
+  color: var(--color-text-soft);
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.admin-logout-btn:hover { border-color: #d99189; color: #b3413a; }
+.admin-logout-btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+/* Account badge — a plain circle with a head icon, opens "Mon compte" as
+   a modal instead of it being a full sidebar section (it's account
+   settings, not a work section like the others). */
+.admin-avatar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--color-bg-alt);
+  background: var(--color-white);
+  color: var(--color-text-soft);
+  border-radius: 50%;
+  cursor: pointer;
+  padding: 0;
+}
+.admin-avatar-btn:hover { border-color: var(--color-accent); color: var(--color-accent-dark); }
+.admin-avatar-btn svg { width: 18px; height: 18px; }
 
 /* Burger: hidden on desktop, shown under the 900px breakpoint below. */
 .admin-burger {
@@ -1013,6 +1076,44 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
 .manual-reservation-form-actions { display: flex; gap: 12px; margin-top: 4px; }
 
 .table-wrap { overflow-x: auto; background: var(--color-white); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); }
+
+/* Compact phone-width alternative to the reservations table — hidden by
+   default, swapped in under the breakpoint below (see
+   ReservationDetailModal in ReservationsTab.jsx for what "Voir plus"
+   opens). */
+.reservations-mobile-list { display: none; }
+.mobile-day-heading {
+  font-weight: 700;
+  color: var(--color-text-soft);
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin: 18px 4px 8px;
+}
+.mobile-day-heading:first-child { margin-top: 4px; }
+.mobile-group-badge {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--color-accent-dark);
+  margin: 4px 4px 6px;
+}
+.reservation-summary-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--color-white);
+  border: 1px solid var(--color-bg-alt);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+.reservation-summary-time { font-weight: 700; flex-shrink: 0; width: 44px; }
+.reservation-summary-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.reservation-summary-name { font-weight: 600; }
+.reservation-summary-service { font-size: 0.82rem; color: var(--color-text-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .admin-table { width: 100%; border-collapse: collapse; min-width: 900px; }
 .admin-table th, .admin-table td {
   text-align: left;
@@ -1090,6 +1191,33 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
 .calendar-nav-center { display: flex; align-items: center; gap: 12px; }
 .calendar-nav h3 { margin: 0; min-width: 220px; text-align: center; font-size: 1rem; }
 
+/* Compact 7-tile week strip — hidden by default, swapped in for the
+   hour-grid below the breakpoint at the bottom of this file. */
+.agenda-week-mobile { display: none; }
+.agenda-mobile-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  background: var(--color-white);
+  border: 1px solid var(--color-bg-alt);
+  border-radius: var(--radius-md);
+  padding: 8px 2px 10px;
+  cursor: pointer;
+  color: var(--color-text);
+}
+.agenda-mobile-tile.is-today { border-color: var(--color-accent); }
+.agenda-mobile-tile.is-selected { background: rgba(184, 115, 90, 0.1); border-color: var(--color-accent); }
+.agenda-mobile-day-name { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; color: var(--color-text-soft); }
+.agenda-mobile-day-num { font-size: 1rem; font-weight: 700; }
+.agenda-mobile-dots { display: flex; gap: 2px; min-height: 6px; }
+.agenda-mobile-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--color-accent); }
+.agenda-mobile-dot.status-pending { background: #8a5a15; }
+.agenda-mobile-dot.status-confirmed { background: #2f7a4a; }
+.agenda-mobile-dot.status-completed { background: #33507a; }
+.agenda-mobile-dot.status-cancelled { background: #b3413a; }
+.agenda-mobile-dot.status-refused { background: #8a2f2f; }
+
 .agenda-scroll { overflow-x: auto; }
 .agenda-grid {
   display: grid;
@@ -1158,6 +1286,12 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
 .agenda-block-name { font-size: 0.72rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 @media (max-width: 700px) {
+  /* The label + "Aujourd'hui" + both arrow buttons never fit on one line
+     at phone width — wrap onto two centered rows instead (label+today
+     above, the two arrows together below) rather than letting the arrows
+     get squeezed past the card edge. */
+  .calendar-nav { flex-wrap: wrap; justify-content: center; row-gap: 10px; }
+  .calendar-nav-center { order: -1; flex-basis: 100%; flex-direction: column; justify-content: center; gap: 8px; }
   .calendar-nav h3 { min-width: 0; font-size: 0.9rem; }
 }
 .row-actions button {
@@ -1409,6 +1543,65 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
 @media (max-width: 640px) {
   .top-service-row { grid-template-columns: 1fr; gap: 4px; }
   .top-service-value { white-space: normal; }
+
+  /* The category name input plus 3 buttons (↑ ↓ Supprimer) never fit on
+     one line on a phone — wrap the input onto its own full-width row and
+     let the buttons flow onto the next one instead of squeezing everyone
+     into an unusable sliver. */
+  .category-manage-row { flex-wrap: wrap; }
+  .category-manage-row input[type='text'] { flex-basis: 100%; }
+  .category-manage-sublist { padding-left: 14px; }
+
+  .category-add-form { flex-wrap: wrap; }
+  .category-add-form input[type='text'] { flex-basis: 100%; }
+  .category-add-form button { width: 100%; }
+}
+
+@media (max-width: 760px) {
+  /* Réservations: swap the 9-column table for the compact tap-to-expand
+     list, and the hour-by-hour week grid for the 7-tile strip — both are
+     unusable at phone width (forced horizontal scroll, illegible text).
+     Scoped to .reservations-table-wrap specifically, NOT every .table-wrap
+     — every other admin table (Stock, Facturation, Dépenses, Promotions,
+     Clients) uses the generic stacked-card transform below instead. */
+  .reservations-table-wrap { display: none; }
+  .reservations-mobile-list { display: block; }
+
+  .agenda-scroll { display: none; }
+  .agenda-week-mobile { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+
+  /* Every other admin table: turn each row into a small card with its
+     cells stacked as labelled fields, instead of forcing a horizontal
+     scroll that hides most of the content off-screen. Inputs inside cells
+     stay exactly as functional as on desktop. */
+  .admin-table thead { display: none; }
+  .admin-table, .admin-table tbody, .admin-table tr, .admin-table td { display: block; width: 100%; }
+  .admin-table { min-width: 0; }
+  .table-wrap { overflow-x: visible; box-shadow: none; background: none; border-radius: 0; }
+  .admin-table tr {
+    background: var(--color-white);
+    border: 1px solid var(--color-bg-alt);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    padding: 12px 14px;
+    margin-bottom: 12px;
+  }
+  .admin-table td {
+    border-bottom: none;
+    padding: 7px 0;
+  }
+  .admin-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--color-text-soft);
+    margin-bottom: 3px;
+  }
+  .admin-table td:empty { display: none; }
+  .admin-table td.row-actions { display: flex; flex-wrap: wrap; gap: 10px 16px; padding-top: 10px; border-top: 1px solid var(--color-bg-alt); }
 }
 
 @media (max-width: 760px) {
@@ -1470,6 +1663,14 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
   .guest-block-header { flex-wrap: wrap; row-gap: 6px; }
 
   .toast { left: 16px; right: 16px; bottom: 16px; max-width: none; }
+
+  /* Username adds nothing critical on a phone-width header (there's only
+     ever one admin account) — drop it and shrink the logout pill down to
+     a plain icon circle, matching the burger button's footprint, so the
+     header never wraps onto two lines. */
+  .admin-username { display: none; }
+  .admin-logout-btn { padding: 0; width: 36px; height: 36px; justify-content: center; }
+  .admin-logout-label { display: none; }
 
   .admin-filters .btn { margin-left: 0; width: 100%; }
 

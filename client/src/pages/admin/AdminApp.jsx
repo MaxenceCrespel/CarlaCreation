@@ -14,6 +14,9 @@ import DepensesTab from './DepensesTab';
 import ClientsTab from './ClientsTab';
 import PromotionsTab from './PromotionsTab';
 
+// "Mon compte" isn't in this list — it's not a work section like the
+// others, so it lives behind the avatar badge in the header instead (see
+// showAccountModal below), keeping the sidebar to just the actual sections.
 const TABS = [
   { key: 'dashboard', label: 'Tableau de bord', Component: DashboardTab },
   { key: 'reservations', label: 'Réservations', Component: ReservationsTab },
@@ -26,7 +29,6 @@ const TABS = [
   { key: 'depenses', label: 'Dépenses', Component: DepensesTab },
   { key: 'promotions', label: 'Promotions', Component: PromotionsTab },
   { key: 'reviews', label: 'Avis', Component: AvisTab },
-  { key: 'account', label: 'Mon compte', Component: AccountTab },
 ];
 
 export default function AdminApp() {
@@ -35,6 +37,7 @@ export default function AdminApp() {
   // Sidebar on desktop is always visible; on mobile it becomes a slide-in
   // drawer toggled by the burger button, and this same flag controls it.
   const [navOpen, setNavOpen] = useState(false);
+  const [showAccountModal, setShowAccountModal] = useState(false);
 
   useEffect(() => {
     apiFetch('/auth/me')
@@ -94,7 +97,25 @@ export default function AdminApp() {
           </div>
           <div className="admin-header-actions">
             <span className="admin-username">{session.username}</span>
-            <button type="button" className="btn btn-outline" onClick={handleLogout}>Se déconnecter</button>
+            <button
+              type="button"
+              className="admin-avatar-btn"
+              aria-label="Mon compte"
+              onClick={() => setShowAccountModal(true)}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="8" r="4" />
+                <path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" />
+              </svg>
+            </button>
+            <button type="button" className="admin-logout-btn" onClick={handleLogout} aria-label="Se déconnecter">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+              <span className="admin-logout-label">Se déconnecter</span>
+            </button>
           </div>
         </div>
       </header>
@@ -127,6 +148,20 @@ export default function AdminApp() {
           <ActiveComponent username={session.username} onCredentialsUpdated={(newUsername) => setSession({ username: newUsername })} />
         </main>
       </div>
+
+      {showAccountModal && (
+        <div className="modal-overlay" onClick={() => setShowAccountModal(false)}>
+          <div className="modal-card" role="dialog" aria-modal="true" aria-label="Mon compte" onClick={(e) => e.stopPropagation()}>
+            <AccountTab
+              username={session.username}
+              onCredentialsUpdated={(newUsername) => setSession({ username: newUsername })}
+            />
+            <div className="modal-actions" style={{ marginTop: 16 }}>
+              <button type="button" className="btn btn-outline" onClick={() => setShowAccountModal(false)}>Fermer</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

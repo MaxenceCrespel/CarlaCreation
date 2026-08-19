@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
+import CollapsibleCard from './CollapsibleCard';
 
 const DAY_NAMES = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'];
 const MONTH_NAMES = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
@@ -221,13 +222,12 @@ function TravelBufferCard() {
   }
 
   return (
-    <form className="card travel-buffer-card" onSubmit={save}>
-      <h2>Trajet (rendez-vous à domicile)</h2>
+    <form className="travel-buffer-card" onSubmit={save}>
       <p className="section-lead">
         Le temps de trajet réel (calculé automatiquement à partir de l'adresse du client) est utilisé en priorité
         pour bloquer le planning avant/après un rendez-vous à domicile. Le frais de déplacement suit les paliers
         ci-dessous selon la distance réelle (ex : gratuit jusqu'à 10 km, puis 2 € au-delà) — le client voit le rayon
-        gratuit avant même de saisir son adresse. Les valeurs de repli ne servent que quand la distance est
+        gratuit avant même de saisir son adresse. Les valeurs ci-dessous ne servent que quand la distance est
         introuvable (adresse non reconnue, calcul indisponible).
       </p>
       {minutes === null || fallbackFeeEuros === null || tiers === null ? (
@@ -347,8 +347,6 @@ export default function HoursTab() {
 
   return (
     <>
-      <TravelBufferCard />
-
       <div className="card hours-editor">
         <h2>Horaires jour par jour</h2>
         <p className="section-lead">
@@ -390,6 +388,13 @@ export default function HoursTab() {
         </>
       )}
       </div>
+
+      <CollapsibleCard
+        title="Trajet et frais de déplacement (repli)"
+        hint="Ne sert que si la distance réelle ne peut pas être calculée — à ouvrir seulement si besoin d'ajuster."
+      >
+        <TravelBufferCard />
+      </CollapsibleCard>
     </>
   );
 }
