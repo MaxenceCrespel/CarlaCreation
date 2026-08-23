@@ -49,12 +49,15 @@ RUN npm install -g npm@latest
 #     whenever Trivy flags it again, this package has had two CVEs in a row.
 #   - ip-address: CVE-2026-69192, Address4 leading-zero octets decoded as
 #     decimal while resolvers treat them as octal (fixed 10.3.1).
+#   - tar: CVE-2026-73566, DoS via a crafted long-path tar archive
+#     (fixed 7.5.21) — used internally by npm itself (npm pack/cacache).
 RUN NPM_DIR="$(npm root -g)/npm" \
   && cd /tmp \
-  && npm pack brace-expansion@5.0.9 ip-address@10.3.1 \
+  && npm pack brace-expansion@5.0.9 ip-address@10.3.1 tar@7.5.21 \
   && tar -xzf brace-expansion-5.0.9.tgz && rm -rf "$NPM_DIR/node_modules/brace-expansion" && mv package "$NPM_DIR/node_modules/brace-expansion" \
   && tar -xzf ip-address-10.3.1.tgz && rm -rf "$NPM_DIR/node_modules/ip-address" && mv package "$NPM_DIR/node_modules/ip-address" \
-  && rm -f brace-expansion-5.0.9.tgz ip-address-10.3.1.tgz
+  && tar -xzf tar-7.5.21.tgz && rm -rf "$NPM_DIR/node_modules/tar" && mv package "$NPM_DIR/node_modules/tar" \
+  && rm -f brace-expansion-5.0.9.tgz ip-address-10.3.1.tgz tar-7.5.21.tgz
 
 COPY --from=api-build /build/api/node_modules ./node_modules
 COPY --from=api-build /build/api/dist ./dist
