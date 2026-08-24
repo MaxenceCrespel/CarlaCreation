@@ -41,7 +41,7 @@ export class DashboardService {
       throw new BadRequestException('La période demandée est trop large (366 jours maximum).');
     }
 
-    const today = localDateString(new Date());
+    const now = new Date();
 
     const reservations: ReservationRow[] = await this.dataSource.query(
       `SELECT r.id, r.service_id, s.name AS service_name, s.price_cents, r.start_time, r.end_time, r.reservation_date, r.status, r.at_client_home, r.discount_percent
@@ -90,7 +90,12 @@ export class DashboardService {
       confirmedOrCompletedCount += 1;
       if (r.at_client_home) atHomeCount += 1;
       else studioCount += 1;
-      if (r.reservation_date <= today) {
+      // Compared against the reservation's actual start time, not just its
+      // calendar date — a date-only cutoff would flip every reservation of
+      // the day to "généré" the instant midnight (Europe/Paris) hits, even
+      // ones scheduled for later that evening that haven't happened yet.
+      const startsAt = new Date(`${r.reservation_date}T${r.start_time}:00`);
+      if (startsAt <= now) {
         generatedCents += total;
       } else {
         upcomingCents += total;
