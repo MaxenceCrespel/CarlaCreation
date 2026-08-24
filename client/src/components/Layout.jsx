@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import Header from './Header';
 import Footer from './Footer';
+import InstallAppBanner from './InstallAppBanner';
 import { useSiteConfig } from '../context/SiteConfigContext';
 
 // Injects/updates a single site-wide LocalBusiness JSON-LD script so search
@@ -47,6 +48,7 @@ export default function Layout() {
         <Outlet />
       </main>
       <Footer />
+      <InstallAppBanner />
     </>
   );
 }
