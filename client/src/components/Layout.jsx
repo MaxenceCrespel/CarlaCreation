@@ -2,7 +2,6 @@ import { useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import Header from './Header';
 import Footer from './Footer';
-import InstallAppBanner from './InstallAppBanner';
 import { useSiteConfig } from '../context/SiteConfigContext';
 
 // Injects/updates a single site-wide LocalBusiness JSON-LD script so search
@@ -48,7 +47,9 @@ export default function Layout() {
         <Outlet />
       </main>
       <Footer />
-      <InstallAppBanner />
+      {/* InstallAppBanner disabled until the final prod domain is locked in —
+          PWA installs are origin-scoped, so installing from staging would
+          break when the site moves. */}
     </>
   );
 }
