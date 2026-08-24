@@ -2,6 +2,16 @@ import { Fragment, useEffect, useState } from 'react';
 import { apiFetch } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import ReservationsCalendar from './ReservationsCalendar';
+import { formatPrice } from '../../utils/format';
+
+// Service price + addons, minus any promotion discount — the actual total
+// the client is paying for this reservation (travel fee shown separately
+// elsewhere, since it depends on distance and isn't part of the "formule").
+function reservationTotalCents(r) {
+  const addonsSum = (r.addons ?? []).reduce((sum, a) => sum + a.extra_price_cents, 0);
+  const fullPrice = r.price_cents + addonsSum;
+  return Math.round(fullPrice * (1 - (r.discount_percent ?? 0) / 100));
+}
 
 const STATUS_LABELS = {
   pending: 'En attente',
@@ -742,12 +752,16 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdateStatus, onEdi
           <div>
             <dt>Prestation</dt>
             <dd>
-              {r.service_name}
+              {r.service_name} — {formatPrice(r.price_cents)}
               {r.addons && r.addons.length > 0 && (
-                <div className="row-addons">+ {r.addons.map((a) => a.name).join(', ')}</div>
+                <div className="row-addons">+ {r.addons.map((a) => `${a.name} (${formatPrice(a.extra_price_cents)})`).join(', ')}</div>
               )}
-              {r.discount_percent > 0 && (
-                <div className="row-addons">-{r.discount_percent}% {r.promotion_label ? `(${r.promotion_label})` : ''}</div>
+              {r.discount_percent > 0 ? (
+                <div className="row-addons">
+                  -{r.discount_percent}% {r.promotion_label ? `(${r.promotion_label})` : '(code promo)'} → total {formatPrice(reservationTotalCents(r))}
+                </div>
+              ) : (
+                <div className="row-addons">Total : {formatPrice(reservationTotalCents(r))}</div>
               )}
             </dd>
           </div>
@@ -1137,12 +1151,16 @@ export default function ReservationsTab() {
                         <td>{r.reservation_date}</td>
                         <td>{r.start_time} – {r.end_time}</td>
                         <td>
-                          {r.service_name}
+                          {r.service_name} — {formatPrice(r.price_cents)}
                           {r.addons && r.addons.length > 0 && (
-                            <div className="row-addons">+ {r.addons.map((a) => a.name).join(', ')}</div>
+                            <div className="row-addons">+ {r.addons.map((a) => `${a.name} (${formatPrice(a.extra_price_cents)})`).join(', ')}</div>
                           )}
-                          {r.discount_percent > 0 && (
-                            <div className="row-addons">-{r.discount_percent}% {r.promotion_label ? `(${r.promotion_label})` : ''}</div>
+                          {r.discount_percent > 0 ? (
+                            <div className="row-addons">
+                              -{r.discount_percent}% {r.promotion_label ? `(${r.promotion_label})` : '(code promo)'} → {formatPrice(reservationTotalCents(r))}
+                            </div>
+                          ) : (
+                            <div className="row-addons">Total : {formatPrice(reservationTotalCents(r))}</div>
                           )}
                         </td>
                         <td>

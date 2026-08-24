@@ -47,6 +47,7 @@ interface ReservationWithServiceRow {
   created_at: Date;
   service_id: number;
   service_name: string;
+  price_cents: number;
   at_client_home: boolean;
   client_address: string | null;
   travel_distance_km: number | null;
@@ -558,7 +559,7 @@ export class ReservationsService {
               r.at_client_home, r.client_address,
               r.travel_distance_km::float8 AS travel_distance_km, r.travel_duration_minutes, r.travel_fee_cents,
               r.promotion_id, r.discount_percent, p.label AS promotion_label,
-              s.name AS service_name
+              s.name AS service_name, s.price_cents
        FROM reservations r
        JOIN services s ON s.id = r.service_id
        LEFT JOIN promotions p ON p.id = r.promotion_id
