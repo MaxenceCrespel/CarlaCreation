@@ -30,6 +30,12 @@ WORKDIR /app
 # at request-serving time, only by that one manual/cron script.
 RUN apk add --no-cache postgresql-client
 
+# Alpine's OpenSSL packages lag behind the base image build — bump them
+# explicitly so Trivy's OS-package scan doesn't flag whatever's newest.
+#   - libssl3/libcrypto3: CVE-2026-14456, DoS via unbounded memory growth
+#     in the QUIC server (fixed 3.5.8-r0).
+RUN apk upgrade --no-cache libssl3 libcrypto3
+
 # The npm version bundled with the base image lags behind and vendors its
 # own (occasionally vulnerable) copies of tar/glob/minimatch/cross-spawn/
 # sigstore — irrelevant to our app code, but still part of the image Trivy
