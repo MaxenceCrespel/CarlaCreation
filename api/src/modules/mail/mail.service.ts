@@ -129,8 +129,14 @@ export class MailService {
   }
 
   async sendStatusUpdate(input: BookingEmailInput & { status: string }): Promise<void> {
+    // 'completed' gets its own email (a review request) instead of the
+    // booking-status template below — see sendReviewRequest.
+    if (input.status === 'completed') {
+      await this.sendReviewRequest(input);
+      return;
+    }
     // Only these transitions are worth an email — 'pending' is the initial
-    // state (covered by sendBookingReceived) and 'completed' isn't urgent.
+    // state (covered by sendBookingReceived).
     if (input.status !== 'confirmed' && input.status !== 'refused' && input.status !== 'cancelled') return;
 
     const label = STATUS_LABELS[input.status] || input.status;
@@ -149,6 +155,29 @@ export class MailService {
     // Only reveal the studio's exact address once the appointment is
     // actually confirmed — not on a refusal/cancellation notice.
     await this.send(input.clientEmail, subject, this.renderBookingEmail(input, intro, label, input.status === 'confirmed'));
+  }
+
+  // Sent once a reservation is marked "completed" by the admin — invites the
+  // client to leave a review, linking to the testimonials section on the
+  // homepage (there is no dedicated /avis page).
+  async sendReviewRequest(input: BookingEmailInput): Promise<void> {
+    const subject = `Merci pour votre visite — ${siteConfig.siteName}`;
+    const reviewUrl = `${config.PUBLIC_ORIGIN}/#testimonials`;
+
+    const html = `
+      <div style="font-family: Segoe UI, Arial, sans-serif; color:#3A2E27; max-width:560px; margin:0 auto;">
+        <img src="${config.PUBLIC_ORIGIN}/logo-email.png" alt="${escapeHtml(siteConfig.siteName)}" width="140" style="display:block;margin:0 0 16px;" />
+        <p>Bonjour ${escapeHtml(input.clientName)},</p>
+        <p>Merci pour votre visite ! J'espère que la prestation vous a plu.</p>
+        <p>Votre avis compte beaucoup et aide d'autres client·e·s à me faire confiance — auriez-vous deux minutes pour en laisser un ?</p>
+        <p style="margin-top:24px;">
+          <a href="${reviewUrl}" style="display:inline-block;background:#9A5F4B;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;">Laisser un avis</a>
+        </p>
+        <p style="margin-top:24px;">Une question ? Appelez-moi au ${escapeHtml(siteConfig.sitePhone)} ou répondez à cet email.</p>
+        <p style="color:#6B5C51;font-size:0.85em;margin-top:32px;">${escapeHtml(siteConfig.siteName)}</p>
+      </div>
+    `;
+    await this.send(input.clientEmail, subject, html);
   }
 
   private renderBookingEmail(input: BookingEmailInput, introHtml: string, statusLabel?: string, revealAddress = false): string {

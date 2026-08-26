@@ -97,6 +97,15 @@ describe('MailService — studio address privacy', () => {
     );
   });
 
+  it('sendStatusUpdate sends a review-request email (not the booking-status template) once completed', async () => {
+    await service.sendStatusUpdate({ ...baseInput, status: 'completed' });
+    expect(sendMail).toHaveBeenCalledTimes(1);
+    const { subject, html } = sendMail.mock.calls[0][0];
+    expect(subject).toContain('Merci pour votre visite');
+    expect(html).toContain('https://carlacreation.example/#testimonials');
+    expect(html).not.toContain('<table');
+  });
+
   it('always sends a plain-text alternative alongside the HTML (avoids an HTML-only spam signal)', async () => {
     await service.sendBookingReceived(baseInput);
     const { html, text } = sendMail.mock.calls[0][0];
