@@ -158,59 +158,68 @@ describe('DashboardService', () => {
   });
 
   it("keeps a later-today reservation as \"upcoming\" instead of flipping it to \"generated\" at midnight (date-only cutoff bug)", async () => {
-    const now = new Date();
-    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const past = new Date(now.getTime() - 60 * 60 * 1000); // 1h ago
-    const future = new Date(now.getTime() + 60 * 60 * 1000); // 1h from now
-    const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    // Pinned to a safe midday moment (fake timers, so the service's own
+    // `new Date()` sees it too) — using the real "now" here made this test
+    // flaky whenever it happened to run within 1h of actual midnight, since
+    // the hardcoded reservation_date would then be wrong for one of the rows.
+    jest.useFakeTimers({ now: new Date(2026, 5, 15, 12, 0, 0) });
+    try {
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const past = new Date(now.getTime() - 60 * 60 * 1000); // 1h ago
+      const future = new Date(now.getTime() + 60 * 60 * 1000); // 1h from now
+      const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 
-    dataSource.query.mockImplementation((sql: string) => {
-      if (sql.includes('FROM reservations r')) {
-        return Promise.resolve([
-          {
-            id: 1,
-            service_id: 1,
-            service_name: 'Déjà passé',
-            price_cents: 3000,
-            start_time: hhmm(past),
-            end_time: hhmm(past),
-            reservation_date: todayStr,
-            status: 'confirmed',
-            at_client_home: false,
-            discount_percent: 0,
-          },
-          {
-            id: 2,
-            service_id: 2,
-            service_name: 'Plus tard ce soir',
-            price_cents: 5000,
-            start_time: hhmm(future),
-            end_time: hhmm(future),
-            reservation_date: todayStr,
-            status: 'confirmed',
-            at_client_home: false,
-            discount_percent: 0,
-          },
-        ]);
-      }
-      if (sql.includes('reservation_addons')) return Promise.resolve([]);
-      if (sql.includes('GROUP BY status')) return Promise.resolve([{ status: 'confirmed', count: 2 }]);
-      if (sql.includes('COUNT(*)::int')) return Promise.resolve([{ count: 2 }]);
-      if (sql.includes('FROM expenses')) return Promise.resolve([]);
-      throw new Error(`Unexpected query: ${sql}`);
-    });
-    getEffectiveHoursForDate.mockResolvedValue({
-      date: todayStr,
-      dayOfWeek: now.getDay(),
-      isClosed: false,
-      isSet: true,
-      ranges: [{ openTime: '00:00', closeTime: '23:59' }],
-    });
+      dataSource.query.mockImplementation((sql: string) => {
+        if (sql.includes('FROM reservations r')) {
+          return Promise.resolve([
+            {
+              id: 1,
+              service_id: 1,
+              service_name: 'Déjà passé',
+              price_cents: 3000,
+              start_time: hhmm(past),
+              end_time: hhmm(past),
+              reservation_date: todayStr,
+              status: 'confirmed',
+              at_client_home: false,
+              discount_percent: 0,
+            },
+            {
+              id: 2,
+              service_id: 2,
+              service_name: 'Plus tard ce soir',
+              price_cents: 5000,
+              start_time: hhmm(future),
+              end_time: hhmm(future),
+              reservation_date: todayStr,
+              status: 'confirmed',
+              at_client_home: false,
+              discount_percent: 0,
+            },
+          ]);
+        }
+        if (sql.includes('reservation_addons')) return Promise.resolve([]);
+        if (sql.includes('GROUP BY status')) return Promise.resolve([{ status: 'confirmed', count: 2 }]);
+        if (sql.includes('COUNT(*)::int')) return Promise.resolve([{ count: 2 }]);
+        if (sql.includes('FROM expenses')) return Promise.resolve([]);
+        throw new Error(`Unexpected query: ${sql}`);
+      });
+      getEffectiveHoursForDate.mockResolvedValue({
+        date: todayStr,
+        dayOfWeek: now.getDay(),
+        isClosed: false,
+        isSet: true,
+        ranges: [{ openTime: '00:00', closeTime: '23:59' }],
+      });
 
-    const result = await service.getDashboard(todayStr, todayStr);
+      const result = await service.getDashboard(todayStr, todayStr);
 
-    expect(result.revenue.generatedCents).toBe(3000);
-    expect(result.revenue.upcomingCents).toBe(5000);
+      expect(result.revenue.generatedCents).toBe(3000);
+      expect(result.revenue.upcomingCents).toBe(5000);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('skips closed days when computing open/available hours', async () => {
