@@ -1144,6 +1144,114 @@ describe('ReservationsService', () => {
 
       expect(deleteCalled).toBe(false);
     });
+
+    it('re-sends the booking-received email to a corrected address when a pending reservation\'s email was a typo', async () => {
+      reservationRepo.findOne.mockResolvedValue({
+        id: 1,
+        service_id: 1,
+        client_name: 'Alice',
+        client_email: 'alice@example.com',
+        client_phone: '0600000000',
+        reservation_date: '2099-01-01',
+        start_time: '10:00',
+        end_time: '10:45',
+        notes: '',
+        at_client_home: false,
+        client_address: null,
+        status: 'pending',
+        group_id: null,
+      });
+      serviceRepo.findOne.mockResolvedValue(HAIRCUT);
+      dataSource.query.mockResolvedValue([]);
+      noOverlap();
+
+      await service.updateReservation(1, { clientEmail: 'alice@example.fr' });
+
+      expect(mailService.sendBookingReceived).toHaveBeenCalledWith(
+        expect.objectContaining({ clientEmail: 'alice@example.fr' }),
+      );
+      expect(mailService.sendStatusUpdate).not.toHaveBeenCalled();
+    });
+
+    it('re-sends the confirmation email to a corrected address when a confirmed reservation\'s email was a typo', async () => {
+      reservationRepo.findOne.mockResolvedValue({
+        id: 1,
+        service_id: 1,
+        client_name: 'Alice',
+        client_email: 'alice@example.com',
+        client_phone: '0600000000',
+        reservation_date: '2099-01-01',
+        start_time: '10:00',
+        end_time: '10:45',
+        notes: '',
+        at_client_home: false,
+        client_address: null,
+        status: 'confirmed',
+        group_id: null,
+      });
+      serviceRepo.findOne.mockResolvedValue(HAIRCUT);
+      dataSource.query.mockResolvedValue([]);
+      noOverlap();
+
+      await service.updateReservation(1, { clientEmail: 'alice@example.fr' });
+
+      expect(mailService.sendStatusUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ clientEmail: 'alice@example.fr', status: 'confirmed' }),
+      );
+      expect(mailService.sendBookingReceived).not.toHaveBeenCalled();
+    });
+
+    it('does not re-send any email when the address is unchanged', async () => {
+      reservationRepo.findOne.mockResolvedValue({
+        id: 1,
+        service_id: 1,
+        client_name: 'Alice',
+        client_email: 'alice@example.com',
+        client_phone: '0600000000',
+        reservation_date: '2099-01-01',
+        start_time: '10:00',
+        end_time: '10:45',
+        notes: '',
+        at_client_home: false,
+        client_address: null,
+        status: 'confirmed',
+        group_id: null,
+      });
+      serviceRepo.findOne.mockResolvedValue(HAIRCUT);
+      dataSource.query.mockResolvedValue([]);
+      noOverlap();
+
+      await service.updateReservation(1, { notes: 'unrelated change' });
+
+      expect(mailService.sendBookingReceived).not.toHaveBeenCalled();
+      expect(mailService.sendStatusUpdate).not.toHaveBeenCalled();
+    });
+
+    it('does not re-send an email for a cancelled reservation even if the address changes', async () => {
+      reservationRepo.findOne.mockResolvedValue({
+        id: 1,
+        service_id: 1,
+        client_name: 'Alice',
+        client_email: 'alice@example.com',
+        client_phone: '0600000000',
+        reservation_date: '2099-01-01',
+        start_time: '10:00',
+        end_time: '10:45',
+        notes: '',
+        at_client_home: false,
+        client_address: null,
+        status: 'cancelled',
+        group_id: null,
+      });
+      serviceRepo.findOne.mockResolvedValue(HAIRCUT);
+      dataSource.query.mockResolvedValue([]);
+      noOverlap();
+
+      await service.updateReservation(1, { clientEmail: 'alice@example.fr' });
+
+      expect(mailService.sendBookingReceived).not.toHaveBeenCalled();
+      expect(mailService.sendStatusUpdate).not.toHaveBeenCalled();
+    });
   });
 
   describe('dispatchDueReminders', () => {

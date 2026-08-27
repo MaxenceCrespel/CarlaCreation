@@ -695,6 +695,40 @@ export class ReservationsService {
         }
       }
     });
+
+    // Admin corrected a typo'd email (e.g. .com → .fr): the original
+    // booking-received/confirmation email already went out to the wrong
+    // address and the client never saw it — re-send the same notification
+    // to the corrected address now. Only makes sense for a still-live
+    // reservation (pending/confirmed); nothing to resend for a cancelled,
+    // refused, or already-completed one.
+    const newEmail = dto.clientEmail ?? existing.client_email;
+    if (newEmail !== existing.client_email && (existing.status === 'pending' || existing.status === 'confirmed')) {
+      const clientName = dto.clientName ?? existing.client_name;
+      const guests = [{ name: clientName, serviceName: service.name, startTime, endTime }];
+      if (existing.status === 'pending') {
+        await this.mailService.sendBookingReceived({
+          clientName,
+          clientEmail: newEmail,
+          date,
+          guests,
+          groupId: existing.group_id ?? undefined,
+          atClientHome,
+          clientAddress,
+        });
+      } else {
+        await this.mailService.sendStatusUpdate({
+          clientName,
+          clientEmail: newEmail,
+          date,
+          status: existing.status,
+          guests,
+          groupId: existing.group_id ?? undefined,
+          atClientHome,
+          clientAddress,
+        });
+      }
+    }
   }
 
   async updateStatus(id: number, status: ReservationStatus): Promise<void> {
