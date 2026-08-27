@@ -19,6 +19,11 @@ describe('Reviews', () => {
     cy.contains('.admin-review-card', reviewerName).within(() => {
       cy.contains('button', 'Approuver').click();
     });
+    // Wait for the approval PATCH to actually complete (surfaced via the
+    // success toast) before navigating away — without this, a slow request
+    // can lose the race against cy.visit below and the review shows as
+    // still-pending on the reload.
+    cy.get('.toast.is-visible').should('contain', 'Avis approuvé');
 
     cy.visit('/');
     cy.get('#testimonials').contains(reviewerName).should('be.visible');
