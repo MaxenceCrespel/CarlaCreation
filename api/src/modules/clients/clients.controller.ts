@@ -19,6 +19,13 @@ export class ClientsController {
     return this.clientsService.matchCandidates(name ?? '');
   }
 
+  // Autocomplete while the admin types a name in the manual-reservation
+  // form — registered before ':id' so 'suggest' isn't parsed as an id.
+  @Get('suggest')
+  suggest(@Query('q') q: string) {
+    return this.clientsService.suggestFromHistory(q ?? '');
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.clientsService.findOne(id);

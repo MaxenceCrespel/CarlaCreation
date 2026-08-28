@@ -1105,6 +1105,41 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
 .manual-reservation-form h2 { font-size: 1.1rem; }
 .manual-reservation-form-actions { display: flex; gap: 12px; margin-top: 4px; }
 
+/* Client name autocomplete (manual reservation form) */
+.client-autocomplete { position: relative; }
+.client-autocomplete-list {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  background: var(--color-white);
+  border: 1px solid var(--color-bg-alt);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  max-height: 220px;
+  overflow-y: auto;
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+}
+.client-autocomplete-list li button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  padding: 8px 14px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+.client-autocomplete-list li button:hover,
+.client-autocomplete-list li button:focus-visible { background: var(--color-bg); }
+.client-autocomplete-name { font-weight: 600; color: var(--color-text); }
+.client-autocomplete-meta { font-size: 0.8rem; color: var(--color-text-soft); }
+
 .table-wrap { overflow-x: auto; background: var(--color-white); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); }
 
 /* Compact phone-width alternative to the reservations table — hidden by

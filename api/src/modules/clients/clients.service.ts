@@ -79,6 +79,30 @@ export class ClientsService {
     return candidates.map((c) => ({ ...c, history: (historyByClient.get(c.id) ?? []).slice(0, 5) }));
   }
 
+  // Autocomplete for the "create a manual reservation" form — sourced from
+  // past reservations' own denormalized client_name/email/phone rather than
+  // the Client table, so it also surfaces people who booked but were never
+  // turned into a "fiche client". Most recent booking per distinct name wins
+  // when suggesting an email/phone to prefill.
+  async suggestFromHistory(q: string): Promise<{ name: string; email: string; phone: string }[]> {
+    const query = q.trim();
+    if (query.length < 2) return [];
+
+    const rows: { client_name: string; client_email: string; client_phone: string }[] = await this.dataSource.query(
+      `SELECT client_name, client_email, client_phone FROM (
+         SELECT DISTINCT ON (LOWER(client_name)) client_name, client_email, client_phone, reservation_date, start_time
+         FROM reservations
+         WHERE client_name ILIKE $1
+         ORDER BY LOWER(client_name), reservation_date DESC, start_time DESC
+       ) recent
+       ORDER BY reservation_date DESC, start_time DESC
+       LIMIT 8`,
+      [`%${query}%`],
+    );
+
+    return rows.map((r) => ({ name: r.client_name, email: r.client_email, phone: r.client_phone }));
+  }
+
   async create(dto: CreateClientDto): Promise<Client> {
     const client = this.clientRepo.create({
       name: dto.name.trim(),

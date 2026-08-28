@@ -70,6 +70,23 @@ describe('ClientsService', () => {
     ]);
   });
 
+  it('suggestFromHistory returns an empty array without querying for a too-short query', async () => {
+    const result = await service.suggestFromHistory('a');
+    expect(result).toEqual([]);
+    expect(dataSource.query).not.toHaveBeenCalled();
+  });
+
+  it('suggestFromHistory wraps the query in a wildcard ILIKE and maps the columns', async () => {
+    dataSource.query.mockResolvedValue([
+      { client_name: 'Julie Martin', client_email: 'julie@example.com', client_phone: '0600000000' },
+    ]);
+
+    const result = await service.suggestFromHistory('juli');
+
+    expect(dataSource.query).toHaveBeenCalledWith(expect.any(String), ['%juli%']);
+    expect(result).toEqual([{ name: 'Julie Martin', email: 'julie@example.com', phone: '0600000000' }]);
+  });
+
   it('create normalizes the name and trims text fields', async () => {
     const result = await service.create({ name: '  Maxence Crespel  ', phone: ' 0600000000 ', notes: ' allergie ' } as any);
     expect(result).toMatchObject({ name: 'Maxence Crespel', normalized_name: 'maxence crespel', phone: '0600000000', notes: 'allergie' });

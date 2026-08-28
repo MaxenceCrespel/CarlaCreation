@@ -64,6 +64,74 @@ function AddonCheckboxes({ service, selectedIds, onToggle }) {
   );
 }
 
+// Suggests names from past reservations (fiche client or not) while the
+// admin types in the manual-booking form — picking one prefills email/phone
+// too, so a returning client's second visit doesn't need retyping everything.
+function ClientNameAutocomplete({ id, value, onChange, onPick }) {
+  const [suggestions, setSuggestions] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [debouncedName, setDebouncedName] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedName(value.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [value]);
+
+  useEffect(() => {
+    if (debouncedName.length < 2) {
+      setSuggestions([]);
+      return undefined;
+    }
+    let cancelled = false;
+    apiFetch(`/admin/clients/suggest?q=${encodeURIComponent(debouncedName)}`)
+      .then((rows) => {
+        if (!cancelled) setSuggestions(rows);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedName]);
+
+  return (
+    <div className="client-autocomplete">
+      <input
+        type="text"
+        id={id}
+        required
+        minLength={2}
+        maxLength={100}
+        autoComplete="off"
+        value={value}
+        onChange={onChange}
+        onFocus={() => setOpen(true)}
+        // Delayed so a click on a suggestion registers before the list unmounts.
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+      />
+      {open && suggestions.length > 0 && (
+        <ul className="client-autocomplete-list">
+          {suggestions.map((s) => (
+            <li key={s.name}>
+              <button
+                type="button"
+                onClick={() => {
+                  onPick(s);
+                  setOpen(false);
+                }}
+              >
+                <span className="client-autocomplete-name">{s.name}</span>
+                {(s.phone || s.email) && (
+                  <span className="client-autocomplete-meta">{[s.phone, s.email].filter(Boolean).join(' · ')}</span>
+                )}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function AddReservationForm({ onCreated, onCancel }) {
   const showToast = useToast();
   const [services, setServices] = useState([]);
@@ -91,6 +159,15 @@ function AddReservationForm({ onCreated, onCancel }) {
       setForm((f) => ({ ...f, [field]: value }));
       if (field === 'serviceId') setAddonIds([]);
     };
+  }
+
+  function pickSuggestedClient(suggestion) {
+    setForm((f) => ({
+      ...f,
+      clientName: suggestion.name,
+      clientEmail: suggestion.email || f.clientEmail,
+      clientPhone: suggestion.phone || f.clientPhone,
+    }));
   }
 
   function toggleAddon(addonId, checked) {
@@ -201,7 +278,7 @@ function AddReservationForm({ onCreated, onCancel }) {
 
       <div className="form-row">
         <label htmlFor="manual-name">Nom (personne 1)</label>
-        <input type="text" id="manual-name" required minLength={2} maxLength={100} value={form.clientName} onChange={update('clientName')} />
+        <ClientNameAutocomplete id="manual-name" value={form.clientName} onChange={update('clientName')} onPick={pickSuggestedClient} />
       </div>
 
       {guests.map((guest, i) => (
