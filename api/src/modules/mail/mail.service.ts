@@ -117,6 +117,48 @@ export class MailService {
     await this.send(config.SMTP_USER, subject, html);
   }
 
+  // Sent to the studio's own inbox when the *client* cancels their own
+  // booking (see ReservationsService.cancelByGroupId) — the push
+  // notification sent alongside this can be missed if Carla is offline or
+  // hasn't enabled push on her device, so email is the reliable fallback.
+  // Not sent when the admin cancels a booking herself (see updateStatus /
+  // updateGroupStatus, which only email the client).
+  async sendAdminCancellationNotification(input: BookingEmailInput): Promise<void> {
+    if (!this.transporter || !config.SMTP_USER) return;
+
+    const subject = `Rendez-vous annulé par le client — ${input.clientName}`;
+    const rows = input.guests
+      .map(
+        (g) => `
+        <tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #E9DED2;">${escapeHtml(g.name)}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #E9DED2;">${escapeHtml(g.serviceName)}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #E9DED2;">${g.startTime} – ${g.endTime}</td>
+        </tr>`,
+      )
+      .join('');
+
+    const html = `
+      <div style="font-family: Segoe UI, Arial, sans-serif; color:#3A2E27; max-width:560px; margin:0 auto;">
+        <h2 style="color:#9A5F4B;">Rendez-vous annulé par le client</h2>
+        <p><strong>${escapeHtml(input.clientName)}</strong> — ${escapeHtml(input.clientEmail)}${input.clientPhone ? ` — ${escapeHtml(input.clientPhone)}` : ''}</p>
+        <p style="margin:16px 0 4px;"><strong>Date :</strong> ${formatDateFr(input.date)}</p>
+        <table style="border-collapse:collapse;width:100%;margin:12px 0;">
+          <thead>
+            <tr style="background:#F8F4EF;">
+              <th style="text-align:left;padding:8px 12px;">Personne</th>
+              <th style="text-align:left;padding:8px 12px;">Prestation</th>
+              <th style="text-align:left;padding:8px 12px;">Horaire</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <p style="margin-top:24px;"><a href="${config.PUBLIC_ORIGIN}/admin" style="color:#9A5F4B;">Voir dans l'espace admin</a></p>
+      </div>
+    `;
+    await this.send(config.SMTP_USER, subject, html);
+  }
+
   async sendReminder(input: BookingEmailInput): Promise<void> {
     const subject = `Rappel — rendez-vous demain — ${siteConfig.siteName}`;
     const intro =

@@ -106,6 +106,16 @@ describe('MailService — studio address privacy', () => {
     expect(html).not.toContain('<table');
   });
 
+  it('sendAdminCancellationNotification sends to the studio inbox, not the client', async () => {
+    await service.sendAdminCancellationNotification({ ...baseInput, clientPhone: '0600000000' });
+    expect(sendMail).toHaveBeenCalledTimes(1);
+    const { to, subject, html } = sendMail.mock.calls[0][0];
+    expect(to).toBe('studio@example.com');
+    expect(subject).toContain('Rendez-vous annulé par le client');
+    expect(html).toContain('Alice');
+    expect(html).toContain('0600000000');
+  });
+
   it('always sends a plain-text alternative alongside the HTML (avoids an HTML-only spam signal)', async () => {
     await service.sendBookingReceived(baseInput);
     const { html, text } = sendMail.mock.calls[0][0];

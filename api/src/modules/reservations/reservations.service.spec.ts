@@ -21,6 +21,7 @@ describe('ReservationsService', () => {
     sendBookingReceived: jest.Mock;
     sendStatusUpdate: jest.Mock;
     sendAdminNewBookingNotification: jest.Mock;
+    sendAdminCancellationNotification: jest.Mock;
     sendReminder: jest.Mock;
   };
   let settingsService: { getTravelBufferMinutes: jest.Mock; getTravelFeeFallbackCents: jest.Mock; getTravelFeeTiers: jest.Mock };
@@ -56,6 +57,7 @@ describe('ReservationsService', () => {
       sendBookingReceived: jest.fn(),
       sendStatusUpdate: jest.fn(),
       sendAdminNewBookingNotification: jest.fn(),
+      sendAdminCancellationNotification: jest.fn(),
       sendReminder: jest.fn(),
     };
     // 30 minutes, matching the app_settings default — kept in sync with the
@@ -735,6 +737,7 @@ describe('ReservationsService', () => {
         {
           client_name: 'Mother',
           client_email: 'mother@example.com',
+          client_phone: '0600000000',
           reservation_date: '2099-01-01',
           start_time: '10:00',
           end_time: '10:45',
@@ -750,6 +753,11 @@ describe('ReservationsService', () => {
     expect(mailService.sendStatusUpdate).toHaveBeenCalledWith(expect.objectContaining({ status: 'cancelled' }));
     expect(pushService.notifyAdmins).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Rendez-vous annulé par le client' }),
+    );
+    // The push alone can be missed (offline, push not enabled) — email is
+    // the reliable fallback so the admin never simply doesn't find out.
+    expect(mailService.sendAdminCancellationNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ clientName: 'Mother', clientEmail: 'mother@example.com', clientPhone: '0600000000' }),
     );
   });
 

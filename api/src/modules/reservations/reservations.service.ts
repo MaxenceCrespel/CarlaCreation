@@ -943,16 +943,37 @@ export class ReservationsService {
       throw new BadRequestException('Ce rendez-vous est déjà passé, il ne peut plus être annulé.');
     }
 
+    // Fetched before updateGroupStatus flips the status, so the mail/push
+    // below still reflects "this just got cancelled" rather than needing a
+    // second query — same guest shape as updateGroupStatus's own mail to
+    // the client, for the admin's cancellation notice.
+    const guestRows: { client_name: string; client_email: string; client_phone: string; start_time: string; end_time: string; service_name: string }[] =
+      await this.dataSource.query(
+        `SELECT r.client_name, r.client_email, r.client_phone, r.start_time, r.end_time, s.name AS service_name
+         FROM reservations r JOIN services s ON s.id = r.service_id WHERE r.group_id = $1 ORDER BY r.start_time ASC`,
+        [groupId],
+      );
+
     await this.updateGroupStatus(groupId, 'cancelled');
 
     // Only the client-initiated path notifies — an admin changing the
     // status herself (updateGroupStatus called elsewhere) doesn't need a
-    // push telling her about her own action.
+    // push/email telling her about her own action.
     await this.pushService.notifyAdmins({
       title: 'Rendez-vous annulé par le client',
       body: `${rows[0].client_name} — ${rows[0].reservation_date}`,
       url: '/admin',
     });
+    if (guestRows.length > 0) {
+      const [primary] = guestRows;
+      await this.mailService.sendAdminCancellationNotification({
+        clientName: primary.client_name,
+        clientEmail: primary.client_email,
+        clientPhone: primary.client_phone,
+        date: rows[0].reservation_date,
+        guests: guestRows.map((r) => ({ name: r.client_name, serviceName: r.service_name, startTime: r.start_time, endTime: r.end_time })),
+      });
+    }
   }
 
   // Runs every 10 minutes so a reservation crossing the "24h before" mark
