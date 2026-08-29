@@ -1061,12 +1061,19 @@ export default function ReservationsTab() {
 
   const statusFiltered = (reservations ?? []).filter((r) => filter === 'all' || r.status === filter);
   const searchNeedle = search.trim().toLowerCase();
+  // A phone number is matched digit-by-digit (ignoring spaces/dashes) in
+  // addition to the plain substring check above — an admin typing the
+  // number as read out on a call ("06 15 22 33 44") shouldn't fail to match
+  // a reservation whose phone was saved without spaces, or vice versa.
+  const digitsNeedle = search.replace(/\D/g, '');
   const searchFiltered = searchNeedle
-    ? statusFiltered.filter((r) =>
-        [r.client_name, r.client_email, r.client_phone, r.notes, r.service_name, r.client_address]
+    ? statusFiltered.filter((r) => {
+        const textMatch = [r.client_name, r.client_email, r.client_phone, r.notes, r.service_name, r.client_address]
           .filter(Boolean)
-          .some((field) => field.toLowerCase().includes(searchNeedle)),
-      )
+          .some((field) => field.toLowerCase().includes(searchNeedle));
+        const phoneMatch = digitsNeedle.length >= 3 && (r.client_phone || '').replace(/\D/g, '').includes(digitsNeedle);
+        return textMatch || phoneMatch;
+      })
     : statusFiltered;
   const dateFiltered = dateFilter ? searchFiltered.filter((r) => r.reservation_date === dateFilter) : searchFiltered;
   // In calendar mode, the table below only shows the selected day's detail
