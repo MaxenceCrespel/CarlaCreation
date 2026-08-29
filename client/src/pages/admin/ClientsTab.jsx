@@ -12,9 +12,9 @@ const STATUS_LABELS = {
 
 const EMPTY_CLIENT_FORM = { name: '', phone: '', notes: '' };
 
-function AddClientForm({ onCreated, onCancel }) {
+function AddClientForm({ onCreated, onCancel, prefill }) {
   const showToast = useToast();
-  const [form, setForm] = useState(EMPTY_CLIENT_FORM);
+  const [form, setForm] = useState(prefill ? { ...EMPTY_CLIENT_FORM, ...prefill } : EMPTY_CLIENT_FORM);
   const [submitting, setSubmitting] = useState(false);
 
   function update(field) {
@@ -194,36 +194,44 @@ export default function ClientsTab() {
   const [clients, setClients] = useState(null);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selected, setSelected] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [addFormPrefill, setAddFormPrefill] = useState(null);
 
-  function load() {
+  // Settles 300ms after typing stops so a search doesn't fire a request per
+  // keystroke — the search now hits the server (it also has to check past
+  // reservations' phone numbers, not just fiches already loaded client-side).
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
     setError(null);
-    apiFetch('/admin/clients')
+    apiFetch(`/admin/clients${debouncedSearch ? `?q=${encodeURIComponent(debouncedSearch)}` : ''}`)
       .then(setClients)
       .catch((err) => setError(err.message));
+  }, [debouncedSearch]);
+
+  function openAddForm(prefill) {
+    setAddFormPrefill(prefill ?? null);
+    setShowAddForm(true);
   }
-
-  useEffect(load, []);
-
-  const filtered = (clients ?? []).filter((c) => {
-    const needle = search.trim().toLowerCase();
-    if (!needle) return true;
-    return [c.name, c.phone].filter(Boolean).some((v) => v.toLowerCase().includes(needle));
-  });
 
   return (
     <>
       {!showAddForm && (
-        <button type="button" className="btn btn-primary btn-sm" style={{ marginBottom: 24 }} onClick={() => setShowAddForm(true)}>
+        <button type="button" className="btn btn-primary btn-sm" style={{ marginBottom: 24 }} onClick={() => openAddForm(null)}>
           + Ajouter un client
         </button>
       )}
 
       {showAddForm && (
         <AddClientForm
+          prefill={addFormPrefill}
           onCreated={(created) => {
-            setClients((rows) => [...(rows ?? []), created].sort((a, b) => a.name.localeCompare(b.name)));
+            setClients((rows) => [...(rows ?? []).filter((c) => c.hasFiche), { ...created, hasFiche: true }].sort((a, b) => a.name.localeCompare(b.name)));
             setShowAddForm(false);
           }}
           onCancel={() => setShowAddForm(false)}
@@ -235,7 +243,7 @@ export default function ClientsTab() {
         <input
           type="text"
           id="client-search"
-          placeholder="Nom, téléphone…"
+          placeholder="Nom, téléphone… (retrouve aussi les anciens clients sans fiche)"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -243,15 +251,15 @@ export default function ClientsTab() {
 
       {error && <p className="loading-text">Erreur : {error}</p>}
       {!error && clients === null && <p className="loading-text">Chargement…</p>}
-      {!error && clients !== null && filtered.length === 0 && (
+      {!error && clients !== null && clients.length === 0 && (
         <p className="loading-text">
-          {clients.length === 0
-            ? 'Aucune fiche client pour le moment — ajoutez-en une ci-dessus, ou liez-en une depuis l\'onglet Réservations.'
-            : 'Aucun résultat pour cette recherche.'}
+          {debouncedSearch
+            ? 'Aucun résultat pour cette recherche.'
+            : 'Aucune fiche client pour le moment — ajoutez-en une ci-dessus, ou liez-en une depuis l\'onglet Réservations.'}
         </p>
       )}
 
-      {!error && filtered.length > 0 && (
+      {!error && clients !== null && clients.length > 0 && (
         <div className="table-wrap">
           <table className="admin-table">
             <thead>
@@ -264,17 +272,34 @@ export default function ClientsTab() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((c) => (
-                <tr key={c.id}>
-                  <td data-label="Nom">{c.name}</td>
-                  <td data-label="Téléphone">{c.phone || '—'}</td>
-                  <td data-label="Rendez-vous">{c.reservationCount}</td>
-                  <td data-label="Note">{c.notes ? c.notes.slice(0, 60) + (c.notes.length > 60 ? '…' : '') : '—'}</td>
-                  <td className="row-actions">
-                    <button type="button" onClick={() => setSelected(c)}>Voir la fiche</button>
-                  </td>
-                </tr>
-              ))}
+              {clients.map((c) =>
+                c.hasFiche ? (
+                  <tr key={c.id}>
+                    <td data-label="Nom">{c.name}</td>
+                    <td data-label="Téléphone">{c.phone || '—'}</td>
+                    <td data-label="Rendez-vous">{c.reservationCount}</td>
+                    <td data-label="Note">{c.notes ? c.notes.slice(0, 60) + (c.notes.length > 60 ? '…' : '') : '—'}</td>
+                    <td className="row-actions">
+                      <button type="button" onClick={() => setSelected(c)}>Voir la fiche</button>
+                    </td>
+                  </tr>
+                ) : (
+                  // Matched via past reservations only — no fiche exists yet
+                  // for this person (the "un appel d'un numéro inconnu qui
+                  // est en fait déjà cliente" case).
+                  <tr key={`history-${c.phone}-${c.name}`} className="is-no-fiche">
+                    <td data-label="Nom">
+                      {c.name} <span className="badge-no-fiche">Pas de fiche</span>
+                    </td>
+                    <td data-label="Téléphone">{c.phone || '—'}</td>
+                    <td data-label="Rendez-vous">—</td>
+                    <td data-label="Note">—</td>
+                    <td className="row-actions">
+                      <button type="button" onClick={() => openAddForm({ name: c.name, phone: c.phone })}>Créer une fiche</button>
+                    </td>
+                  </tr>
+                ),
+              )}
             </tbody>
           </table>
         </div>

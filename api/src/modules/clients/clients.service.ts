@@ -24,17 +24,55 @@ export class ClientsService {
   // No @OneToMany declared on Client (this codebase favours explicit
   // queries over ORM relation graphs, see Service/ServiceAddon) — the
   // reservation count per client is a separate raw query below.
-  async findAll(q?: string): Promise<(Client & { reservationCount: number })[]> {
+  async findAll(
+    q?: string,
+  ): Promise<((Client & { reservationCount: number; hasFiche: true }) | { hasFiche: false; name: string; phone: string; email: string })[]> {
     const clients = await this.clientRepo.find({ order: { name: 'ASC' } });
-    const filtered = q?.trim() ? clients.filter((c) => c.normalized_name.includes(normalizeClientName(q))) : clients;
-    if (filtered.length === 0) return [];
+    const needle = q?.trim();
 
+    if (!needle) {
+      const counts = await this.reservationCountsFor(clients.map((c) => c.id));
+      return clients.map((c) => ({ ...c, reservationCount: counts.get(c.id) ?? 0, hasFiche: true as const }));
+    }
+
+    // Match on name OR phone — a search that only checked the name meant an
+    // admin trying to place a call by number could never find the fiche
+    // that already has it.
+    const normalizedNeedle = normalizeClientName(needle);
+    const digitsNeedle = needle.replace(/\D/g, '');
+    const matchesPhone = (phone: string) => digitsNeedle.length >= 3 && phone.replace(/\D/g, '').includes(digitsNeedle);
+
+    const ficheMatches = clients.filter((c) => c.normalized_name.includes(normalizedNeedle) || matchesPhone(c.phone));
+    const counts = await this.reservationCountsFor(ficheMatches.map((c) => c.id));
+    const ficheResults = ficheMatches.map((c) => ({ ...c, reservationCount: counts.get(c.id) ?? 0, hasFiche: true as const }));
+
+    // Also surface people who've booked before but were never turned into a
+    // "fiche" — the case this was built for: the admin gets a call from a
+    // number she doesn't recognise, but it's actually a past client. Skip
+    // any phone already covered by a fiche match above so the same person
+    // doesn't show up twice.
+    const coveredPhones = new Set(ficheMatches.map((c) => c.phone.replace(/\D/g, '')).filter(Boolean));
+    const historyRows: { client_name: string; client_email: string; client_phone: string }[] = await this.dataSource.query(
+      `SELECT DISTINCT ON (client_phone) client_name, client_email, client_phone
+       FROM reservations
+       WHERE client_name ILIKE $1 OR (LENGTH($2) >= 3 AND regexp_replace(client_phone, '\\D', '', 'g') ILIKE $3)
+       ORDER BY client_phone, reservation_date DESC`,
+      [`%${needle}%`, digitsNeedle, `%${digitsNeedle}%`],
+    );
+    const historyResults = historyRows
+      .filter((r) => r.client_phone && !coveredPhones.has(r.client_phone.replace(/\D/g, '')))
+      .map((r) => ({ hasFiche: false as const, name: r.client_name, phone: r.client_phone, email: r.client_email }));
+
+    return [...ficheResults, ...historyResults];
+  }
+
+  private async reservationCountsFor(clientIds: number[]): Promise<Map<number, number>> {
+    if (clientIds.length === 0) return new Map();
     const counts: { client_id: number; count: string }[] = await this.dataSource.query(
       `SELECT client_id, COUNT(*)::int AS count FROM reservations WHERE client_id = ANY($1) GROUP BY client_id`,
-      [filtered.map((c) => c.id)],
+      [clientIds],
     );
-    const countByClient = new Map(counts.map((c) => [c.client_id, Number(c.count)]));
-    return filtered.map((c) => ({ ...c, reservationCount: countByClient.get(c.id) ?? 0 }));
+    return new Map(counts.map((c) => [c.client_id, Number(c.count)]));
   }
 
   async findOne(id: number): Promise<Client & { history: ReservationHistoryRow[] }> {

@@ -1140,6 +1140,17 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
 .client-autocomplete-name { font-weight: 600; color: var(--color-text); }
 .client-autocomplete-meta { font-size: 0.8rem; color: var(--color-text-soft); }
 
+.badge-no-fiche {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: var(--color-bg-alt);
+  color: var(--color-accent-dark);
+}
+
 .table-wrap { overflow-x: auto; background: var(--color-white); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); }
 
 /* Compact phone-width alternative to the reservations table — hidden by

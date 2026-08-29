@@ -34,6 +34,52 @@ describe('ClientsService', () => {
     service = module.get(ClientsService);
   });
 
+  it('findAll with no query returns every fiche, unfiltered', async () => {
+    clientRepo.find.mockResolvedValue([{ id: 1, name: 'Alice', normalized_name: 'alice', phone: '0600000000' }]);
+    dataSource.query.mockResolvedValue([{ client_id: 1, count: 3 }]);
+
+    const result = await service.findAll();
+
+    expect(result).toEqual([{ id: 1, name: 'Alice', normalized_name: 'alice', phone: '0600000000', reservationCount: 3, hasFiche: true }]);
+  });
+
+  it('findAll matches a fiche by phone, not just name', async () => {
+    clientRepo.find.mockResolvedValue([{ id: 1, name: 'Alice', normalized_name: 'alice', phone: '06 15 22 33 44' }]);
+    dataSource.query.mockResolvedValue([]); // counts query, then history query
+
+    const result = await service.findAll('0615');
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ hasFiche: true, name: 'Alice' });
+  });
+
+  it('findAll surfaces a past-reservation match by phone even without a fiche', async () => {
+    clientRepo.find.mockResolvedValue([]); // no fiches at all
+    dataSource.query.mockResolvedValue([
+      { client_name: 'Client Sans Fiche', client_email: 'x@example.com', client_phone: '0615223344' },
+    ]);
+
+    const result = await service.findAll('0615');
+
+    expect(result).toEqual([{ hasFiche: false, name: 'Client Sans Fiche', phone: '0615223344', email: 'x@example.com' }]);
+  });
+
+  it('findAll does not duplicate a person who already has a matching fiche', async () => {
+    clientRepo.find.mockResolvedValue([{ id: 1, name: 'Alice', normalized_name: 'alice', phone: '0615223344' }]);
+    dataSource.query.mockImplementation(async (sql: string) => {
+      if (sql.includes('FROM reservations')) {
+        if (sql.includes('DISTINCT ON')) return [{ client_name: 'Alice', client_email: 'a@example.com', client_phone: '0615223344' }];
+        return [{ client_id: 1, count: 2 }];
+      }
+      return [];
+    });
+
+    const result = await service.findAll('0615');
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ hasFiche: true, name: 'Alice' });
+  });
+
   it('matchCandidates normalizes the name (case/whitespace-insensitive) before matching', async () => {
     clientRepo.find.mockResolvedValue([{ id: 1, name: 'Maxence Crespel', normalized_name: 'maxence crespel' }]);
     dataSource.query.mockResolvedValue([]);
