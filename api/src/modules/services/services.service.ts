@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { Service } from '../../database/entities/service.entity';
@@ -110,9 +110,24 @@ export class ServicesService {
   }
 
   async remove(id: number): Promise<void> {
-    const result = await this.serviceRepo.delete(id);
-    if (result.affected === 0) {
+    const existing = await this.serviceRepo.findOne({ where: { id } });
+    if (!existing) {
       throw new NotFoundException('Prestation introuvable.');
     }
+
+    // reservations.service_id has no ON DELETE rule (see init.sql) — a
+    // service that's ever been booked would otherwise fail deletion with a
+    // raw foreign-key-violation 500 instead of a clear, actionable message.
+    const [{ count }]: { count: number }[] = await this.dataSource.query(
+      `SELECT COUNT(*)::int AS count FROM reservations WHERE service_id = $1`,
+      [id],
+    );
+    if (count > 0) {
+      throw new ConflictException(
+        "Cette prestation a déjà été réservée — désactivez-la plutôt que de la supprimer, pour garder l'historique des réservations passées.",
+      );
+    }
+
+    await this.serviceRepo.delete(id);
   }
 }

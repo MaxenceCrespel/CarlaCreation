@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getDataSourceToken, getRepositoryToken } from '@nestjs/typeorm';
-import { NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { ServicesService } from './services.service';
 import { Service } from '../../database/entities/service.entity';
 import { ServiceAddon } from '../../database/entities/service-addon.entity';
@@ -9,7 +9,7 @@ describe('ServicesService', () => {
   let service: ServicesService;
   let repo: { find: jest.Mock; findOne: jest.Mock; create: jest.Mock; save: jest.Mock; delete: jest.Mock };
   let addonRepo: { find: jest.Mock };
-  let dataSource: { transaction: jest.Mock };
+  let dataSource: { transaction: jest.Mock; query: jest.Mock };
   let manager: { create: jest.Mock; save: jest.Mock; delete: jest.Mock; insert: jest.Mock; find: jest.Mock };
 
   beforeEach(async () => {
@@ -30,6 +30,7 @@ describe('ServicesService', () => {
     };
     dataSource = {
       transaction: jest.fn((fn) => fn(manager)),
+      query: jest.fn().mockResolvedValue([{ count: 0 }]),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -108,13 +109,25 @@ describe('ServicesService', () => {
     expect(manager.delete).not.toHaveBeenCalled();
   });
 
-  it('remove throws NotFoundException when nothing was deleted', async () => {
-    repo.delete.mockResolvedValue({ affected: 0 });
+  it('remove throws NotFoundException for a missing service', async () => {
+    repo.findOne.mockResolvedValue(null);
     await expect(service.remove(999)).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('remove succeeds silently when a row was deleted', async () => {
+  it('remove throws ConflictException (not a raw 500) when the service has ever been booked', async () => {
+    repo.findOne.mockResolvedValue({ id: 1, name: 'Coupe Femme' });
+    dataSource.query.mockResolvedValue([{ count: 3 }]);
+
+    await expect(service.remove(1)).rejects.toBeInstanceOf(ConflictException);
+    expect(repo.delete).not.toHaveBeenCalled();
+  });
+
+  it('remove deletes the service when it has never been booked', async () => {
+    repo.findOne.mockResolvedValue({ id: 1, name: 'Coupe Femme' });
+    dataSource.query.mockResolvedValue([{ count: 0 }]);
     repo.delete.mockResolvedValue({ affected: 1 });
+
     await expect(service.remove(1)).resolves.toBeUndefined();
+    expect(repo.delete).toHaveBeenCalledWith(1);
   });
 });
