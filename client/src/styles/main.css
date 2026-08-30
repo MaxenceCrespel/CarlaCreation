@@ -320,6 +320,7 @@ img { max-width: 100%; display: block; }
 }
 .service-pick-card.is-selected { border-color: var(--color-accent); box-shadow: 0 0 0 3px rgba(184, 115, 90, 0.15); }
 .service-pick-card h4 { margin: 0 0 6px; font-size: 1rem; font-family: var(--font-body); font-weight: 700; }
+.service-pick-description { margin: 0; font-size: 0.85rem; color: var(--color-text-soft); }
 .service-pick-card .service-meta { margin-top: 10px; padding-top: 10px; }
 
 /* Addon checkboxes (booking: optional extras on the selected service) */

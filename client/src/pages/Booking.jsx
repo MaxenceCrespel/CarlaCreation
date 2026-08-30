@@ -142,6 +142,7 @@ function ServicePicker({ services, categories, category, onCategoryChange, subca
             onClick={() => onSelectService(s.id)}
           >
             <h4>{s.name}</h4>
+            {s.description && <p className="service-pick-description">{s.description}</p>}
             <div className="service-meta">
               <span className="service-price">{formatPrice(s.price_cents)}</span>
               <span className="service-duration">{formatDuration(s.duration_minutes)}</span>
