@@ -341,13 +341,45 @@ export default function Booking() {
   );
   const totalPrice = useMemo(() => servicesSubtotal + travelFeeCents, [servicesSubtotal, travelFeeCents]);
 
-  // Discount only ever applies to the prestations+suppléments subtotal, not
-  // the travel fee — same basis as the backend (ReservationsService /
-  // DashboardService / InvoicesService all agree on this).
-  const activeDiscountPercent = selectedPromotionId
-    ? promotions.find((p) => p.id === Number(selectedPromotionId))?.discount_percent ?? 0
-    : appliedPromoCode?.discount_percent ?? 0;
-  const discountCents = Math.round(servicesSubtotal * (activeDiscountPercent / 100));
+  // Each person's own discount: their personal "tarif spécial" if they
+  // picked one for themselves, otherwise the order-wide promo code (if
+  // any) — a personal rate never stacks with the code, it just takes
+  // priority for that one person. Discount only ever applies to a
+  // person's own prestation+suppléments, never the travel fee — same
+  // basis as the backend (ReservationsService / DashboardService /
+  // InvoicesService all agree on this).
+  const pricedGuests = useMemo(() => {
+    const codePercent = appliedPromoCode?.discount_percent ?? 0;
+    const priceFor = (service, addonIds) => {
+      const base = service?.price_cents ?? 0;
+      const addonsPrice = (service?.addons ?? []).filter((a) => addonIds.includes(a.id)).reduce((sum, a) => sum + a.extra_price_cents, 0);
+      return base + addonsPrice;
+    };
+    const ownPromo = (promotionId) => (promotionId ? promotions.find((p) => p.id === Number(promotionId)) : null);
+    const rows = [
+      (() => {
+        const promo = ownPromo(selectedPromotionId);
+        return {
+          name: form.clientName,
+          priceCents: priceFor(selectedService, selectedAddonIds),
+          discountPercent: promo ? promo.discount_percent : codePercent,
+          discountLabel: promo ? promo.label : appliedPromoCode?.label,
+        };
+      })(),
+      ...guests.map((g) => {
+        const svc = services.find((s) => s.id === g.serviceId) || null;
+        const promo = ownPromo(g.promotionId);
+        return {
+          name: g.name,
+          priceCents: priceFor(svc, g.addonIds),
+          discountPercent: promo ? promo.discount_percent : codePercent,
+          discountLabel: promo ? promo.label : appliedPromoCode?.label,
+        };
+      }),
+    ];
+    return rows.map((r) => ({ ...r, discountCents: Math.round(r.priceCents * (r.discountPercent / 100)) }));
+  }, [form.clientName, selectedService, selectedAddonIds, selectedPromotionId, guests, services, promotions, appliedPromoCode]);
+  const discountCents = useMemo(() => pricedGuests.reduce((sum, g) => sum + g.discountCents, 0), [pricedGuests]);
   const finalPrice = totalPrice - discountCents;
   const recapGuests = useMemo(
     () => [
@@ -403,6 +435,13 @@ export default function Booking() {
     setSelectedSlot('');
   }
 
+  // Separate from updateGuest (which resets addonIds — see above) since
+  // picking a "tarif spécial" doesn't change the service, so their chosen
+  // addons must stay put.
+  function updateGuestPromotion(key, promotionId) {
+    setGuests((g) => g.map((guest) => (guest.key === key ? { ...guest, promotionId } : guest)));
+  }
+
   function toggleGuestAddon(key, addonId, checked) {
     setGuests((g) =>
       g.map((guest) =>
@@ -441,7 +480,7 @@ export default function Booking() {
   function addGuest() {
     if (guests.length >= MAX_ADDITIONAL_GUESTS) return;
     guestKeySeq += 1;
-    setGuests((g) => [...g, { key: guestKeySeq, name: '', category: firstTopLevelCategoryId(categories), subcategory: null, serviceId: null, addonIds: [] }]);
+    setGuests((g) => [...g, { key: guestKeySeq, name: '', category: firstTopLevelCategoryId(categories), subcategory: null, serviceId: null, addonIds: [], promotionId: '' }]);
     setSlots([]);
     setSlotsState('idle');
     setSelectedSlot('');
@@ -598,6 +637,7 @@ export default function Booking() {
   // string, or null when the step is complete and it's safe to move on.
   function validateStep(n) {
     if (n === 1) {
+      if (!form.clientName.trim()) return 'Indiquez votre nom.';
       if (!selectedServiceId) return 'Choisissez une prestation.';
       if (guests.some((g) => !g.name.trim() || !g.serviceId)) {
         return 'Complétez le nom et la prestation de chaque personne ajoutée, ou retirez-la.';
@@ -706,7 +746,12 @@ export default function Booking() {
           addonIds: selectedAddonIds,
           date,
           startTime: selectedSlot,
-          additionalGuests: guests.map((g) => ({ name: g.name.trim(), serviceId: g.serviceId, addonIds: g.addonIds })),
+          additionalGuests: guests.map((g) => ({
+            name: g.name.trim(),
+            serviceId: g.serviceId,
+            addonIds: g.addonIds,
+            promotionId: g.promotionId ? Number(g.promotionId) : undefined,
+          })),
           ...form,
           atClientHome,
           clientAddress: atClientHome ? form.clientAddress.trim() : undefined,
@@ -799,6 +844,20 @@ export default function Booking() {
             {step === 1 && (
               <>
                 <div className="form-row">
+                  <label htmlFor="clientName">Nom complet {guests.length > 0 ? '(personne 1)' : ''}</label>
+                  <input
+                    type="text"
+                    id="clientName"
+                    autoComplete="name"
+                    required
+                    minLength={2}
+                    maxLength={100}
+                    value={form.clientName}
+                    onChange={updateField('clientName')}
+                  />
+                </div>
+
+                <div className="form-row">
                   <label>Type de prestation</label>
                   <ServicePicker
                     services={services}
@@ -814,6 +873,20 @@ export default function Booking() {
                     <AddonCheckboxes service={selectedService} selectedIds={selectedAddonIds} onToggle={toggleAddon} />
                   </div>
                 </div>
+
+                {promotions.length > 0 && (
+                  <div className="form-row">
+                    <label htmlFor="promotion-select">Tarif spécial de cette personne (optionnel)</label>
+                    <select id="promotion-select" value={selectedPromotionId} onChange={(e) => selectPromotion(e.target.value)}>
+                      <option value="">Tarif standard</option>
+                      {promotions.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.label} (-{p.discount_percent}%)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 {guests.map((guest, i) => (
                   <div className="guest-block" key={guest.key}>
@@ -848,6 +921,23 @@ export default function Booking() {
                       selectedIds={guest.addonIds}
                       onToggle={(addonId, checked) => toggleGuestAddon(guest.key, addonId, checked)}
                     />
+                    {promotions.length > 0 && (
+                      <div className="form-row">
+                        <label htmlFor={`guest-promotion-${guest.key}`}>Tarif spécial de cette personne (optionnel)</label>
+                        <select
+                          id={`guest-promotion-${guest.key}`}
+                          value={guest.promotionId}
+                          onChange={(e) => updateGuestPromotion(guest.key, e.target.value)}
+                        >
+                          <option value="">Tarif standard</option>
+                          {promotions.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.label} (-{p.discount_percent}%)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </div>
                 ))}
 
@@ -1022,11 +1112,6 @@ export default function Booking() {
 
             {step === 4 && (
               <>
-                <div className="form-row">
-                  <label htmlFor="clientName">Nom complet {guests.length > 0 ? '(personne 1)' : ''}</label>
-                  <input type="text" id="clientName" autoComplete="name" required minLength={2} maxLength={100} value={form.clientName} onChange={updateField('clientName')} />
-                </div>
-
                 <div className="form-row two-col">
                   <div>
                     <label htmlFor="clientEmail">Email</label>
@@ -1042,20 +1127,6 @@ export default function Booking() {
                   <label htmlFor="notes">Message (optionnel)</label>
                   <textarea id="notes" rows={3} maxLength={500} placeholder="Précisions sur votre demande…" value={form.notes} onChange={updateField('notes')} />
                 </div>
-
-                {promotions.length > 0 && (
-                  <div className="form-row">
-                    <label htmlFor="promotion-select">Tarif spécial (optionnel)</label>
-                    <select id="promotion-select" value={selectedPromotionId} onChange={(e) => selectPromotion(e.target.value)}>
-                      <option value="">Tarif standard</option>
-                      {promotions.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.label} (-{p.discount_percent}%)
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
 
                 <div className="form-row">
                   <label htmlFor="promo-code">Code promo (optionnel)</label>
@@ -1192,7 +1263,16 @@ export default function Booking() {
                       <br />
                       <span className="recap-note">
                         {formatPrice(totalPrice)} - {formatPrice(discountCents)} de réduction
-                        {appliedPromoCode ? ` (${appliedPromoCode.label})` : selectedPromotionId ? ` (${promotions.find((p) => p.id === Number(selectedPromotionId))?.label})` : ''}
+                        {pricedGuests.length > 1
+                          ? ' (' +
+                            pricedGuests
+                              .filter((g) => g.discountCents > 0)
+                              .map((g) => `${g.name || 'vous'}${g.discountLabel ? ` : ${g.discountLabel}` : ''}`)
+                              .join(', ') +
+                            ')'
+                          : pricedGuests[0]?.discountLabel
+                            ? ` (${pricedGuests[0].discountLabel})`
+                            : ''}
                       </span>
                     </>
                   )}

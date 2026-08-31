@@ -765,26 +765,58 @@ describe('ReservationsService', () => {
     const STUDENT_RATE = { id: 1, label: 'Tarif étudiant', discount_percent: 10, requires_code: false, code: null, active: true };
     const WELCOME_CODE = { id: 2, label: 'Bienvenue', discount_percent: 20, requires_code: true, code: 'BIENVENUE20', active: true };
 
-    it('resolvePublicPromotion applies a selectable rate by id', async () => {
+    it('resolvePublicGuestDiscounts applies a selectable rate only to the guest who picked it', async () => {
       promotionsService.findSelectable.mockResolvedValue([STUDENT_RATE]);
-      const result = await (service as any).resolvePublicPromotion(1, undefined);
-      expect(result).toEqual({ id: 1, discountPercent: 10 });
+      const guests = [
+        { name: 'Étudiante', serviceId: 1, addonIds: [], promotionId: 1 },
+        { name: 'Sa mère', serviceId: 1, addonIds: [] },
+      ];
+      const result = await (service as any).resolvePublicGuestDiscounts(guests, undefined);
+      expect(result).toEqual([
+        { promotionId: 1, discountPercent: 10 },
+        { promotionId: null, discountPercent: 0 },
+      ]);
     });
 
-    it('resolvePublicPromotion rejects a promotionId not in the selectable list', async () => {
+    it('resolvePublicGuestDiscounts rejects a promotionId not in the selectable list', async () => {
       promotionsService.findSelectable.mockResolvedValue([STUDENT_RATE]);
-      await expect((service as any).resolvePublicPromotion(999, undefined)).rejects.toBeInstanceOf(BadRequestException);
+      const guests = [{ name: 'Test', serviceId: 1, addonIds: [], promotionId: 999 }];
+      await expect((service as any).resolvePublicGuestDiscounts(guests, undefined)).rejects.toBeInstanceOf(BadRequestException);
     });
 
-    it('resolvePublicPromotion applies a valid promo code', async () => {
+    it('resolvePublicGuestDiscounts applies a valid promo code to every guest without their own rate', async () => {
+      promotionsService.findSelectable.mockResolvedValue([]);
       promotionsService.findByCode.mockResolvedValue(WELCOME_CODE);
-      const result = await (service as any).resolvePublicPromotion(undefined, 'bienvenue20');
-      expect(result).toEqual({ id: 2, discountPercent: 20 });
+      const guests = [
+        { name: 'Alice', serviceId: 1, addonIds: [] },
+        { name: 'Bob', serviceId: 1, addonIds: [] },
+      ];
+      const result = await (service as any).resolvePublicGuestDiscounts(guests, 'bienvenue20');
+      expect(result).toEqual([
+        { promotionId: 2, discountPercent: 20 },
+        { promotionId: 2, discountPercent: 20 },
+      ]);
     });
 
-    it('resolvePublicPromotion returns null when neither a rate nor a code is given', async () => {
-      const result = await (service as any).resolvePublicPromotion(undefined, undefined);
-      expect(result).toBeNull();
+    it("resolvePublicGuestDiscounts lets a guest's own rate win over the order-wide code, for that guest only", async () => {
+      promotionsService.findSelectable.mockResolvedValue([STUDENT_RATE]);
+      promotionsService.findByCode.mockResolvedValue(WELCOME_CODE);
+      const guests = [
+        { name: 'Étudiante', serviceId: 1, addonIds: [], promotionId: 1 },
+        { name: 'Sa mère', serviceId: 1, addonIds: [] },
+      ];
+      const result = await (service as any).resolvePublicGuestDiscounts(guests, 'bienvenue20');
+      expect(result).toEqual([
+        { promotionId: 1, discountPercent: 10 }, // her own rate, not the code
+        { promotionId: 2, discountPercent: 20 }, // the order-wide code
+      ]);
+    });
+
+    it('resolvePublicGuestDiscounts gives no discount when neither a rate nor a code is given', async () => {
+      promotionsService.findSelectable.mockResolvedValue([]);
+      const guests = [{ name: 'Test', serviceId: 1, addonIds: [] }];
+      const result = await (service as any).resolvePublicGuestDiscounts(guests, undefined);
+      expect(result).toEqual([{ promotionId: null, discountPercent: 0 }]);
     });
 
     it('resolveAdminPromotion applies any active promotion by id, code-based or not', async () => {
@@ -859,6 +891,41 @@ describe('ReservationsService', () => {
 
       const reservationInsert = inserts.find((i) => !Array.isArray(i.payload));
       expect(reservationInsert.payload).toMatchObject({ promotion_id: null, discount_percent: 0 });
+    });
+
+    it("createManual applies a guest's own tarif spécial to that guest ONLY, not to the whole group (regression: was leaking to every prestation in the order)", async () => {
+      serviceRepo.findOne.mockImplementation(({ where }: { where: { id: number } }) =>
+        Promise.resolve(where.id === 1 ? HAIRCUT : MANICURE),
+      );
+      noOverlap();
+      promotionsService.findAll.mockResolvedValue([STUDENT_RATE]);
+
+      const inserts: any[] = [];
+      dataSource.transaction.mockImplementationOnce(async (fn) => {
+        const manager = {
+          insert: jest.fn(async (_entity: unknown, payload: unknown) => {
+            inserts.push(payload);
+            return { identifiers: [{ id: inserts.length + 400 }] };
+          }),
+        };
+        return fn(manager);
+      });
+
+      await service.createManual({
+        serviceId: 1,
+        clientName: 'Étudiante',
+        clientEmail: 'test@example.com',
+        clientPhone: '0600000000',
+        date: '2099-01-01',
+        startTime: '10:00',
+        promotionId: 1, // her own "tarif étudiant"
+        additionalGuests: [{ name: 'Sa mère', serviceId: 7 }], // no promotion of her own
+      } as any);
+
+      const reservationInserts = inserts.filter((p) => !Array.isArray(p));
+      expect(reservationInserts).toHaveLength(2);
+      expect(reservationInserts[0]).toMatchObject({ client_name: 'Étudiante', promotion_id: 1, discount_percent: 10 });
+      expect(reservationInserts[1]).toMatchObject({ client_name: 'Sa mère', promotion_id: null, discount_percent: 0 });
     });
   });
 

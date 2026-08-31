@@ -37,7 +37,8 @@ describe('Booking flow', () => {
           `day ${openedDate} should be open — got ${JSON.stringify(day)}`,
         ).to.eq(true);
 
-        // Step 1 — Prestation: pick a service, then advance
+        // Step 1 — Prestation: name, then pick a service, then advance
+        cy.get('#clientName').type('Cypress Visitor');
         cy.get('.service-pick-card').first().click();
         cy.contains('button', 'Suivant').click();
 
@@ -60,7 +61,6 @@ describe('Booking flow', () => {
         cy.contains('button', 'Suivant').click();
 
         // Step 4 — Coordonnées
-        cy.get('#clientName').type('Cypress Visitor');
         cy.get('#clientEmail').type('cypress-visitor@example.com');
         cy.get('#clientPhone').type('0600000099');
 

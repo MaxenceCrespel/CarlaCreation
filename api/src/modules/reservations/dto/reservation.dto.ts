@@ -152,6 +152,15 @@ export class AdditionalGuestDto {
   @IsInt({ each: true })
   @Min(1, { each: true })
   addonIds?: number[];
+
+  // This guest's own "tarif spécial" (e.g. tarif étudiant) — a rate-based
+  // discount is personal to whoever qualifies for it, not shared with
+  // everyone else in the same booking (unlike a promo code, which is a
+  // single order-wide coupon — see CreateReservationDto.promoCode).
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  promotionId?: number;
 }
 
 export class CreateReservationDto {
@@ -211,10 +220,12 @@ export class CreateReservationDto {
   @Type(() => AdditionalGuestDto)
   additionalGuests?: AdditionalGuestDto[];
 
-  // At most one of these two — the "tarif spécial" dropdown (promotionId,
-  // must be an active non-code promotion) or a typed "code promo"
-  // (promoCode, must be an active code-based promotion). See
-  // ReservationsService.resolvePublicPromotion for validation.
+  // The primary contact's own "tarif spécial" (personal to them, not the
+  // whole booking — see AdditionalGuestDto.promotionId for everyone else)
+  // — at most one of promotionId/promoCode for THIS person specifically.
+  // promoCode, by contrast, is a single order-wide coupon and applies to
+  // every guest in the booking who doesn't have their own rate promotion.
+  // See ReservationsService.resolvePublicPromotion for validation.
   @IsOptional()
   @IsInt()
   @Min(1)
@@ -370,9 +381,11 @@ export class AdminCreateReservationDto {
   @IsBoolean()
   allowOverlap?: boolean;
 
-  // Admin picks directly from the full promotion list (any active
-  // promotion, code-based or not — she doesn't need to type a code she
-  // already sees) — see ReservationsService.resolveAdminPromotion.
+  // The primary contact's own promotion — admin picks directly from the
+  // full list (any active promotion, code-based or not; she doesn't need
+  // to type a code she already sees). Personal to this one person, same as
+  // the public flow — see AdditionalGuestDto.promotionId for everyone
+  // else, and ReservationsService.resolveAdminPromotion for validation.
   @IsOptional()
   @IsInt()
   @Min(1)

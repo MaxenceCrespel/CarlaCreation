@@ -22,6 +22,7 @@ interface Guest {
   name: string;
   serviceId: number;
   addonIds: number[];
+  promotionId?: number;
 }
 
 interface BookedGuest {
@@ -89,28 +90,56 @@ export class ReservationsService {
     private readonly promotionsService: PromotionsService,
   ) {}
 
-  // The dropdown-selectable "tarif spécial" path: promotionId must point at
-  // an active, non-code promotion (a code-based one can only be applied via
-  // its actual code, see resolvePublicPromotion below).
-  private async resolvePublicPromotion(
-    promotionId: number | undefined,
-    promoCode: string | undefined,
-  ): Promise<{ id: number; discountPercent: number } | null> {
-    if (promotionId) {
-      const selectable = await this.promotionsService.findSelectable();
-      const promo = selectable.find((p) => p.id === promotionId);
-      if (!promo) throw new BadRequestException('Tarif spécial invalide.');
-      return { id: promo.id, discountPercent: promo.discount_percent };
-    }
-    if (promoCode) {
-      const promo = await this.promotionsService.findByCode(promoCode);
-      return { id: promo.id, discountPercent: promo.discount_percent };
-    }
-    return null;
+  // Resolves each guest's OWN discount, not a single value for the whole
+  // booking — a rate-based "tarif spécial" (e.g. tarif étudiant) is
+  // personal to whoever qualifies for it, and must never leak onto every
+  // other prestation in the same order. `fallback`, when given, is a
+  // booking-wide promo code applied to any guest who didn't pick their own
+  // rate — a guest's own rate always wins over it for that one person, the
+  // two never stack.
+  private resolveGuestDiscounts(
+    guests: Guest[],
+    eligiblePromotions: { id: number; discount_percent: number }[],
+    fallback: { id: number; discountPercent: number } | null,
+    invalidMessage: string,
+  ): { promotionId: number | null; discountPercent: number }[] {
+    return guests.map((g) => {
+      if (g.promotionId) {
+        const promo = eligiblePromotions.find((p) => p.id === g.promotionId);
+        if (!promo) throw new BadRequestException(invalidMessage);
+        return { promotionId: promo.id, discountPercent: promo.discount_percent };
+      }
+      if (fallback) return { promotionId: fallback.id, discountPercent: fallback.discountPercent };
+      return { promotionId: null, discountPercent: 0 };
+    });
+  }
+
+  // The dropdown-selectable "tarif spécial" catalogue + the order-wide
+  // promo code (if any) — combined per-guest by resolveGuestDiscounts.
+  private async resolvePublicGuestDiscounts(guests: Guest[], promoCode: string | undefined) {
+    const [selectable, codePromotion] = await Promise.all([
+      this.promotionsService.findSelectable(),
+      promoCode ? this.promotionsService.findByCode(promoCode) : Promise.resolve(null),
+    ]);
+    return this.resolveGuestDiscounts(
+      guests,
+      selectable,
+      codePromotion ? { id: codePromotion.id, discountPercent: codePromotion.discount_percent } : null,
+      'Tarif spécial invalide.',
+    );
   }
 
   // Admin picker: any active promotion (rate or code) can be applied
-  // directly by id — she already sees the label, no need to type a code.
+  // directly by id, per guest — she already sees the label, no need to
+  // type a code. No booking-wide fallback here: the admin form has no
+  // separate "code" field, just one promotion picker per person.
+  private async resolveAdminGuestDiscounts(guests: Guest[]) {
+    const active = (await this.promotionsService.findAll()).filter((p) => p.active);
+    return this.resolveGuestDiscounts(guests, active, null, 'Promotion invalide.');
+  }
+
+  // Same rule as resolveAdminGuestDiscounts, for the single-reservation
+  // edit form (UpdateReservationDto) rather than a whole group.
   private async resolveAdminPromotion(promotionId: number | undefined | null): Promise<{ id: number; discountPercent: number } | null> {
     if (!promotionId) return null;
     const promotions = await this.promotionsService.findAll();
@@ -246,8 +275,8 @@ export class ReservationsService {
   // free, pre-computed slot — re-validated here to avoid race/tampering.
   async create(dto: CreateReservationDto) {
     const guests: Guest[] = [
-      { name: dto.clientName, serviceId: dto.serviceId, addonIds: dto.addonIds ?? [] },
-      ...(dto.additionalGuests ?? []).map((g: AdditionalGuestDto) => ({ name: g.name, serviceId: g.serviceId, addonIds: g.addonIds ?? [] })),
+      { name: dto.clientName, serviceId: dto.serviceId, addonIds: dto.addonIds ?? [], promotionId: dto.promotionId },
+      ...(dto.additionalGuests ?? []).map((g: AdditionalGuestDto) => ({ name: g.name, serviceId: g.serviceId, addonIds: g.addonIds ?? [], promotionId: g.promotionId })),
     ];
 
     const services = await this.resolveServices(
@@ -270,9 +299,9 @@ export class ReservationsService {
       throw new ConflictException("Ce créneau n'est plus disponible. Merci d'en choisir un autre.");
     }
 
-    const promotion = await this.resolvePublicPromotion(dto.promotionId, dto.promoCode);
+    const guestDiscounts = await this.resolvePublicGuestDiscounts(guests, dto.promoCode);
 
-    const result = await this.insertGroup(guests, services, addonsPerGuest, {
+    const result = await this.insertGroup(guests, services, addonsPerGuest, guestDiscounts, {
       date: dto.date,
       startTime: dto.startTime,
       clientEmail: dto.clientEmail,
@@ -284,8 +313,6 @@ export class ReservationsService {
       travelDistanceKm: travel.distanceKm,
       travelDurationMinutes: travel.durationMinutes,
       travelFeeCents: travel.feeCents,
-      promotionId: promotion?.id ?? null,
-      discountPercent: promotion?.discountPercent ?? 0,
     });
 
     await this.mailService.sendBookingReceived({
@@ -328,8 +355,8 @@ export class ReservationsService {
     }
 
     const guests: Guest[] = [
-      { name: dto.clientName, serviceId: dto.serviceId, addonIds: dto.addonIds ?? [] },
-      ...(dto.additionalGuests ?? []).map((g: AdditionalGuestDto) => ({ name: g.name, serviceId: g.serviceId, addonIds: g.addonIds ?? [] })),
+      { name: dto.clientName, serviceId: dto.serviceId, addonIds: dto.addonIds ?? [], promotionId: dto.promotionId },
+      ...(dto.additionalGuests ?? []).map((g: AdditionalGuestDto) => ({ name: g.name, serviceId: g.serviceId, addonIds: g.addonIds ?? [], promotionId: g.promotionId })),
     ];
 
     const services = await this.resolveServices(
@@ -372,9 +399,9 @@ export class ReservationsService {
     }
 
     const status = dto.status || 'confirmed';
-    const promotion = await this.resolveAdminPromotion(dto.promotionId);
+    const guestDiscounts = await this.resolveAdminGuestDiscounts(guests);
 
-    const result = await this.insertGroup(guests, services, addonsPerGuest, {
+    const result = await this.insertGroup(guests, services, addonsPerGuest, guestDiscounts, {
       date: dto.date,
       startTime: dto.startTime,
       clientEmail: dto.clientEmail,
@@ -386,8 +413,6 @@ export class ReservationsService {
       travelDistanceKm: travel.distanceKm,
       travelDurationMinutes: travel.durationMinutes,
       travelFeeCents: travel.feeCents,
-      promotionId: promotion?.id ?? null,
-      discountPercent: promotion?.discountPercent ?? 0,
     });
 
     // A manual booking is usually entered as already-confirmed, so send the
@@ -464,6 +489,10 @@ export class ReservationsService {
     guests: Guest[],
     services: Service[],
     addonsPerGuest: ServiceAddon[][],
+    // Aligned with `guests` by index — each guest's own resolved discount,
+    // see resolveGuestDiscounts (never a single value blanket-applied to
+    // the whole group).
+    guestDiscounts: { promotionId: number | null; discountPercent: number }[],
     common: {
       date: string;
       startTime: string;
@@ -476,8 +505,6 @@ export class ReservationsService {
       travelDistanceKm: number | null;
       travelDurationMinutes: number | null;
       travelFeeCents: number | null;
-      promotionId: number | null;
-      discountPercent: number;
     },
   ): Promise<{ groupId: string; date: string; startTime: string; endTime: string; guests: BookedGuest[]; atClientHome: boolean; clientAddress: string | null }> {
     const groupId = crypto.randomUUID();
@@ -510,8 +537,8 @@ export class ReservationsService {
           travel_distance_km: common.travelDistanceKm,
           travel_duration_minutes: common.travelDurationMinutes,
           travel_fee_cents: common.travelFeeCents,
-          promotion_id: common.promotionId,
-          discount_percent: common.discountPercent,
+          promotion_id: guestDiscounts[i].promotionId,
+          discount_percent: guestDiscounts[i].discountPercent,
         });
         const reservationId = Number(inserted.identifiers[0].id);
 
