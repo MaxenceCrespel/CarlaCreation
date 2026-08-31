@@ -240,6 +240,11 @@ export default function Booking() {
     ...getSavedContact(),
   }));
   const [feedback, setFeedback] = useState(null);
+  // Id of the specific field currently flagged invalid (red border, see
+  // .field-invalid) — set alongside `feedback` so the client doesn't have
+  // to hunt for what's actually wrong, especially once the step has grown
+  // long (several guests, addons...).
+  const [invalidField, setInvalidField] = useState(null);
   const [manageGroupId, setManageGroupId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [showRecap, setShowRecap] = useState(false);
@@ -257,6 +262,11 @@ export default function Booking() {
 
   const formTopRef = useRef(null);
   const addonsSectionRef = useRef(null);
+  // For steps whose invalid field isn't a single bordered input (the
+  // prestation grid, a specific guest's whole block) — scrolled to and
+  // outlined the same way as a real field, see focusInvalidField().
+  const servicePickerRef = useRef(null);
+  const guestBlockRefs = useRef({});
   const isFirstRender = useRef(true);
 
   useEffect(() => {
@@ -464,6 +474,7 @@ export default function Booking() {
   }
 
   function pickService(id) {
+    if (invalidField === 'service-picker') setInvalidField(null);
     setSelectedServiceId(id);
     setSelectedAddonIds([]);
     setSlots([]);
@@ -633,43 +644,73 @@ export default function Booking() {
     return (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
   }
 
-  // Each step validates only what it's responsible for — returns an error
-  // string, or null when the step is complete and it's safe to move on.
+  // Each step validates only what it's responsible for — returns
+  // { message, fieldId } (fieldId names the input to jump to and outline in
+  // red, see focusInvalidField — null when there's no single input for it),
+  // or null when the step is complete and it's safe to move on.
   function validateStep(n) {
     if (n === 1) {
-      if (!form.clientName.trim()) return 'Indiquez votre nom.';
-      if (!selectedServiceId) return 'Choisissez une prestation.';
-      if (guests.some((g) => !g.name.trim() || !g.serviceId)) {
-        return 'Complétez le nom et la prestation de chaque personne ajoutée, ou retirez-la.';
+      if (!form.clientName.trim()) return { message: 'Indiquez votre nom.', fieldId: 'clientName' };
+      if (!selectedServiceId) return { message: 'Choisissez une prestation.', fieldId: 'service-picker' };
+      const badGuest = guests.find((g) => !g.name.trim() || !g.serviceId);
+      if (badGuest) {
+        return badGuest.name.trim()
+          ? { message: 'Choisissez une prestation pour chaque personne ajoutée, ou retirez-la.', fieldId: `guest-block-${badGuest.key}` }
+          : { message: 'Indiquez le nom de chaque personne ajoutée, ou retirez-la.', fieldId: `guest-name-${badGuest.key}` };
       }
       return null;
     }
     if (n === 2) {
       if (atClientHome) {
         const address = form.clientAddress.trim();
-        if (!address) return 'Indiquez votre adresse pour un rendez-vous à domicile.';
-        if (address.length < 5) return 'Indiquez une adresse complète.';
+        if (!address) return { message: 'Indiquez votre adresse pour un rendez-vous à domicile.', fieldId: 'clientAddress' };
+        if (address.length < 5) return { message: 'Indiquez une adresse complète.', fieldId: 'clientAddress' };
         // debouncedAddress only catches up ~700ms after typing stops, and
         // travelEstimate resolves after that — moving on before either is
         // done would let the next steps compute availability/price off a
         // stale or missing distance instead of the real one.
         if (debouncedAddress !== address || travelEstimate === 'loading') {
-          return 'Merci de patienter quelques instants, calcul du trajet en cours…';
+          return { message: 'Merci de patienter quelques instants, calcul du trajet en cours…', fieldId: null };
         }
       }
       return null;
     }
     if (n === 3) {
-      if (!date || !selectedSlot) return 'Choisissez une date et un créneau.';
+      if (!date || !selectedSlot) return { message: 'Choisissez une date et un créneau.', fieldId: 'slot' };
       return null;
     }
     return null;
   }
 
+  // Scrolls to and outlines in red the field a validation error points at
+  // — a real input gets focused directly; the prestation grid and a
+  // specific guest's block (not single inputs) get their container
+  // outlined via the matching ref instead. Runs from an effect (below),
+  // not straight from the click handler, so it also works when the error
+  // forces a step change first (handleSubmit's final re-check) — the
+  // target field doesn't exist in the DOM until that new step has
+  // rendered.
+  useEffect(() => {
+    if (!invalidField) return;
+    if (invalidField === 'service-picker') {
+      servicePickerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    if (invalidField.startsWith('guest-block-')) {
+      guestBlockRefs.current[invalidField]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    const el = document.getElementById(invalidField);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el?.focus({ preventScroll: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invalidField, step]);
+
   function goNext() {
     const error = validateStep(step);
     if (error) {
-      setFeedback({ type: 'error', text: error });
+      setFeedback({ type: 'error', text: error.message });
+      setInvalidField(error.fieldId);
       return;
     }
     // One soft nudge before leaving step 1 if a chosen service has
@@ -680,6 +721,7 @@ export default function Booking() {
       return;
     }
     setFeedback(null);
+    setInvalidField(null);
     setStep((s) => Math.min(4, s + 1));
   }
 
@@ -698,12 +740,14 @@ export default function Booking() {
 
   function goBack() {
     setFeedback(null);
+    setInvalidField(null);
     setStep((s) => Math.max(1, s - 1));
   }
 
   function goToStep(n) {
     if (n >= step) return;
     setFeedback(null);
+    setInvalidField(null);
     setStep(n);
   }
 
@@ -723,8 +767,9 @@ export default function Booking() {
     for (let n = 1; n <= 3; n += 1) {
       const error = validateStep(n);
       if (error) {
-        setFeedback({ type: 'error', text: error });
+        setFeedback({ type: 'error', text: error.message });
         setStep(n);
+        setInvalidField(error.fieldId);
         return;
       }
     }
@@ -848,16 +893,20 @@ export default function Booking() {
                   <input
                     type="text"
                     id="clientName"
+                    className={invalidField === 'clientName' ? 'field-invalid' : ''}
                     autoComplete="name"
                     required
                     minLength={2}
                     maxLength={100}
                     value={form.clientName}
-                    onChange={updateField('clientName')}
+                    onChange={(e) => {
+                      updateField('clientName')(e);
+                      if (invalidField === 'clientName') setInvalidField(null);
+                    }}
                   />
                 </div>
 
-                <div className="form-row">
+                <div className={`form-row ${invalidField === 'service-picker' ? 'field-invalid' : ''}`} ref={servicePickerRef}>
                   <label>Type de prestation</label>
                   <ServicePicker
                     services={services}
@@ -889,7 +938,13 @@ export default function Booking() {
                 )}
 
                 {guests.map((guest, i) => (
-                  <div className="guest-block" key={guest.key}>
+                  <div
+                    className={`guest-block ${invalidField === `guest-block-${guest.key}` ? 'field-invalid' : ''}`}
+                    key={guest.key}
+                    ref={(el) => {
+                      guestBlockRefs.current[`guest-block-${guest.key}`] = el;
+                    }}
+                  >
                     <div className="guest-block-header">
                       <label htmlFor={`guest-name-${guest.key}`}>Personne {i + 2} (ex : votre enfant)</label>
                       <button type="button" className="guest-remove-btn" onClick={() => removeGuest(guest.key)}>
@@ -899,12 +954,16 @@ export default function Booking() {
                     <input
                       type="text"
                       id={`guest-name-${guest.key}`}
+                      className={invalidField === `guest-name-${guest.key}` ? 'field-invalid' : ''}
                       required
                       minLength={2}
                       maxLength={100}
                       placeholder="Nom complet"
                       value={guest.name}
-                      onChange={(e) => updateGuest(guest.key, { name: e.target.value })}
+                      onChange={(e) => {
+                        updateGuest(guest.key, { name: e.target.value });
+                        if (invalidField === `guest-name-${guest.key}`) setInvalidField(null);
+                      }}
                     />
                     <ServicePicker
                       services={services}
@@ -914,7 +973,10 @@ export default function Booking() {
                       subcategory={guest.subcategory}
                       onSubcategoryChange={(s) => updateGuest(guest.key, { subcategory: s, serviceId: null })}
                       selectedServiceId={guest.serviceId}
-                      onSelectService={(id) => updateGuest(guest.key, { serviceId: id })}
+                      onSelectService={(id) => {
+                        if (invalidField === `guest-block-${guest.key}`) setInvalidField(null);
+                        updateGuest(guest.key, { serviceId: id });
+                      }}
                     />
                     <AddonCheckboxes
                       service={services.find((s) => s.id === guest.serviceId) || null}
@@ -993,13 +1055,17 @@ export default function Booking() {
                     <input
                       type="text"
                       id="clientAddress"
+                      className={invalidField === 'clientAddress' ? 'field-invalid' : ''}
                       autoComplete="street-address"
                       required
                       minLength={5}
                       maxLength={300}
                       placeholder="Numéro, rue, code postal, ville"
                       value={form.clientAddress}
-                      onChange={updateField('clientAddress')}
+                      onChange={(e) => {
+                        updateField('clientAddress')(e);
+                        if (invalidField === 'clientAddress') setInvalidField(null);
+                      }}
                     />
                     {travelEstimate === 'loading' && <p className="loading-text travel-estimate-hint">Calcul du trajet…</p>}
                     {travelEstimate && typeof travelEstimate === 'object' && (
@@ -1080,10 +1146,14 @@ export default function Booking() {
                   <label htmlFor="slot">Créneau disponible</label>
                   <select
                     id="slot"
+                    className={invalidField === 'slot' ? 'field-invalid' : ''}
                     required
                     disabled={slotsState !== 'ready'}
                     value={selectedSlot}
-                    onChange={(e) => setSelectedSlot(e.target.value)}
+                    onChange={(e) => {
+                      setSelectedSlot(e.target.value);
+                      if (invalidField === 'slot') setInvalidField(null);
+                    }}
                   >
                     {slotsState === 'idle' && <option value="">Choisissez d'abord une date</option>}
                     {slotsState === 'loading' && <option value="">Chargement des créneaux…</option>}
