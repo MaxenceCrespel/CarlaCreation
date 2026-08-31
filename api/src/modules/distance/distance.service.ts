@@ -42,7 +42,15 @@ export class DistanceService {
       if (!origin) return null;
       this.originCache = origin;
 
-      const destination = await this.geocode(destinationAddress);
+      // Biased and bounded around the studio's own location: a free-tier
+      // geocoder given an ambiguous or partially-covered address (a street
+      // name that also exists elsewhere in France, a high house number
+      // some datasets don't have precisely) can otherwise return a match
+      // hundreds of km off — silently inflating (or wrecking) the quoted
+      // travel fee. Every client address is realistically within a modest
+      // radius of the studio, so this both nudges ties toward the right
+      // area and hard-excludes anything clearly outside it.
+      const destination = await this.geocode(destinationAddress, origin);
       if (!destination) return null;
 
       return await this.route(origin, destination);
@@ -52,19 +60,44 @@ export class DistanceService {
     }
   }
 
-  private async geocode(address: string): Promise<Coordinates | null> {
+  private async geocode(address: string, near?: Coordinates): Promise<Coordinates | null> {
     const url = new URL(GEOCODE_URL);
     url.searchParams.set('api_key', config.GEOCODING_API_KEY);
     url.searchParams.set('text', address);
     url.searchParams.set('size', '1');
     url.searchParams.set('boundary.country', 'FR');
+    // Prefer precise street/housenumber matches over a locality or region
+    // falling back silently when the exact address isn't in the index.
+    url.searchParams.set('layers', 'address,street');
+    if (near) {
+      // Biases ties toward the studio's area...
+      url.searchParams.set('focus.point.lon', String(near.lon));
+      url.searchParams.set('focus.point.lat', String(near.lat));
+      // ...and this hard-excludes anything outside a generous service
+      // radius — no realistic client address is farther than this from
+      // the studio, so a match beyond it is a geocoding error, not a
+      // genuine (if pricey) trip.
+      url.searchParams.set('boundary.circle.lon', String(near.lon));
+      url.searchParams.set('boundary.circle.lat', String(near.lat));
+      url.searchParams.set('boundary.circle.radius', '60');
+    }
 
     const res = await fetch(url, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      // A non-2xx here (quota exhausted, key revoked, malformed request...)
+      // was previously swallowed with zero trace — silently falling back
+      // to the flat fee left no way to tell "the geocoder is down" apart
+      // from "it just never got asked".
+      this.logger.warn(`Geocoding request failed (HTTP ${res.status}) for "${address}"`);
+      return null;
+    }
 
     const body: any = await res.json();
     const coords = body?.features?.[0]?.geometry?.coordinates;
-    if (!Array.isArray(coords) || coords.length !== 2) return null;
+    if (!Array.isArray(coords) || coords.length !== 2) {
+      this.logger.warn(`No geocoding match for "${address}"`);
+      return null;
+    }
     return { lon: coords[0], lat: coords[1] };
   }
 
@@ -83,12 +116,18 @@ export class DistanceService {
       }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      this.logger.warn(`Routing request failed (HTTP ${res.status})`);
+      return null;
+    }
 
     const body: any = await res.json();
     const distanceMeters = body?.distances?.[0]?.[0];
     const durationSeconds = body?.durations?.[0]?.[0];
-    if (typeof distanceMeters !== 'number' || typeof durationSeconds !== 'number') return null;
+    if (typeof distanceMeters !== 'number' || typeof durationSeconds !== 'number') {
+      this.logger.warn('Malformed routing response');
+      return null;
+    }
 
     return {
       distanceKm: Math.round((distanceMeters / 1000) * 10) / 10,

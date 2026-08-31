@@ -47,6 +47,29 @@ describe('DistanceService', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
+  it("biases and bounds the destination geocode around the studio's own resolved location (regression: a mismatched address could otherwise resolve hundreds of km off)", async () => {
+    (config as { GEOCODING_ENABLED: boolean }).GEOCODING_ENABLED = true;
+
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ features: [{ geometry: { coordinates: [3.05, 50.63] } }] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ features: [{ geometry: { coordinates: [3.1, 50.65] } }] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ distances: [[8432]], durations: [[842]] }) });
+
+    await service.estimate('Origin', 'Destination');
+
+    const destinationUrl: URL = fetchMock.mock.calls[1][0];
+    expect(destinationUrl.searchParams.get('focus.point.lon')).toBe('3.05');
+    expect(destinationUrl.searchParams.get('focus.point.lat')).toBe('50.63');
+    expect(destinationUrl.searchParams.get('boundary.circle.lon')).toBe('3.05');
+    expect(destinationUrl.searchParams.get('boundary.circle.lat')).toBe('50.63');
+    expect(destinationUrl.searchParams.get('boundary.circle.radius')).toBe('60');
+
+    // The origin's own geocode has no "near" point to bias around yet.
+    const originUrl: URL = fetchMock.mock.calls[0][0];
+    expect(originUrl.searchParams.has('focus.point.lon')).toBe(false);
+    expect(originUrl.searchParams.has('boundary.circle.lon')).toBe(false);
+  });
+
   it('caches the origin geocode across calls', async () => {
     (config as { GEOCODING_ENABLED: boolean }).GEOCODING_ENABLED = true;
 
