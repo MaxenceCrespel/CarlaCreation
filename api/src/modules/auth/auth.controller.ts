@@ -11,8 +11,13 @@ import { LoginDto, UpdateCredentialsDto } from './dto/login.dto';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  // Strict rate limiting on login to slow down credential brute-forcing.
-  @Throttle({ default: { limit: 10, ttl: 900_000 } })
+  // Strict rate limiting on login to slow down credential brute-forcing —
+  // 30/15min is still negligible against real brute-forcing (a few
+  // thousand guesses/day at most) but leaves enough room for a growing
+  // admin E2E suite that logs in once per spec file to not trip this on
+  // its own (see cypress/support/commands.js's cy.session() caching,
+  // which already cuts most of that down, but doesn't eliminate it).
+  @Throttle({ default: { limit: 30, ttl: 900_000 } })
   @UseGuards(CsrfGuard)
   @Post('login')
   @HttpCode(200)
