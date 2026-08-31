@@ -94,6 +94,12 @@ export class Reservation {
   @Column({ type: 'int', default: 0 })
   discount_percent: number;
 
+  // Only ever set by the client's own self-cancellation flow (see
+  // ReservationsService.cancelByGroupId) — never by the admin cancelling a
+  // reservation herself, since she already knows why.
+  @Column({ type: 'text', nullable: true })
+  cancellation_reason: string | null;
+
   @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;
 }

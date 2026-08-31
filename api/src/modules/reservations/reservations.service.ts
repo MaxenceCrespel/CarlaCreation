@@ -58,6 +58,7 @@ interface ReservationWithServiceRow {
   promotion_id: number | null;
   discount_percent: number;
   promotion_label: string | null;
+  cancellation_reason: string | null;
   addons: { name: string; extra_price_cents: number; extra_duration_minutes: number }[];
 }
 
@@ -585,7 +586,7 @@ export class ReservationsService {
               r.start_time, r.end_time, r.notes, r.status, r.created_at, r.service_id, r.client_id,
               r.at_client_home, r.client_address,
               r.travel_distance_km::float8 AS travel_distance_km, r.travel_duration_minutes, r.travel_fee_cents,
-              r.promotion_id, r.discount_percent, p.label AS promotion_label,
+              r.promotion_id, r.discount_percent, p.label AS promotion_label, r.cancellation_reason,
               s.name AS service_name, s.price_cents
        FROM reservations r
        JOIN services s ON s.id = r.service_id
@@ -955,7 +956,7 @@ export class ReservationsService {
     };
   }
 
-  async cancelByGroupId(groupId: string): Promise<void> {
+  async cancelByGroupId(groupId: string, reason: string): Promise<void> {
     const rows: { status: ReservationStatus; client_name: string; reservation_date: string }[] = await this.dataSource.query(
       `SELECT status, client_name, reservation_date FROM reservations WHERE group_id = $1 LIMIT 1`,
       [groupId],
@@ -982,13 +983,16 @@ export class ReservationsService {
       );
 
     await this.updateGroupStatus(groupId, 'cancelled');
+    // Stored on every row in the group, same as the status change above —
+    // required by CancelReservationDto, so always a real, non-empty string.
+    await this.reservationRepo.update({ group_id: groupId }, { cancellation_reason: reason });
 
     // Only the client-initiated path notifies — an admin changing the
     // status herself (updateGroupStatus called elsewhere) doesn't need a
     // push/email telling her about her own action.
     await this.pushService.notifyAdmins({
       title: 'Rendez-vous annulé par le client',
-      body: `${rows[0].client_name} — ${rows[0].reservation_date}`,
+      body: `${rows[0].client_name} — ${rows[0].reservation_date} — Motif : ${reason}`,
       url: '/admin',
     });
     if (guestRows.length > 0) {
@@ -999,6 +1003,7 @@ export class ReservationsService {
         clientPhone: primary.client_phone,
         date: rows[0].reservation_date,
         guests: guestRows.map((r) => ({ name: r.client_name, serviceName: r.service_name, startTime: r.start_time, endTime: r.end_time })),
+        cancellationReason: reason,
       });
     }
   }

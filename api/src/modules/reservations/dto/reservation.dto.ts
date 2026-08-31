@@ -391,3 +391,12 @@ export class AdminCreateReservationDto {
   @Min(1)
   promotionId?: number;
 }
+
+// The client's own self-cancellation flow ("mon rendez-vous" page) — a
+// reason is required so the admin isn't left guessing why a slot freed up.
+export class CancelReservationDto {
+  @IsString()
+  @Length(3, 500)
+  reason!: string;
+}
+

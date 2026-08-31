@@ -900,6 +900,12 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdateStatus, onEdi
               </select>
             </dd>
           </div>
+          {r.status === 'cancelled' && r.cancellation_reason && (
+            <div>
+              <dt>Motif d'annulation</dt>
+              <dd>{r.cancellation_reason}</dd>
+            </div>
+          )}
         </dl>
 
         <div className="modal-actions" style={{ flexWrap: 'wrap' }}>
@@ -1291,6 +1297,9 @@ export default function ReservationsTab() {
                                 <option key={value} value={value}>{label}</option>
                               ))}
                             </select>
+                            {r.status === 'cancelled' && r.cancellation_reason && (
+                              <div className="row-addons">Motif : {r.cancellation_reason}</div>
+                            )}
                           </div>
                         </td>
                         <td className="row-actions">

@@ -116,6 +116,12 @@ describe('MailService — studio address privacy', () => {
     expect(html).toContain('0600000000');
   });
 
+  it('sendAdminCancellationNotification includes the client\'s cancellation reason when given', async () => {
+    await service.sendAdminCancellationNotification({ ...baseInput, cancellationReason: 'Empêchement de dernière minute' });
+    const html = sendMail.mock.calls[0][0].html;
+    expect(html).toContain('Empêchement de dernière minute');
+  });
+
   it('always sends a plain-text alternative alongside the HTML (avoids an HTML-only spam signal)', async () => {
     await service.sendBookingReceived(baseInput);
     const { html, text } = sendMail.mock.calls[0][0];

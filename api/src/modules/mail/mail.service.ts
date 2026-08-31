@@ -19,6 +19,9 @@ export interface BookingEmailInput {
   groupId?: string;
   atClientHome?: boolean;
   clientAddress?: string | null;
+  // Only ever set on sendAdminCancellationNotification — the client's own
+  // reason for a self-cancellation.
+  cancellationReason?: string;
 }
 
 const DAY_NAMES_FR = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
@@ -143,6 +146,7 @@ export class MailService {
         <h2 style="color:#9A5F4B;">Rendez-vous annulé par le client</h2>
         <p><strong>${escapeHtml(input.clientName)}</strong> — ${escapeHtml(input.clientEmail)}${input.clientPhone ? ` — ${escapeHtml(input.clientPhone)}` : ''}</p>
         <p style="margin:16px 0 4px;"><strong>Date :</strong> ${formatDateFr(input.date)}</p>
+        ${input.cancellationReason ? `<p style="margin:0 0 16px;"><strong>Motif :</strong> ${escapeHtml(input.cancellationReason)}</p>` : ''}
         <table style="border-collapse:collapse;width:100%;margin:12px 0;">
           <thead>
             <tr style="background:#F8F4EF;">

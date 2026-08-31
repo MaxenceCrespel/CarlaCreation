@@ -717,17 +717,17 @@ describe('ReservationsService', () => {
 
   it('cancelByGroupId throws NotFoundException for an unknown group', async () => {
     dataSource.query.mockResolvedValue([]);
-    await expect(service.cancelByGroupId('unknown')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.cancelByGroupId('unknown', 'Empêchement')).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('cancelByGroupId refuses to re-cancel an already cancelled group', async () => {
     dataSource.query.mockResolvedValue([{ status: 'cancelled' }]);
-    await expect(service.cancelByGroupId('some-group')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.cancelByGroupId('some-group', 'Empêchement')).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('cancelByGroupId refuses to cancel a completed booking', async () => {
     dataSource.query.mockResolvedValue([{ status: 'completed' }]);
-    await expect(service.cancelByGroupId('some-group')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.cancelByGroupId('some-group', 'Empêchement')).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('cancelByGroupId cancels a pending booking, notifies the client and pushes to the admin', async () => {
@@ -747,17 +747,30 @@ describe('ReservationsService', () => {
     });
     reservationRepo.update.mockResolvedValue({ affected: 1 });
 
-    await service.cancelByGroupId('some-group');
+    await service.cancelByGroupId('some-group', 'Empêchement de dernière minute');
 
     expect(reservationRepo.update).toHaveBeenCalledWith({ group_id: 'some-group' }, { status: 'cancelled' });
+    // Stored on every row in the group, same as the status change above.
+    expect(reservationRepo.update).toHaveBeenCalledWith(
+      { group_id: 'some-group' },
+      { cancellation_reason: 'Empêchement de dernière minute' },
+    );
     expect(mailService.sendStatusUpdate).toHaveBeenCalledWith(expect.objectContaining({ status: 'cancelled' }));
     expect(pushService.notifyAdmins).toHaveBeenCalledWith(
-      expect.objectContaining({ title: 'Rendez-vous annulé par le client' }),
+      expect.objectContaining({
+        title: 'Rendez-vous annulé par le client',
+        body: expect.stringContaining('Empêchement de dernière minute'),
+      }),
     );
     // The push alone can be missed (offline, push not enabled) — email is
     // the reliable fallback so the admin never simply doesn't find out.
     expect(mailService.sendAdminCancellationNotification).toHaveBeenCalledWith(
-      expect.objectContaining({ clientName: 'Mother', clientEmail: 'mother@example.com', clientPhone: '0600000000' }),
+      expect.objectContaining({
+        clientName: 'Mother',
+        clientEmail: 'mother@example.com',
+        clientPhone: '0600000000',
+        cancellationReason: 'Empêchement de dernière minute',
+      }),
     );
   });
 

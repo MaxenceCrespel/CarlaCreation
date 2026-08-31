@@ -169,6 +169,7 @@ CREATE TABLE
         client_id INTEGER REFERENCES clients (id) ON DELETE SET NULL,
         promotion_id INTEGER REFERENCES promotions (id) ON DELETE SET NULL,
         discount_percent INTEGER NOT NULL DEFAULT 0,
+        cancellation_reason TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
@@ -328,7 +329,8 @@ VALUES
     (1785600000000, 'AddProductPurchasePrice1785600000000'),
     (1785700000000, 'AddExpenses1785700000000'),
     (1785800000000, 'AddClients1785800000000'),
-    (1785900000000, 'AddPromotions1785900000000');
+    (1785900000000, 'AddPromotions1785900000000'),
+    (1786000000000, 'AddCancellationReason1786000000000');
 
 -- Admin account — username "carla", password "Carla0303!" (bcrypt, cost 12).
 -- Change this password after first login in a real deployment.

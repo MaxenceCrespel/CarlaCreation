@@ -2,7 +2,7 @@ import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, UseGuards } f
 import { Throttle } from '@nestjs/throttler';
 import { CsrfGuard } from '../../common/csrf';
 import { ReservationsService } from './reservations.service';
-import { AvailabilityQueryDto, CreateReservationDto, DayAvailabilityQueryDto, NextAvailableQueryDto, TravelEstimateQueryDto } from './dto/reservation.dto';
+import { AvailabilityQueryDto, CancelReservationDto, CreateReservationDto, DayAvailabilityQueryDto, NextAvailableQueryDto, TravelEstimateQueryDto } from './dto/reservation.dto';
 
 @Controller('api/reservations')
 export class ReservationsController {
@@ -52,8 +52,8 @@ export class ReservationsController {
   @Throttle({ default: { limit: 20, ttl: 3_600_000 } })
   @UseGuards(CsrfGuard)
   @Post('lookup/:groupId/cancel')
-  async cancel(@Param('groupId', ParseUUIDPipe) groupId: string) {
-    await this.reservationsService.cancelByGroupId(groupId);
+  async cancel(@Param('groupId', ParseUUIDPipe) groupId: string, @Body() dto: CancelReservationDto) {
+    await this.reservationsService.cancelByGroupId(groupId, dto.reason);
     return { success: true };
   }
 }

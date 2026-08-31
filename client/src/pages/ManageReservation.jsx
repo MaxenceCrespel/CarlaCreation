@@ -12,6 +12,17 @@ const STATUS_LABELS = {
   refused: 'Refusé',
 };
 
+// Covers the common cases at a glance — "Autre" plus the optional free-text
+// field below still let a client explain anything more specific.
+const CANCEL_REASONS = [
+  'Empêchement personnel',
+  'Problème de santé',
+  'Contrainte professionnelle',
+  'Erreur de réservation',
+  'Je ne suis plus disponible ce jour-là',
+  'Autre',
+];
+
 const DAY_NAMES_FR = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
 const MONTH_NAMES_FR = [
   'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
@@ -30,6 +41,13 @@ export default function ManageReservation() {
   const [reservation, setReservation] = useState(null);
   const [error, setError] = useState(null);
   const [cancelling, setCancelling] = useState(false);
+  // Shows the reason field instead of the "Annuler" button — a click
+  // straight through to cancellation with no way to say why left the admin
+  // guessing every time a slot freed up.
+  const [showCancelForm, setShowCancelForm] = useState(false);
+  const [cancelReasonSelect, setCancelReasonSelect] = useState('');
+  const [cancelReasonDetails, setCancelReasonDetails] = useState('');
+  const [cancelError, setCancelError] = useState(null);
 
   useSeo({ title: 'Mon rendez-vous', path: `/mon-rendez-vous/${groupId}` });
 
@@ -42,12 +60,23 @@ export default function ManageReservation() {
 
   useEffect(load, [groupId]);
 
-  async function handleCancel() {
+  async function handleCancel(e) {
+    e.preventDefault();
+    if (!cancelReasonSelect) {
+      setCancelError('Merci de choisir un motif.');
+      return;
+    }
+    const details = cancelReasonDetails.trim();
+    const reason = details ? `${cancelReasonSelect} — ${details}` : cancelReasonSelect;
     if (!window.confirm('Confirmez-vous l\'annulation de ce rendez-vous ?')) return;
+    setCancelError(null);
     setCancelling(true);
     try {
-      await apiFetch(`/reservations/lookup/${groupId}/cancel`, { method: 'POST' });
+      await apiFetch(`/reservations/lookup/${groupId}/cancel`, { method: 'POST', body: { reason } });
       showToast('Rendez-vous annulé.', 'success');
+      setShowCancelForm(false);
+      setCancelReasonSelect('');
+      setCancelReasonDetails('');
       load();
     } catch (err) {
       showToast(err.message, 'error');
@@ -108,10 +137,60 @@ export default function ManageReservation() {
               </tbody>
             </table>
 
-            {(reservation.status === 'pending' || reservation.status === 'confirmed') && (
-              <button type="button" className="btn btn-outline-danger" onClick={handleCancel} disabled={cancelling}>
-                {cancelling ? 'Annulation…' : 'Annuler mon rendez-vous'}
+            {(reservation.status === 'pending' || reservation.status === 'confirmed') && !showCancelForm && (
+              <button type="button" className="btn btn-outline-danger" onClick={() => setShowCancelForm(true)}>
+                Annuler mon rendez-vous
               </button>
+            )}
+
+            {(reservation.status === 'pending' || reservation.status === 'confirmed') && showCancelForm && (
+              <form onSubmit={handleCancel}>
+                <div className="form-row">
+                  <label htmlFor="cancel-reason-select">Motif de l'annulation</label>
+                  <select
+                    id="cancel-reason-select"
+                    value={cancelReasonSelect}
+                    onChange={(e) => {
+                      setCancelReasonSelect(e.target.value);
+                      if (cancelError) setCancelError(null);
+                    }}
+                  >
+                    <option value="">Choisissez un motif</option>
+                    {CANCEL_REASONS.map((r) => (
+                      <option key={r} value={r}>{r}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-row">
+                  <label htmlFor="cancel-reason-details">Précision (optionnel)</label>
+                  <textarea
+                    id="cancel-reason-details"
+                    rows={3}
+                    maxLength={500}
+                    placeholder="Des détails à ajouter ?"
+                    value={cancelReasonDetails}
+                    onChange={(e) => setCancelReasonDetails(e.target.value)}
+                  />
+                </div>
+                {cancelError && <p className="form-feedback error">{cancelError}</p>}
+                <div className="manual-reservation-form-actions">
+                  <button type="submit" className="btn btn-outline-danger" disabled={cancelling}>
+                    {cancelling ? 'Annulation…' : 'Confirmer l\'annulation'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={() => {
+                      setShowCancelForm(false);
+                      setCancelReasonSelect('');
+                      setCancelReasonDetails('');
+                      setCancelError(null);
+                    }}
+                  >
+                    Ne pas annuler
+                  </button>
+                </div>
+              </form>
             )}
             {reservation.status === 'cancelled' && <p className="loading-text">Ce rendez-vous a été annulé.</p>}
           </div>
