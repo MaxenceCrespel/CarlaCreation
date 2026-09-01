@@ -776,6 +776,16 @@ textarea.field-invalid {
 .testimonial-card p { color: var(--color-text); font-style: italic; }
 .testimonial-card footer { color: var(--color-accent-dark); font-weight: 600; font-size: 0.9rem; }
 .testimonial-card .stars { margin-bottom: 10px; }
+.testimonial-reply {
+  background: var(--color-bg);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-top: 12px;
+  font-style: normal;
+  font-size: 0.9rem;
+  color: var(--color-text);
+}
+.testimonial-reply strong { color: var(--color-accent-dark); }
 
 /* Reviews carousel — autoplaying but also fully hand-slidable (native CSS
    scroll-snap handles touch/trackpad drag, no JS drag logic needed). */
@@ -1514,6 +1524,29 @@ textarea.field-invalid {
 }
 .admin-review-actions button.save-btn { border-color: var(--color-accent); color: var(--color-accent-dark); }
 .admin-review-actions button.danger { border-color: #e3b3ac; color: #b3413a; }
+
+.admin-review-reply { background: var(--color-bg); border-radius: var(--radius-sm); padding: 12px 14px; margin: 0 0 14px; }
+.admin-review-reply label { display: block; font-size: 0.8rem; color: var(--color-text-soft); margin-bottom: 6px; }
+.admin-review-reply textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1.5px solid var(--color-bg-alt);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  margin-bottom: 8px;
+}
+.admin-review-reply button.save-btn {
+  border: 1.5px solid var(--color-accent);
+  background: var(--color-bg);
+  color: var(--color-accent-dark);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.admin-review-reply button.save-btn:disabled { opacity: 0.5; cursor: default; }
 
 /* Hours admin — horizontal scrolling calendar (same day-chip pattern as the
    client-side booking date picker) + an editor panel for whichever single

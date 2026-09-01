@@ -19,6 +19,7 @@ export class ReviewsController {
         clientName: r.client_name,
         rating: r.rating,
         comment: r.comment,
+        adminReply: r.admin_reply,
         createdAt: r.created_at,
       })),
     };

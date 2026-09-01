@@ -25,6 +25,8 @@ export default function AvisTab() {
   const [reviews, setReviews] = useState(null);
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState('pending');
+  const [replyDrafts, setReplyDrafts] = useState({});
+  const [savingReplyId, setSavingReplyId] = useState(null);
 
   function load() {
     setError(null);
@@ -42,6 +44,32 @@ export default function AvisTab() {
       showToast(status === 'approved' ? 'Avis approuvé.' : 'Avis refusé.', 'success');
     } catch (err) {
       showToast(err.message, 'error');
+    }
+  }
+
+  function draftFor(review) {
+    return replyDrafts[review.id] ?? review.adminReply ?? '';
+  }
+
+  function setDraft(id, value) {
+    setReplyDrafts((drafts) => ({ ...drafts, [id]: value }));
+  }
+
+  async function saveReply(id) {
+    const reply = draftFor(reviews.find((r) => r.id === id));
+    setSavingReplyId(id);
+    try {
+      const updated = await apiFetch(`/admin/reviews/${id}/reply`, { method: 'PATCH', body: { reply } });
+      setReviews((rows) => rows.map((r) => (r.id === id ? updated : r)));
+      setReplyDrafts((drafts) => {
+        const { [id]: _discard, ...rest } = drafts;
+        return rest;
+      });
+      showToast(reply.trim() === '' ? 'Réponse supprimée.' : 'Réponse publiée.', 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setSavingReplyId(null);
     }
   }
 
@@ -100,6 +128,27 @@ export default function AvisTab() {
               <p className="admin-review-meta">
                 — {review.clientName} · {new Date(review.createdAt).toLocaleDateString('fr-FR')}
               </p>
+
+              <div className="admin-review-reply">
+                <label htmlFor={`reply-${review.id}`}>Votre réponse (visible publiquement)</label>
+                <textarea
+                  id={`reply-${review.id}`}
+                  rows={2}
+                  maxLength={1000}
+                  placeholder="Répondre à cet avis…"
+                  value={draftFor(review)}
+                  onChange={(e) => setDraft(review.id, e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="save-btn"
+                  disabled={savingReplyId === review.id || draftFor(review) === (review.adminReply ?? '')}
+                  onClick={() => saveReply(review.id)}
+                >
+                  {savingReplyId === review.id ? 'Enregistrement…' : review.adminReply ? 'Mettre à jour' : 'Publier la réponse'}
+                </button>
+              </div>
+
               <div className="admin-review-actions">
                 {review.status !== 'approved' && (
                   <button type="button" className="save-btn" onClick={() => setStatus(review.id, 'approved')}>Approuver</button>

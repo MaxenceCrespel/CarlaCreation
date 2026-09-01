@@ -28,4 +28,23 @@ describe('Reviews', () => {
     cy.visit('/');
     cy.get('#testimonials').contains(reviewerName).should('be.visible');
   });
+
+  it('admin replies to it, and the reply shows up publicly next to the review', () => {
+    const replyText = 'Merci beaucoup pour votre retour, à très vite !';
+
+    cy.adminLogin();
+    cy.contains('button.admin-nav-link', 'Avis').click();
+    cy.contains('button.admin-filter-btn', 'Approuvés').click();
+
+    cy.contains('.admin-review-card', reviewerName).within(() => {
+      cy.get('.admin-review-reply textarea').clear().type(replyText);
+      cy.contains('button', 'Publier la réponse').click();
+    });
+    cy.get('.toast.is-visible').should('contain', 'Réponse publiée');
+
+    cy.visit('/');
+    cy.get('#testimonials').contains(reviewerName).closest('.testimonial-card').within(() => {
+      cy.get('.testimonial-reply').should('contain', replyText);
+    });
+  });
 });

@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, UseGuards } 
 import { AdminAuthGuard } from '../../common/admin-auth.guard';
 import { CsrfGuard } from '../../common/csrf';
 import { ReviewsService } from './reviews.service';
-import { UpdateReviewStatusDto } from './dto/review.dto';
+import { UpdateReviewReplyDto, UpdateReviewStatusDto } from './dto/review.dto';
 
 @UseGuards(AdminAuthGuard)
 @Controller('api/admin/reviews')
@@ -18,6 +18,7 @@ export class AdminReviewsController {
       rating: r.rating,
       comment: r.comment,
       status: r.status,
+      adminReply: r.admin_reply,
       createdAt: r.created_at,
     }));
   }
@@ -26,7 +27,30 @@ export class AdminReviewsController {
   @Patch(':id/status')
   async updateStatus(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateReviewStatusDto) {
     const r = await this.reviewsService.updateStatus(id, dto.status);
-    return { id: r.id, clientName: r.client_name, rating: r.rating, comment: r.comment, status: r.status, createdAt: r.created_at };
+    return {
+      id: r.id,
+      clientName: r.client_name,
+      rating: r.rating,
+      comment: r.comment,
+      status: r.status,
+      adminReply: r.admin_reply,
+      createdAt: r.created_at,
+    };
+  }
+
+  @UseGuards(CsrfGuard)
+  @Patch(':id/reply')
+  async updateReply(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateReviewReplyDto) {
+    const r = await this.reviewsService.setReply(id, dto.reply);
+    return {
+      id: r.id,
+      clientName: r.client_name,
+      rating: r.rating,
+      comment: r.comment,
+      status: r.status,
+      adminReply: r.admin_reply,
+      createdAt: r.created_at,
+    };
   }
 
   @UseGuards(CsrfGuard)

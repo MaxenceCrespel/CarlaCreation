@@ -64,6 +64,14 @@ export class ReviewsService {
     return this.reviewRepo.save(item);
   }
 
+  async setReply(id: number, reply: string): Promise<Review> {
+    const item = await this.reviewRepo.findOne({ where: { id } });
+    if (!item) throw new NotFoundException('Avis introuvable.');
+
+    item.admin_reply = reply.trim() === '' ? null : reply.trim();
+    return this.reviewRepo.save(item);
+  }
+
   async remove(id: number): Promise<void> {
     const result = await this.reviewRepo.delete(id);
     if (result.affected === 0) throw new NotFoundException('Avis introuvable.');

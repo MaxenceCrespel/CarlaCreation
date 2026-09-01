@@ -89,4 +89,27 @@ describe('ReviewsService', () => {
       expect.objectContaining({ title: 'Nouvel avis à modérer' }),
     );
   });
+
+  it('setReply trims and stores the admin reply', async () => {
+    const review = { id: 1, admin_reply: null };
+    repo.findOne.mockResolvedValue(review);
+
+    const result = await service.setReply(1, '  Merci beaucoup ! ');
+
+    expect(result.admin_reply).toBe('Merci beaucoup !');
+  });
+
+  it('setReply clears the reply when given an empty string', async () => {
+    const review = { id: 1, admin_reply: 'Ancienne réponse' };
+    repo.findOne.mockResolvedValue(review);
+
+    const result = await service.setReply(1, '   ');
+
+    expect(result.admin_reply).toBeNull();
+  });
+
+  it('setReply throws NotFoundException for a missing review', async () => {
+    repo.findOne.mockResolvedValue(null);
+    await expect(service.setReply(999, 'Merci !')).rejects.toBeInstanceOf(NotFoundException);
+  });
 });

@@ -257,6 +257,7 @@ CREATE TABLE
         rating INTEGER NOT NULL,
         comment TEXT NOT NULL,
         status TEXT NOT NULL DEFAULT 'pending',
+        admin_reply TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
@@ -332,7 +333,8 @@ VALUES
     (1785800000000, 'AddClients1785800000000'),
     (1785900000000, 'AddPromotions1785900000000'),
     (1786000000000, 'AddCancellationReason1786000000000'),
-    (1786100000000, 'AddContactMessageIsRead1786100000000');
+    (1786100000000, 'AddContactMessageIsRead1786100000000'),
+    (1786200000000, 'AddReviewAdminReply1786200000000');
 
 -- Admin account — username "carla", password "Carla0303!" (bcrypt, cost 12).
 -- Change this password after first login in a real deployment.

@@ -23,6 +23,11 @@ export class Review {
   @Column({ default: 'pending' })
   status: ReviewStatus;
 
+  // Public reply from the admin, shown under the review alongside the
+  // client's comment. Null means no reply has been posted yet.
+  @Column({ type: 'text', nullable: true })
+  admin_reply: string | null;
+
   @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;
 }

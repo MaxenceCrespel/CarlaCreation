@@ -149,6 +149,11 @@ export default function ReviewsCarousel({ reviews }) {
             <Stars value={review.rating} />
             <p>« {review.comment} »</p>
             <footer>— {review.clientName}</footer>
+            {review.adminReply && (
+              <p className="testimonial-reply">
+                <strong>Réponse de Carla —</strong> {review.adminReply}
+              </p>
+            )}
           </blockquote>
         ))}
       </div>

@@ -24,3 +24,10 @@ export class UpdateReviewStatusDto {
   @IsIn(['approved', 'rejected', 'pending'])
   status!: ReviewStatus;
 }
+
+export class UpdateReviewReplyDto {
+  // Empty string clears the reply.
+  @IsString()
+  @Length(0, 1000)
+  reply!: string;
+}
