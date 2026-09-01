@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ContactMessage } from '../../database/entities/contact-message.entity';
@@ -21,5 +21,22 @@ export class ContactService {
       body: `${dto.name} — ${dto.message.slice(0, 80)}`,
       url: '/admin',
     });
+  }
+
+  findAll(): Promise<ContactMessage[]> {
+    return this.contactRepo.find({ order: { created_at: 'DESC' } });
+  }
+
+  async setRead(id: number, isRead: boolean): Promise<ContactMessage> {
+    const item = await this.contactRepo.findOne({ where: { id } });
+    if (!item) throw new NotFoundException('Message introuvable.');
+
+    item.is_read = isRead;
+    return this.contactRepo.save(item);
+  }
+
+  async remove(id: number): Promise<void> {
+    const result = await this.contactRepo.delete(id);
+    if (result.affected === 0) throw new NotFoundException('Message introuvable.');
   }
 }

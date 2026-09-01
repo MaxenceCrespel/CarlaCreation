@@ -13,6 +13,7 @@ import FacturationTab from './FacturationTab';
 import DepensesTab from './DepensesTab';
 import ClientsTab from './ClientsTab';
 import PromotionsTab from './PromotionsTab';
+import MessagesTab from './MessagesTab';
 
 // "Mon compte" isn't in this list — it's not a work section like the
 // others, so it lives behind the avatar badge in the header instead (see
@@ -29,6 +30,7 @@ const TABS = [
   { key: 'depenses', label: 'Dépenses', Component: DepensesTab },
   { key: 'promotions', label: 'Promotions', Component: PromotionsTab },
   { key: 'reviews', label: 'Avis', Component: AvisTab },
+  { key: 'messages', label: 'Messages', Component: MessagesTab },
 ];
 
 export default function AdminApp() {

@@ -246,6 +246,7 @@ CREATE TABLE
         name TEXT NOT NULL,
         email TEXT NOT NULL,
         message TEXT NOT NULL,
+        is_read BOOLEAN NOT NULL DEFAULT false,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
@@ -330,7 +331,8 @@ VALUES
     (1785700000000, 'AddExpenses1785700000000'),
     (1785800000000, 'AddClients1785800000000'),
     (1785900000000, 'AddPromotions1785900000000'),
-    (1786000000000, 'AddCancellationReason1786000000000');
+    (1786000000000, 'AddCancellationReason1786000000000'),
+    (1786100000000, 'AddContactMessageIsRead1786100000000');
 
 -- Admin account — username "carla", password "Carla0303!" (bcrypt, cost 12).
 -- Change this password after first login in a real deployment.

@@ -1,4 +1,4 @@
-import { IsEmail, IsEmpty, IsString, Length } from 'class-validator';
+import { IsBoolean, IsEmail, IsEmpty, IsString, Length } from 'class-validator';
 
 export class CreateContactDto {
   @IsString()
@@ -15,4 +15,9 @@ export class CreateContactDto {
   // Honeypot: must stay empty. Bots that auto-fill every field trip this.
   @IsEmpty({ message: 'Requête invalide.' })
   website?: string;
+}
+
+export class UpdateContactMessageDto {
+  @IsBoolean()
+  isRead!: boolean;
 }
