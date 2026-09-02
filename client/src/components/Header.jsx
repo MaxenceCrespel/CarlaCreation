@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { useSiteConfig } from '../context/SiteConfigContext';
-import logo from '../assets/logo.svg';
+import logo from '../assets/logo.png';
 
 export default function Header() {
   const { siteName, navLinks } = useSiteConfig();

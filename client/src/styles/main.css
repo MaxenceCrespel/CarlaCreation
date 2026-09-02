@@ -104,7 +104,7 @@ img { max-width: 100%; display: block; }
   color: var(--color-text);
   margin-right: auto;
 }
-.brand-logo { height: 42px; width: auto; display: block; }
+.brand-logo { height: 58px; width: auto; display: block; }
 .brand-mark { color: var(--color-accent); font-size: 1.4rem; }
 
 .main-nav ul {
@@ -1778,7 +1778,7 @@ textarea.field-invalid {
 @media (max-width: 480px) {
   .container { padding: 0 16px; }
   .header-inner { padding: 12px 16px; }
-  .brand-logo { height: 36px; }
+  .brand-logo { height: 48px; }
 
   .hero { padding: 48px 0 36px; }
   .section { padding: 44px 0; }
