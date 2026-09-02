@@ -13,7 +13,7 @@ export class ContactService {
   ) {}
 
   async create(dto: CreateContactDto): Promise<void> {
-    const message = this.contactRepo.create({ name: dto.name, email: dto.email, message: dto.message });
+    const message = this.contactRepo.create({ name: dto.name, phone: dto.phone, message: dto.message });
     await this.contactRepo.save(message);
 
     await this.pushService.notifyAdmins({

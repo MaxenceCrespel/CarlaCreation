@@ -9,7 +9,7 @@ export class ContactMessage {
   name: string;
 
   @Column()
-  email: string;
+  phone: string;
 
   @Column()
   message: string;

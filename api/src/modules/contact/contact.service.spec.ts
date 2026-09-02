@@ -32,14 +32,14 @@ describe('ContactService', () => {
   });
 
   it('creates and saves a contact message with the submitted fields', async () => {
-    await service.create({ name: 'Camille', email: 'camille@example.com', message: 'Bonjour !' } as any);
+    await service.create({ name: 'Camille', phone: '0601020304', message: 'Bonjour !' } as any);
 
-    expect(repo.create).toHaveBeenCalledWith({ name: 'Camille', email: 'camille@example.com', message: 'Bonjour !' });
+    expect(repo.create).toHaveBeenCalledWith({ name: 'Camille', phone: '0601020304', message: 'Bonjour !' });
     expect(repo.save).toHaveBeenCalled();
   });
 
   it('notifies admins of the new contact message', async () => {
-    await service.create({ name: 'Camille', email: 'camille@example.com', message: 'Bonjour !' } as any);
+    await service.create({ name: 'Camille', phone: '0601020304', message: 'Bonjour !' } as any);
 
     expect(pushService.notifyAdmins).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Nouveau message de contact' }),

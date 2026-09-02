@@ -244,7 +244,7 @@ CREATE TABLE
     IF NOT EXISTS contact_messages (
         id SERIAL PRIMARY KEY,
         name TEXT NOT NULL,
-        email TEXT NOT NULL,
+        phone TEXT NOT NULL,
         message TEXT NOT NULL,
         is_read BOOLEAN NOT NULL DEFAULT false,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -334,7 +334,8 @@ VALUES
     (1785900000000, 'AddPromotions1785900000000'),
     (1786000000000, 'AddCancellationReason1786000000000'),
     (1786100000000, 'AddContactMessageIsRead1786100000000'),
-    (1786200000000, 'AddReviewAdminReply1786200000000');
+    (1786200000000, 'AddReviewAdminReply1786200000000'),
+    (1786300000000, 'ContactMessagePhoneInsteadOfEmail1786300000000');
 
 -- Admin account — username "carla", password "Carla0303!" (bcrypt, cost 12).
 -- Change this password after first login in a real deployment.

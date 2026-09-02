@@ -89,7 +89,7 @@ export default function MessagesTab() {
               </div>
               <p className="admin-review-comment">« {message.message} »</p>
               <p className="admin-review-meta">
-                — {message.name} ({message.email}) · {new Date(message.created_at).toLocaleDateString('fr-FR')}
+                — {message.name} (<a href={`tel:${message.phone}`}>{message.phone}</a>) · {new Date(message.created_at).toLocaleDateString('fr-FR')}
               </p>
               <div className="admin-review-actions">
                 {message.is_read ? (

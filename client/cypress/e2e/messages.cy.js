@@ -5,7 +5,7 @@ describe('Contact messages', () => {
   it('a visitor submits the contact form', () => {
     cy.visit('/contact');
     cy.get('#contactName').type(senderName);
-    cy.get('#contactEmail').type('cypress-contact@example.com');
+    cy.get('#contactPhone').type('0601020304');
     cy.get('#contactMessage').type(messageText);
     cy.contains('button', 'Envoyer le message').click();
     cy.get('.form-feedback.success').should('be.visible');

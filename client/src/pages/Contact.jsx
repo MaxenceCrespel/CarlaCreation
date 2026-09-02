@@ -15,10 +15,10 @@ export default function Contact() {
   const showToast = useToast();
 
   // Pre-fill from a previous visit/booking so returning clients don't have
-  // to retype their name and email here either.
+  // to retype their name and phone number here either.
   const [form, setForm] = useState(() => {
     const saved = getSavedContact();
-    return { name: saved?.clientName || '', email: saved?.clientEmail || '', message: '', website: '' };
+    return { name: saved?.clientName || '', phone: saved?.clientPhone || '', message: '', website: '' };
   });
   const [feedback, setFeedback] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -41,7 +41,7 @@ export default function Contact() {
       await apiFetch('/contact', { method: 'POST', body: form });
       setFeedback({ type: 'success', text: 'Message envoyé, merci ! Je vous répondrai rapidement.' });
       showToast('Message envoyé !', 'success');
-      saveContact({ clientName: form.name, clientEmail: form.email, clientPhone: getSavedContact()?.clientPhone || '' });
+      saveContact({ clientName: form.name, clientPhone: form.phone, clientEmail: getSavedContact()?.clientEmail || '' });
       setForm((f) => ({ ...f, message: '', website: '' }));
     } catch (err) {
       setFeedback({ type: 'error', text: err.message });
@@ -79,8 +79,15 @@ export default function Contact() {
               <input type="text" id="contactName" required minLength={2} maxLength={100} value={form.name} onChange={update('name')} />
             </div>
             <div className="form-row">
-              <label htmlFor="contactEmail">Email</label>
-              <input type="email" id="contactEmail" required value={form.email} onChange={update('email')} />
+              <label htmlFor="contactPhone">Téléphone</label>
+              <input
+                type="tel"
+                id="contactPhone"
+                required
+                pattern="[0-9+\s().-]{6,20}"
+                value={form.phone}
+                onChange={update('phone')}
+              />
             </div>
             <div className="form-row">
               <label htmlFor="contactMessage">Message</label>

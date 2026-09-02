@@ -1,12 +1,13 @@
-import { IsBoolean, IsEmail, IsEmpty, IsString, Length } from 'class-validator';
+import { IsBoolean, IsEmpty, IsString, Length, Matches } from 'class-validator';
 
 export class CreateContactDto {
   @IsString()
   @Length(2, 100)
   name!: string;
 
-  @IsEmail()
-  email!: string;
+  @IsString()
+  @Matches(/^[0-9+\s().-]{6,20}$/)
+  phone!: string;
 
   @IsString()
   @Length(5, 2000)
