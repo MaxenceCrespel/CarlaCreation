@@ -24,11 +24,16 @@ export class AuthController {
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
     const { token, username } = await this.authService.login(dto.username, dto.password);
 
+    // Fixed 7-day expiry, no sliding renewal: solo admin account checked
+    // sporadically from a bookmark/installed PWA — 8h forced a reconnect on
+    // basically every visit. 7 days is rare enough to not be annoying, but
+    // still short enough that she re-enters her password regularly instead
+    // of a session that never dies.
     res.cookie('admin_session', token, {
       httpOnly: true,
       sameSite: 'strict',
       secure: config.COOKIE_SECURE,
-      maxAge: 8 * 60 * 60 * 1000,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
       path: '/',
     });
 
@@ -65,7 +70,7 @@ export class AuthController {
       httpOnly: true,
       sameSite: 'strict',
       secure: config.COOKIE_SECURE,
-      maxAge: 8 * 60 * 60 * 1000,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
       path: '/',
     });
 

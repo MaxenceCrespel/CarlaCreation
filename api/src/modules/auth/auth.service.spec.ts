@@ -33,7 +33,7 @@ describe('AuthService', () => {
     const result = await service.login('admin', 'correct-password');
 
     expect(result).toEqual({ token: 'signed-jwt-token', username: 'admin' });
-    expect(jwtService.sign).toHaveBeenCalledWith({ sub: 1, username: 'admin' }, { expiresIn: '8h' });
+    expect(jwtService.sign).toHaveBeenCalledWith({ sub: 1, username: 'admin' }, { expiresIn: '7d' });
   });
 
   it('rejects a wrong password', async () => {
@@ -102,7 +102,7 @@ describe('AuthService', () => {
       expect(adminRepo.save).toHaveBeenCalledWith(expect.objectContaining({ username: 'carla2' }));
       const saved = adminRepo.save.mock.calls[0][0];
       expect(bcrypt.compareSync('a-new-strong-password', saved.password_hash)).toBe(true);
-      expect(jwtService.sign).toHaveBeenCalledWith({ sub: 1, username: 'carla2' }, { expiresIn: '8h' });
+      expect(jwtService.sign).toHaveBeenCalledWith({ sub: 1, username: 'carla2' }, { expiresIn: '7d' });
     });
 
     it('allows changing only the password, keeping the same username', async () => {

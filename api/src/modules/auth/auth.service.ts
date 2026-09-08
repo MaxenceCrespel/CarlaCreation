@@ -28,7 +28,7 @@ export class AuthService {
       throw new UnauthorizedException('Identifiants invalides.');
     }
 
-    const token = this.jwtService.sign({ sub: admin.id, username: admin.username }, { expiresIn: '8h' });
+    const token = this.jwtService.sign({ sub: admin.id, username: admin.username }, { expiresIn: '7d' });
     return { token, username: admin.username };
   }
 
@@ -66,7 +66,7 @@ export class AuthService {
     // The old session's JWT still carries the previous username — re-issue
     // one now so `GET /api/auth/me` (and the cookie itself) reflect the
     // change immediately, without forcing a fresh login.
-    const token = this.jwtService.sign({ sub: admin.id, username: admin.username }, { expiresIn: '8h' });
+    const token = this.jwtService.sign({ sub: admin.id, username: admin.username }, { expiresIn: '7d' });
     return { token, username: admin.username };
   }
 }
