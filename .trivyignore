@@ -1,3 +1,17 @@
 # Trivy vulnerability exceptions for the Docker image built from api/Dockerfile.
 # Add a CVE ID per line with a comment explaining why it's accepted, e.g.:
 # CVE-2023-12345  # false positive, not reachable in our usage — see <link>
+
+# multer 2.2.0, nested inside @nestjs/platform-express (not our own direct
+# multer@2.4.0, which is already patched — see api/package.json). The real
+# fix needs NestJS v12, but @nestjs/throttler (used app-wide for rate
+# limiting: login, contact form, booking) only declares peer support up to
+# @nestjs/core ^11 as of its latest release (6.5.0) — no v12-compatible
+# release exists yet. Forcing the mismatch would ship the rate-limiter
+# against a range its own maintainers haven't validated. Exposure is
+# limited: the only multer-backed endpoint (gallery photo upload) sits
+# behind AdminAuthGuard, not public. Revisit once @nestjs/throttler ships
+# v12 support — check `npm view @nestjs/throttler versions`.
+CVE-2026-77037
+CVE-2026-77078
+CVE-2026-82333

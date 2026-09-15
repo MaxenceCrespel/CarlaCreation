@@ -1,0 +1,14 @@
+# npm audit exceptions for the API's production dependencies (see
+# scripts/check-npm-audit.js). One npm advisory id per line — find it by
+# running `npm audit --omit=dev --json` and reading each vulnerability's
+# `via[].source`. Comment above each id explaining why it's accepted.
+
+# multer 2.2.0, nested inside @nestjs/platform-express (our own direct
+# multer dependency is already patched to 2.4.0 — see package.json). Fixing
+# this one needs NestJS v12, which @nestjs/throttler (used app-wide for
+# rate limiting) doesn't support yet — see the matching entry in
+# ../.trivyignore for the full rationale. Revisit once it does.
+1193790
+1193791
+1193792
+1193793

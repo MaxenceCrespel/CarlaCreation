@@ -22,7 +22,12 @@ jobs:
           # jamais expédiées, donc les auditer ferait échouer la CI sur des CVE
           # inatteignables en prod (ex: brace-expansion via une vieille version
           # transitive de rimraf/glob dans Jest, sans fix non-breaking disponible).
-          npm audit --omit=dev --audit-level=high
+          #
+          # `npm audit` n'a pas de mécanisme d'exception natif (contrairement à
+          # Trivy + .trivyignore) — check-npm-audit.js rejoue le même principe :
+          # tout ce qui n'est pas documenté dans .npmauditignore fait échouer le job.
+          npm audit --omit=dev --audit-level=high --json > /tmp/npm-audit.json || true
+          node scripts/check-npm-audit.js /tmp/npm-audit.json .npmauditignore
       - name: Audit des dépendances Client (Frontend)
         run: |
           cd client
