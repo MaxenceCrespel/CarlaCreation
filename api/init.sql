@@ -10,6 +10,7 @@
 -- one-command bootstrap path for a brand new database (Docker, or a local
 -- Postgres you're setting up by hand).
 
+DROP TABLE IF EXISTS page_views;
 DROP TABLE IF EXISTS expenses;
 DROP TABLE IF EXISTS invoice_items;
 DROP TABLE IF EXISTS invoices;
@@ -300,6 +301,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS "IDX_travel_fee_tiers_min_km" ON travel_fee_ti
 INSERT INTO travel_fee_tiers (min_km, fee_cents) VALUES (0, 0), (10, 200);
 
 -- Records this bootstrap as already-applied so `npm run migration:run`
+CREATE TABLE
+    IF NOT EXISTS page_views (
+        id SERIAL PRIMARY KEY,
+        path TEXT NOT NULL,
+        visitor_id TEXT NOT NULL,
+        source TEXT NOT NULL,
+        device TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+CREATE INDEX IF NOT EXISTS "IDX_page_views_created_at" ON page_views (created_at);
+CREATE INDEX IF NOT EXISTS "IDX_page_views_visitor_id_created_at" ON page_views (visitor_id, created_at);
+
 -- doesn't try to re-run the (already-executed-via-this-file) InitSchema
 -- migration against this database later.
 CREATE TABLE
@@ -335,7 +349,8 @@ VALUES
     (1786000000000, 'AddCancellationReason1786000000000'),
     (1786100000000, 'AddContactMessageIsRead1786100000000'),
     (1786200000000, 'AddReviewAdminReply1786200000000'),
-    (1786300000000, 'ContactMessagePhoneInsteadOfEmail1786300000000');
+    (1786300000000, 'ContactMessagePhoneInsteadOfEmail1786300000000'),
+    (1786400000000, 'AddPageViews1786400000000');
 
 -- Admin account — username "carla", password "Carla0303!" (bcrypt, cost 12).
 -- Change this password after first login in a real deployment.

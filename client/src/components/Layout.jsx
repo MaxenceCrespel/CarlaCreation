@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import Header from './Header';
 import Footer from './Footer';
 import { useSiteConfig } from '../context/SiteConfigContext';
+import { usePageViewTracking } from '../hooks/usePageViewTracking';
 
 // Injects/updates a single site-wide LocalBusiness JSON-LD script so search
 // engines can show rich results (phone, email) — this only needs to exist
@@ -38,6 +39,7 @@ function useLocalBusinessSchema() {
 
 export default function Layout() {
   useLocalBusinessSchema();
+  usePageViewTracking();
 
   return (
     <>

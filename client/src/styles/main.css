@@ -1072,6 +1072,7 @@ textarea.field-invalid {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  position: relative;
 }
 .kpi-label { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-muted); }
 .kpi-value { font-size: 1.6rem; font-weight: 700; color: var(--color-text); }
@@ -1099,6 +1100,106 @@ textarea.field-invalid {
 .daily-chart-bar { width: 100%; background: var(--color-accent); border-radius: 3px 3px 0 0; min-height: 2px; transition: height 0.3s ease; }
 .daily-chart-col.is-closed .daily-chart-bar { background: var(--color-bg-alt); }
 .daily-chart-label { font-size: 0.62rem; color: var(--color-text-soft); }
+
+/* Visitors tab */
+.visitors-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
+.visitors-head h2 { margin: 0; }
+
+.period-picker { position: relative; }
+.period-select {
+  font-family: var(--font-body); font-size: 0.85rem; font-weight: 700;
+  color: var(--color-accent-dark); background: var(--color-bg-alt);
+  border: none; border-radius: 999px; padding: 8px 14px;
+  cursor: pointer; white-space: nowrap;
+}
+.period-select:hover, .period-select[aria-expanded="true"] { background: var(--color-accent); color: var(--color-white); }
+.period-menu {
+  position: absolute; top: calc(100% + 6px); right: 0;
+  background: var(--color-white); border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md); padding: 4px; z-index: 5; min-width: 200px;
+}
+.period-menu button {
+  display: block; width: 100%; text-align: left; border: none; background: none;
+  font-family: var(--font-body); font-size: 0.88rem; color: var(--color-text);
+  padding: 9px 12px; border-radius: 6px; cursor: pointer;
+}
+.period-menu button:hover { background: var(--color-bg); }
+.period-menu button.is-active { color: var(--color-accent-dark); font-weight: 700; }
+
+/* "What does this mean?" — a small info button on each stat card, not the
+   whole card, so it doesn't fight with the chart's own clickable bars. */
+.card-wrap { position: relative; }
+.card-info-btn {
+  position: absolute; top: 10px; right: 10px;
+  width: 22px; height: 22px; border-radius: 50%;
+  border: none; background: var(--color-bg-alt); color: var(--color-accent-dark);
+  font-family: var(--font-heading); font-size: 0.8rem; font-weight: 700;
+  line-height: 22px; text-align: center; padding: 0; cursor: pointer;
+}
+.card-info-btn:hover, .card-info-btn:focus-visible { background: var(--color-accent); color: var(--color-white); }
+.explain-overlay {
+  position: fixed; inset: 0; background: rgba(58, 46, 39, 0.55);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px; z-index: 260;
+}
+.explain-card {
+  background: var(--color-white); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md); max-width: 420px; width: 100%;
+  max-height: 80vh; overflow-y: auto; padding: 24px; position: relative;
+}
+.explain-card h3 { font-family: var(--font-heading); margin: 0 26px 10px 0; color: var(--color-text); }
+.explain-card p { color: var(--color-text-soft); margin: 0; line-height: 1.55; }
+.explain-close {
+  position: absolute; top: 14px; right: 14px;
+  width: 30px; height: 30px; border-radius: 50%; border: none;
+  background: var(--color-bg); color: var(--color-text-soft);
+  font-size: 1.1rem; line-height: 1; cursor: pointer;
+}
+
+/* Visitor frequentation chart — its own class names (not .daily-chart):
+   that one scrolls horizontally with a fixed min-width per bar, which
+   would either crowd a 90-day chart into a tiny sliver or force scrolling
+   on every period; this one always fits the full period on screen. */
+.visitor-chart {
+  background: var(--color-white); border-radius: var(--radius-md); box-shadow: var(--shadow-sm);
+  padding: 16px 32px 12px 10px; display: flex; align-items: flex-end; gap: 2px; height: 150px;
+  width: 100%;
+}
+.visitor-chart-col {
+  flex: 1 1 0; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; height: 100%;
+  justify-content: flex-end; gap: 4px;
+  border: none; background: none; padding: 0; font: inherit; cursor: pointer;
+}
+.visitor-chart-bar-track { width: 100%; height: 108px; display: flex; align-items: flex-end; }
+.visitor-chart-bar { width: 100%; border-radius: 3px 3px 0 0; background: var(--color-accent); opacity: 0.5; transition: opacity 0.15s ease, height 0.3s ease; }
+.visitor-chart-col.is-selected .visitor-chart-bar { opacity: 1; }
+.visitor-chart-col:hover .visitor-chart-bar, .visitor-chart-col:focus-visible .visitor-chart-bar { opacity: 0.8; }
+.visitor-chart-col:focus-visible { outline: 2px solid var(--color-accent-dark); outline-offset: 2px; border-radius: 3px; }
+.visitor-chart-label { font-size: 0.68rem; color: var(--color-muted); line-height: 1; min-height: 10px; }
+.chart-readout {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-top: 10px; padding: 10px 14px; background: var(--color-bg);
+  border-radius: var(--radius-sm); font-size: 0.88rem;
+}
+.chart-readout .rd-day { color: var(--color-text-soft); }
+.chart-readout .rd-count { font-weight: 700; color: var(--color-accent-dark); }
+.chart-caption { font-size: 0.78rem; color: var(--color-text-soft); margin-top: 8px; }
+
+/* Visitors: ranked "top pages" list */
+.rank-list { background: var(--color-white); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); padding: 4px 40px 4px 18px; }
+.rank-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--color-bg-alt); }
+.rank-row:last-child { border-bottom: none; }
+.rank-num { font-family: var(--font-heading); font-size: 1rem; color: var(--color-accent); width: 18px; flex-shrink: 0; }
+.rank-name { flex: 1; font-size: 0.92rem; color: var(--color-text); font-weight: 600; }
+.rank-count { font-size: 0.85rem; color: var(--color-text-soft); font-variant-numeric: tabular-nums; }
+
+/* Visitors: sources/devices breakdown bars (reuses .progress-bar-track/fill) */
+.breakdown { background: var(--color-white); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); padding: 18px 40px 18px 18px; display: flex; flex-direction: column; gap: 12px; }
+.breakdown-row { display: flex; flex-direction: column; gap: 5px; }
+.breakdown-top { display: flex; justify-content: space-between; font-size: 0.88rem; }
+.breakdown-top .breakdown-name { color: var(--color-text); font-weight: 600; }
+.breakdown-top .breakdown-pct { color: var(--color-text-soft); font-variant-numeric: tabular-nums; }
 
 /* Dashboard: top prestations horizontal bars */
 .top-services-bars { display: flex; flex-direction: column; gap: 14px; margin-top: 12px; }

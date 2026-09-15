@@ -14,12 +14,14 @@ import DepensesTab from './DepensesTab';
 import ClientsTab from './ClientsTab';
 import PromotionsTab from './PromotionsTab';
 import MessagesTab from './MessagesTab';
+import VisitorsTab from './VisitorsTab';
 
 // "Mon compte" isn't in this list — it's not a work section like the
 // others, so it lives behind the avatar badge in the header instead (see
 // showAccountModal below), keeping the sidebar to just the actual sections.
 const TABS = [
   { key: 'dashboard', label: 'Tableau de bord', Component: DashboardTab },
+  { key: 'visitors', label: 'Visiteurs', Component: VisitorsTab },
   { key: 'reservations', label: 'Réservations', Component: ReservationsTab },
   { key: 'clients', label: 'Clients', Component: ClientsTab },
   { key: 'gallery', label: 'Galerie', Component: GalleryTab },
