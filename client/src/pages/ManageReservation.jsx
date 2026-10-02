@@ -1,8 +1,17 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import { useToast } from '../context/ToastContext';
 import { useSeo } from '../hooks/useSeo';
+import { formatPrice } from '../utils/format';
+
+const PAYMENT_STATUS_LABELS = {
+  pending: 'En attente de règlement',
+  paid: 'Réglé',
+  refunded: 'Remboursé',
+  partially_refunded: 'Partiellement remboursé',
+  canceled: 'Annulé',
+};
 
 const STATUS_LABELS = {
   pending: 'En attente de confirmation',
@@ -37,6 +46,8 @@ function formatDateFr(dateStr) {
 
 export default function ManageReservation() {
   const { groupId } = useParams();
+  const [searchParams] = useSearchParams();
+  const paiementParam = searchParams.get('paiement');
   const showToast = useToast();
   const [reservation, setReservation] = useState(null);
   const [error, setError] = useState(null);
@@ -106,12 +117,34 @@ export default function ManageReservation() {
 
         {!error && reservation && (
           <div className="card">
+            {paiementParam === 'reussi' && (
+              <p className="form-feedback success" style={{ marginBottom: 16 }}>
+                Paiement reçu, merci ! Votre demande est bien enregistrée.
+              </p>
+            )}
+            {paiementParam === 'annule' && (
+              <p className="form-feedback error" style={{ marginBottom: 16 }}>
+                Le paiement n'a pas été finalisé — votre demande reste enregistrée, mais le règlement en ligne n'a pas
+                encore été effectué. Contactez-nous si vous souhaitez réessayer.
+              </p>
+            )}
             <p>
               <strong>Statut :</strong>{' '}
               <span className={`status-badge status-${reservation.status}`}>
                 {STATUS_LABELS[reservation.status] || reservation.status}
               </span>
             </p>
+            {reservation.payment && (
+              <p>
+                <strong>Paiement en ligne ({formatPrice(reservation.payment.amountCents)}) :</strong>{' '}
+                {PAYMENT_STATUS_LABELS[reservation.payment.status] || reservation.payment.status}
+              </p>
+            )}
+            {reservation.paidOnSite != null && (
+              <p>
+                <strong>Paiement :</strong> {reservation.paidOnSite ? 'réglé sur place' : 'à régler sur place'}
+              </p>
+            )}
             <p><strong>Date :</strong> {formatDateFr(reservation.date)}</p>
             <p>
               <strong>Lieu :</strong>{' '}

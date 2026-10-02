@@ -14,6 +14,7 @@ import { ReservationsModule } from './modules/reservations/reservations.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { ContactModule } from './modules/contact/contact.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { StripeModule } from './modules/stripe/stripe.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { SeoModule } from './modules/seo/seo.module';
 import { HealthModule } from './modules/health/health.module';
@@ -78,6 +79,7 @@ class NoopThrottlerGuard implements CanActivate {
     ClientsModule,
     PromotionsModule,
     AnalyticsModule,
+    StripeModule,
   ],
   providers: [
     {

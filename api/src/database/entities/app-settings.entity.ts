@@ -15,4 +15,11 @@ export class AppSettings {
 
   @Column({ default: 200 })
   travel_fee_fallback_cents: number;
+
+  // How far in advance (relative to the appointment's start time) a client
+  // must cancel for their online payment to be refunded — see
+  // ReservationsService.cancelByGroupId. Only applies to the "payer en
+  // ligne" choice (see Payment); "payer sur place" never involves Stripe.
+  @Column({ default: 48 })
+  refund_deadline_hours: number;
 }

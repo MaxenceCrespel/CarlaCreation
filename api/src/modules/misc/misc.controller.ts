@@ -29,6 +29,9 @@ export class MiscController {
       travelFeeFallbackCents: await this.settingsService.getTravelFeeFallbackCents(),
       // Infinity isn't valid JSON — null means "fees never apply".
       travelFreeRadiusKm: Number.isFinite(radiusKm) ? radiusKm : null,
+      // Lets the booking form show/hide the "payer en ligne vs payer sur
+      // place" choice — no point offering it when Stripe isn't configured.
+      stripeEnabled: config.STRIPE_ENABLED,
     };
   }
 }

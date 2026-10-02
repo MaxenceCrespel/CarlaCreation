@@ -177,4 +177,19 @@ describe('SettingsService — travel fee tiers', () => {
       { min_km: 15, fee_cents: 300 },
     ]);
   });
+
+  it('getRefundDeadlineHours returns the stored value', async () => {
+    dataSource.getRepository.mockReturnValue({ findOne: jest.fn().mockResolvedValue({ id: 1, refund_deadline_hours: 24 }) });
+    await expect(service.getRefundDeadlineHours()).resolves.toBe(24);
+  });
+
+  it('getRefundDeadlineHours falls back to 48 if the settings row is somehow missing', async () => {
+    dataSource.getRepository.mockReturnValue({ findOne: jest.fn().mockResolvedValue(null) });
+    await expect(service.getRefundDeadlineHours()).resolves.toBe(48);
+  });
+
+  it('setRefundDeadlineHours rejects a negative or unreasonably large value', async () => {
+    await expect(service.setRefundDeadlineHours(-1)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.setRefundDeadlineHours(1000)).rejects.toBeInstanceOf(BadRequestException);
+  });
 });

@@ -16,6 +16,8 @@ const WINDOW_DAYS = 60;
 const DEFAULT_TRAVEL_BUFFER_MINUTES = 30;
 // Same fallback rationale as above — mirrors the app_settings default.
 const DEFAULT_TRAVEL_FEE_FALLBACK_CENTS = 200;
+// Same rationale, mirroring the AddPayments migration's default.
+const DEFAULT_REFUND_DEADLINE_HOURS = 48;
 // Same rationale, mirroring the seeded default tier schedule (free under
 // 10km, then a flat 2€ surcharge) in case the table is somehow empty.
 const DEFAULT_TRAVEL_FEE_TIERS: TravelFeeTierDto[] = [
@@ -134,6 +136,26 @@ export class SettingsService {
       .into(AppSettings)
       .values({ id: 1, travel_fee_fallback_cents: cents })
       .orUpdate(['travel_fee_fallback_cents'], ['id'])
+      .execute();
+  }
+
+  // How far in advance of the appointment a client must cancel for their
+  // online payment to be refunded — see ReservationsService.cancelByGroupId.
+  async getRefundDeadlineHours(): Promise<number> {
+    const row = await this.dataSource.getRepository(AppSettings).findOne({ where: { id: 1 } });
+    return row?.refund_deadline_hours ?? DEFAULT_REFUND_DEADLINE_HOURS;
+  }
+
+  async setRefundDeadlineHours(hours: number): Promise<void> {
+    if (!Number.isInteger(hours) || hours < 0 || hours > 720) {
+      throw new BadRequestException('Le délai de remboursement doit être un entier entre 0 et 720 heures.');
+    }
+    await this.dataSource
+      .createQueryBuilder()
+      .insert()
+      .into(AppSettings)
+      .values({ id: 1, refund_deadline_hours: hours })
+      .orUpdate(['refund_deadline_hours'], ['id'])
       .execute();
   }
 

@@ -100,6 +100,14 @@ export class Reservation {
   @Column({ type: 'text', nullable: true })
   cancellation_reason: string | null;
 
+  // Only meaningful when the client chose "payer sur place" at booking
+  // (no online Payment row for this group at all — see Payment). Carla
+  // toggles this herself once she's actually been paid in person (cash,
+  // or the SumUp app's own Tap to Pay — neither integrated with this
+  // system), purely for her own bookkeeping visibility.
+  @Column({ default: false })
+  paid_on_site: boolean;
+
   @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;
 }

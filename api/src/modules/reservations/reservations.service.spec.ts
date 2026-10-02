@@ -10,6 +10,8 @@ import { SettingsService } from '../settings/settings.service';
 import { DistanceService } from '../distance/distance.service';
 import { PushService } from '../push/push.service';
 import { PromotionsService } from '../promotions/promotions.service';
+import { StripeService } from '../stripe/stripe.service';
+import { PaymentsService } from '../stripe/payments.service';
 
 describe('ReservationsService', () => {
   let service: ReservationsService;
@@ -24,10 +26,17 @@ describe('ReservationsService', () => {
     sendAdminCancellationNotification: jest.Mock;
     sendReminder: jest.Mock;
   };
-  let settingsService: { getTravelBufferMinutes: jest.Mock; getTravelFeeFallbackCents: jest.Mock; getTravelFeeTiers: jest.Mock };
+  let settingsService: {
+    getTravelBufferMinutes: jest.Mock;
+    getTravelFeeFallbackCents: jest.Mock;
+    getTravelFeeTiers: jest.Mock;
+    getRefundDeadlineHours: jest.Mock;
+  };
   let distanceService: { estimate: jest.Mock };
   let pushService: { notifyAdmins: jest.Mock };
   let promotionsService: { findSelectable: jest.Mock; findByCode: jest.Mock; findAll: jest.Mock };
+  let stripeService: { isEnabled: jest.Mock; createCheckoutSession: jest.Mock };
+  let paymentsService: { findByGroupId: jest.Mock; createPending: jest.Mock; refund: jest.Mock; capture: jest.Mock; cancelAuthorization: jest.Mock };
 
   const HAIRCUT = { id: 1, name: 'Coupe Femme', duration_minutes: 45, active: true };
   const MANICURE = { id: 7, name: 'Manucure Classique', duration_minutes: 30, active: true };
@@ -69,6 +78,7 @@ describe('ReservationsService', () => {
         { minKm: 0, feeCents: 0 },
         { minKm: 10, feeCents: 200 },
       ]),
+      getRefundDeadlineHours: jest.fn().mockResolvedValue(48),
     };
     // No address geocoded by default — most tests don't care about travel
     // distance, so this keeps them on the "flat fallback fee only" path.
@@ -80,6 +90,19 @@ describe('ReservationsService', () => {
       findSelectable: jest.fn().mockResolvedValue([]),
       findByCode: jest.fn().mockRejectedValue(new NotFoundException('Code promo invalide ou expiré.')),
       findAll: jest.fn().mockResolvedValue([]),
+    };
+    // Stripe disabled by default, same as a deployment with no keys set —
+    // tests that care about the payment path enable it explicitly.
+    stripeService = {
+      isEnabled: jest.fn().mockReturnValue(false),
+      createCheckoutSession: jest.fn(),
+    };
+    paymentsService = {
+      findByGroupId: jest.fn().mockResolvedValue(null),
+      createPending: jest.fn(),
+      refund: jest.fn(),
+      capture: jest.fn(),
+      cancelAuthorization: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -94,6 +117,8 @@ describe('ReservationsService', () => {
         { provide: DistanceService, useValue: distanceService },
         { provide: PushService, useValue: pushService },
         { provide: PromotionsService, useValue: promotionsService },
+        { provide: StripeService, useValue: stripeService },
+        { provide: PaymentsService, useValue: paymentsService },
       ],
     }).compile();
 
@@ -478,6 +503,39 @@ describe('ReservationsService', () => {
       expect(rows.find((r) => r.id === 2)?.addons).toEqual([]);
     });
 
+    it('findAllForAdmin attaches online payment status by group_id, batched in one query', async () => {
+      dataSource.query.mockImplementation((sql: string) => {
+        if (sql.includes('JOIN services s')) {
+          return Promise.resolve([
+            { id: 1, group_id: 'group-a', service_name: 'Manucure Classique' },
+            { id: 2, group_id: 'group-b', service_name: 'Coupe Femme' },
+            { id: 3, group_id: null, service_name: 'Coupe Femme' }, // pre-payments-feature booking
+          ]);
+        }
+        if (sql.includes('FROM reservation_addons')) return Promise.resolve([]);
+        if (sql.includes('FROM payments')) {
+          return Promise.resolve([{ group_id: 'group-a', status: 'paid', amount_cents: 4500 }]);
+        }
+        throw new Error(`Unexpected query: ${sql}`);
+      });
+
+      const rows = await service.findAllForAdmin();
+
+      expect(rows.find((r) => r.id === 1)).toMatchObject({ payment_status: 'paid', payment_amount_cents: 4500 });
+      expect(rows.find((r) => r.id === 2)).toMatchObject({ payment_status: null, payment_amount_cents: null });
+      expect(rows.find((r) => r.id === 3)).toMatchObject({ payment_status: null, payment_amount_cents: null });
+    });
+
+    it('findAllForAdmin skips the payments query entirely when no row has a group_id', async () => {
+      dataSource.query.mockImplementation((sql: string) => {
+        if (sql.includes('JOIN services s')) return Promise.resolve([{ id: 1, group_id: null, service_name: 'Coupe Femme' }]);
+        if (sql.includes('FROM reservation_addons')) return Promise.resolve([]);
+        throw new Error(`Unexpected query: ${sql}`);
+      });
+
+      await expect(service.findAllForAdmin()).resolves.toEqual([expect.objectContaining({ payment_status: null })]);
+    });
+
     it('rejects an addon id that does not exist', async () => {
       serviceRepo.findOne.mockResolvedValue(MANICURE);
       addonRepo.find.mockResolvedValue([]); // none found for the requested id
@@ -772,6 +830,176 @@ describe('ReservationsService', () => {
         cancellationReason: 'Empêchement de dernière minute',
       }),
     );
+  });
+
+  describe('cancelByGroupId — online payment refund', () => {
+    // Formats a future Date into the {reservation_date, start_time} pair
+    // cancelByGroupId reads to compute how much notice was given.
+    function futureAppointment(hoursFromNow: number) {
+      const d = new Date(Date.now() + hoursFromNow * 3600_000);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      return {
+        reservation_date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+        start_time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+      };
+    }
+
+    function mockCancelQueries(appointment: { reservation_date: string; start_time: string }) {
+      dataSource.query.mockImplementation(async (sql: string) => {
+        if (sql.includes('SELECT status')) return [{ status: 'pending', client_name: 'Mother', ...appointment }];
+        return [
+          {
+            client_name: 'Mother',
+            client_email: 'mother@example.com',
+            client_phone: '0600000000',
+            ...appointment,
+            end_time: appointment.start_time,
+            service_name: 'Coupe Femme',
+          },
+        ];
+      });
+      reservationRepo.update.mockResolvedValue({ affected: 1 });
+    }
+
+    it('refunds automatically when cancelled well within the deadline', async () => {
+      paymentsService.findByGroupId.mockResolvedValue({ status: 'paid', stripe_payment_intent_id: 'pi_123' });
+      mockCancelQueries(futureAppointment(72)); // 72h notice, deadline is 48h
+
+      await service.cancelByGroupId('some-group', 'Empêchement');
+
+      expect(paymentsService.refund).toHaveBeenCalledWith('some-group');
+      expect(mailService.sendAdminCancellationNotification).toHaveBeenCalledWith(expect.objectContaining({ paymentRefunded: true }));
+      expect(pushService.notifyAdmins).toHaveBeenCalledWith(expect.objectContaining({ body: expect.stringContaining('paiement remboursé') }));
+    });
+
+    it('does not refund when cancelled too close to the appointment', async () => {
+      paymentsService.findByGroupId.mockResolvedValue({ status: 'paid', stripe_payment_intent_id: 'pi_123' });
+      mockCancelQueries(futureAppointment(2)); // only 2h notice
+
+      await service.cancelByGroupId('some-group', 'Empêchement');
+
+      expect(paymentsService.refund).not.toHaveBeenCalled();
+      expect(mailService.sendAdminCancellationNotification).toHaveBeenCalledWith(expect.objectContaining({ paymentRefunded: false }));
+      expect(pushService.notifyAdmins).toHaveBeenCalledWith(expect.objectContaining({ body: expect.stringContaining('paiement conservé') }));
+    });
+
+    it('still cancels the booking even if the Stripe refund call fails', async () => {
+      paymentsService.findByGroupId.mockResolvedValue({ status: 'paid', stripe_payment_intent_id: 'pi_123' });
+      paymentsService.refund.mockRejectedValue(new Error('Stripe is down'));
+      mockCancelQueries(futureAppointment(72));
+
+      await service.cancelByGroupId('some-group', 'Empêchement');
+
+      expect(reservationRepo.update).toHaveBeenCalledWith({ group_id: 'some-group' }, { status: 'cancelled' });
+      expect(mailService.sendAdminCancellationNotification).toHaveBeenCalledWith(expect.objectContaining({ paymentRefunded: false }));
+    });
+
+    it('releases the hold (no refund) when cancelled before the appointment was ever confirmed', async () => {
+      paymentsService.findByGroupId.mockResolvedValue({ status: 'authorized', stripe_payment_intent_id: 'pi_123' });
+      mockCancelQueries(futureAppointment(2)); // even with short notice — nothing was charged yet, deadline doesn't apply
+
+      await service.cancelByGroupId('some-group', 'Empêchement');
+
+      expect(paymentsService.cancelAuthorization).toHaveBeenCalledWith('some-group');
+      expect(paymentsService.refund).not.toHaveBeenCalled();
+      expect(mailService.sendAdminCancellationNotification).toHaveBeenCalledWith(expect.objectContaining({ paymentRefunded: true }));
+    });
+
+    it('leaves paymentRefunded null when there was never an online payment', async () => {
+      paymentsService.findByGroupId.mockResolvedValue(null);
+      mockCancelQueries(futureAppointment(72));
+
+      await service.cancelByGroupId('some-group', 'Empêchement');
+
+      expect(paymentsService.refund).not.toHaveBeenCalled();
+      expect(mailService.sendAdminCancellationNotification).toHaveBeenCalledWith(expect.objectContaining({ paymentRefunded: null }));
+    });
+  });
+
+  describe('updateGroupStatus — payment settlement', () => {
+    function mockGroupStatusQueries(distinctStatuses: string[]) {
+      dataSource.query.mockImplementation(async (sql: string) => {
+        if (sql.includes('SELECT DISTINCT status')) return distinctStatuses.map((status) => ({ status }));
+        return [
+          {
+            client_name: 'Client',
+            client_email: 'client@example.com',
+            reservation_date: '2026-01-01',
+            start_time: '10:00',
+            end_time: '10:45',
+            at_client_home: false,
+            client_address: null,
+            service_name: 'Coupe Femme',
+          },
+        ];
+      });
+      reservationRepo.update.mockResolvedValue({ affected: 1 });
+    }
+
+    it('captures the held payment once the whole group is confirmed', async () => {
+      mockGroupStatusQueries(['confirmed']);
+
+      await service.updateGroupStatus('group-1', 'confirmed');
+
+      expect(paymentsService.capture).toHaveBeenCalledWith('group-1');
+      expect(paymentsService.cancelAuthorization).not.toHaveBeenCalled();
+    });
+
+    it('releases the hold instead of charging when the group is refused', async () => {
+      mockGroupStatusQueries(['refused']);
+
+      await service.updateGroupStatus('group-1', 'refused');
+
+      expect(paymentsService.cancelAuthorization).toHaveBeenCalledWith('group-1');
+      expect(paymentsService.capture).not.toHaveBeenCalled();
+    });
+
+    it('leaves the payment untouched for any other status transition', async () => {
+      mockGroupStatusQueries(['completed']);
+
+      await service.updateGroupStatus('group-1', 'completed');
+
+      expect(paymentsService.capture).not.toHaveBeenCalled();
+      expect(paymentsService.cancelAuthorization).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updateStatus — payment settlement (single reservation in a group)', () => {
+    function mockSingleStatusQueries(distinctStatuses: string[]) {
+      dataSource.query.mockImplementation(async (sql: string) => {
+        if (sql.includes('SELECT DISTINCT status')) return distinctStatuses.map((status) => ({ status }));
+        return [
+          {
+            group_id: 'group-1',
+            client_name: 'Client',
+            client_email: 'client@example.com',
+            reservation_date: '2026-01-01',
+            start_time: '10:00',
+            end_time: '10:45',
+            service_name: 'Coupe Femme',
+            at_client_home: false,
+            client_address: null,
+          },
+        ];
+      });
+      reservationRepo.update.mockResolvedValue({ affected: 1 });
+    }
+
+    it('captures once the last guest in the group also becomes confirmed', async () => {
+      mockSingleStatusQueries(['confirmed']);
+
+      await service.updateStatus(1, 'confirmed');
+
+      expect(paymentsService.capture).toHaveBeenCalledWith('group-1');
+    });
+
+    it('does not capture yet while other guests in the group are still pending', async () => {
+      mockSingleStatusQueries(['confirmed', 'pending']);
+
+      await service.updateStatus(1, 'confirmed');
+
+      expect(paymentsService.capture).not.toHaveBeenCalled();
+    });
   });
 
   describe('promotions', () => {

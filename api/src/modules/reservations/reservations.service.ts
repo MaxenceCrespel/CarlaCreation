@@ -16,7 +16,10 @@ import { SettingsService } from '../settings/settings.service';
 import { DistanceService } from '../distance/distance.service';
 import { PushService } from '../push/push.service';
 import { PromotionsService } from '../promotions/promotions.service';
+import { PaymentsService } from '../stripe/payments.service';
+import { StripeService } from '../stripe/stripe.service';
 import { siteConfig } from '../../site-config';
+import { config } from '../../config';
 
 interface Guest {
   name: string;
@@ -59,7 +62,13 @@ interface ReservationWithServiceRow {
   discount_percent: number;
   promotion_label: string | null;
   cancellation_reason: string | null;
+  paid_on_site: boolean;
   addons: { name: string; extra_price_cents: number; extra_duration_minutes: number }[];
+  // null when there's no online payment at all for this group (Stripe
+  // wasn't configured at booking time, the client chose "payer sur
+  // place", or never reached checkout).
+  payment_status: string | null;
+  payment_amount_cents: number | null;
 }
 
 interface ReminderCandidateRow {
@@ -89,6 +98,8 @@ export class ReservationsService {
     private readonly distanceService: DistanceService,
     private readonly pushService: PushService,
     private readonly promotionsService: PromotionsService,
+    private readonly stripeService: StripeService,
+    private readonly paymentsService: PaymentsService,
   ) {}
 
   // Resolves each guest's OWN discount, not a single value for the whole
@@ -302,6 +313,16 @@ export class ReservationsService {
 
     const guestDiscounts = await this.resolvePublicGuestDiscounts(guests, dto.promoCode);
 
+    // Same per-guest discount math as the admin reservations list — see
+    // resolveGuestDiscounts — summed across the group, plus the shared
+    // travel fee once (it's per-trip, not per-person).
+    const totalCents =
+      services.reduce((sum, s, i) => {
+        const addonsCents = addonsPerGuest[i].reduce((a, addon) => a + addon.extra_price_cents, 0);
+        const fullPrice = s.price_cents + addonsCents;
+        return sum + Math.round(fullPrice * (1 - guestDiscounts[i].discountPercent / 100));
+      }, 0) + (travel.feeCents ?? 0);
+
     const result = await this.insertGroup(guests, services, addonsPerGuest, guestDiscounts, {
       date: dto.date,
       startTime: dto.startTime,
@@ -315,6 +336,31 @@ export class ReservationsService {
       travelDurationMinutes: travel.durationMinutes,
       travelFeeCents: travel.feeCents,
     });
+
+    // Stripe is entirely optional (config.STRIPE_ENABLED) — when it isn't
+    // configured, the client chose "payer sur place", or the checkout
+    // session fails to create, the booking still goes through exactly as
+    // before: a pending request with no payment step. A Stripe outage
+    // must never block a booking.
+    let checkoutUrl: string | null = null;
+    if (this.stripeService.isEnabled() && dto.paymentOption === 'full' && totalCents > 0) {
+      try {
+        const session = await this.stripeService.createCheckoutSession({
+          groupId: result.groupId,
+          amountCents: totalCents,
+          description: `Réservation — ${siteConfig.siteName}`,
+          customerEmail: dto.clientEmail,
+          successUrl: `${config.PUBLIC_ORIGIN}/mon-rendez-vous/${result.groupId}?paiement=reussi`,
+          cancelUrl: `${config.PUBLIC_ORIGIN}/mon-rendez-vous/${result.groupId}?paiement=annule`,
+        });
+        if (session) {
+          await this.paymentsService.createPending(result.groupId, totalCents, session.sessionId);
+          checkoutUrl = session.url;
+        }
+      } catch (err) {
+        this.logger.error(`Stripe checkout session creation failed for group ${result.groupId}: ${(err as Error).message}`);
+      }
+    }
 
     await this.mailService.sendBookingReceived({
       clientName: dto.clientName,
@@ -342,7 +388,7 @@ export class ReservationsService {
       url: '/admin',
     });
 
-    return result;
+    return { ...result, checkoutUrl, totalCents };
   }
 
   // Admin-only: log a reservation directly (walk-in, phone booking…),
@@ -581,12 +627,12 @@ export class ReservationsService {
   }
 
   async findAllForAdmin(): Promise<ReservationWithServiceRow[]> {
-    const rows: Omit<ReservationWithServiceRow, 'addons'>[] = await this.dataSource.query(
+    const rows: Omit<ReservationWithServiceRow, 'addons' | 'payment_status' | 'payment_amount_cents'>[] = await this.dataSource.query(
       `SELECT r.id, r.group_id, r.client_name, r.client_email, r.client_phone, r.reservation_date,
               r.start_time, r.end_time, r.notes, r.status, r.created_at, r.service_id, r.client_id,
               r.at_client_home, r.client_address,
               r.travel_distance_km::float8 AS travel_distance_km, r.travel_duration_minutes, r.travel_fee_cents,
-              r.promotion_id, r.discount_percent, p.label AS promotion_label, r.cancellation_reason,
+              r.promotion_id, r.discount_percent, p.label AS promotion_label, r.cancellation_reason, r.paid_on_site,
               s.name AS service_name, s.price_cents
        FROM reservations r
        JOIN services s ON s.id = r.service_id
@@ -607,7 +653,26 @@ export class ReservationsService {
       addonsByReservation.set(a.reservation_id, list);
     }
 
-    return rows.map((r) => ({ ...r, addons: addonsByReservation.get(r.id) ?? [] }));
+    // One online payment per booking group (see Payment entity) — batched
+    // by group_id rather than N+1'd per row. Only exists for the "payer en
+    // ligne" choice; "payer sur place" bookings never get a row here (see
+    // paid_on_site instead).
+    const groupIds = [...new Set(rows.map((r) => r.group_id).filter((id): id is string => Boolean(id)))];
+    const paymentRows: { group_id: string; status: string; amount_cents: number }[] =
+      groupIds.length > 0
+        ? await this.dataSource.query(`SELECT group_id, status, amount_cents FROM payments WHERE group_id = ANY($1)`, [groupIds])
+        : [];
+    const paymentByGroup = new Map(paymentRows.map((p) => [p.group_id, p]));
+
+    return rows.map((r) => {
+      const payment = r.group_id ? paymentByGroup.get(r.group_id) : undefined;
+      return {
+        ...r,
+        addons: addonsByReservation.get(r.id) ?? [],
+        payment_status: payment?.status ?? null,
+        payment_amount_cents: payment?.amount_cents ?? null,
+      };
+    });
   }
 
   // Editing a mistaken date/time/service/client detail after the fact — a
@@ -782,6 +847,9 @@ export class ReservationsService {
       [id],
     );
     const row = rows[0];
+    if (row?.group_id) {
+      await this.settlePaymentForGroupStatus(row.group_id, status);
+    }
     if (row) {
       await this.mailService.sendStatusUpdate({
         clientName: row.client_name,
@@ -793,6 +861,34 @@ export class ReservationsService {
         clientAddress: row.client_address,
         guests: [{ name: row.client_name, serviceName: row.service_name, startTime: row.start_time, endTime: row.end_time }],
       });
+    }
+  }
+
+  // Captures (on 'confirmed') or releases (on 'refused') the payment hold
+  // placed at booking — see StripeService.createCheckoutSession's
+  // capture_method: 'manual'. Only acts once every row in the group shares
+  // the new status: a single guest in a multi-person booking changing
+  // status shouldn't move money for the whole group's shared payment (see
+  // Payment.group_id) while the others are still pending/confirmed.
+  // updateGroupStatus always satisfies this trivially since it updates the
+  // whole group atomically; updateStatus (single row) only triggers once
+  // the last guest catches up.
+  private async settlePaymentForGroupStatus(groupId: string, status: ReservationStatus): Promise<void> {
+    if (status !== 'confirmed' && status !== 'refused') return;
+
+    const rows: { status: ReservationStatus }[] = await this.dataSource.query(`SELECT DISTINCT status FROM reservations WHERE group_id = $1`, [groupId]);
+    if (rows.length !== 1 || rows[0].status !== status) return;
+
+    try {
+      if (status === 'confirmed') {
+        await this.paymentsService.capture(groupId);
+      } else {
+        await this.paymentsService.cancelAuthorization(groupId);
+      }
+    } catch {
+      // Already logged by PaymentsService — must never block the status
+      // change itself (she'll see the stale payment status in the admin
+      // list and can retry or handle it by hand via the Stripe dashboard).
     }
   }
 
@@ -848,6 +944,8 @@ export class ReservationsService {
     if (result.affected === 0) {
       throw new NotFoundException('Groupe de réservations introuvable.');
     }
+
+    await this.settlePaymentForGroupStatus(groupId, status);
 
     const rows: {
       client_name: string;
@@ -933,9 +1031,10 @@ export class ReservationsService {
       service_name: string;
       at_client_home: boolean;
       client_address: string | null;
+      paid_on_site: boolean;
     }[] = await this.dataSource.query(
       `SELECT r.client_name, r.client_email, r.reservation_date, r.start_time, r.end_time, r.status,
-              r.at_client_home, r.client_address, s.name AS service_name
+              r.at_client_home, r.client_address, r.paid_on_site, s.name AS service_name
        FROM reservations r JOIN services s ON s.id = r.service_id WHERE r.group_id = $1 ORDER BY r.start_time ASC`,
       [groupId],
     );
@@ -944,6 +1043,7 @@ export class ReservationsService {
     }
 
     const [primary] = rows;
+    const payment = await this.paymentsService.findByGroupId(groupId);
     return {
       groupId,
       clientName: primary.client_name,
@@ -953,12 +1053,25 @@ export class ReservationsService {
       atClientHome: primary.at_client_home,
       clientAddress: primary.client_address,
       guests: rows.map((r) => ({ name: r.client_name, serviceName: r.service_name, startTime: r.start_time, endTime: r.end_time })),
+      payment: payment ? { status: payment.status, amountCents: payment.amount_cents } : null,
+      paidOnSite: payment ? null : primary.paid_on_site,
     };
   }
 
+  // Purely a bookkeeping toggle for "payer sur place" bookings — no Stripe
+  // involved at all. Carla flips it herself once she's actually been paid
+  // (cash, or the SumUp app's own Tap to Pay on her phone, neither
+  // integrated with this system).
+  async setPaidOnSite(groupId: string, paid: boolean): Promise<void> {
+    const result = await this.reservationRepo.update({ group_id: groupId }, { paid_on_site: paid });
+    if (result.affected === 0) {
+      throw new NotFoundException('Réservation introuvable.');
+    }
+  }
+
   async cancelByGroupId(groupId: string, reason: string): Promise<void> {
-    const rows: { status: ReservationStatus; client_name: string; reservation_date: string }[] = await this.dataSource.query(
-      `SELECT status, client_name, reservation_date FROM reservations WHERE group_id = $1 LIMIT 1`,
+    const rows: { status: ReservationStatus; client_name: string; reservation_date: string; start_time: string }[] = await this.dataSource.query(
+      `SELECT status, client_name, reservation_date, start_time FROM reservations WHERE group_id = $1 ORDER BY start_time ASC LIMIT 1`,
       [groupId],
     );
     if (rows.length === 0) {
@@ -987,12 +1100,48 @@ export class ReservationsService {
     // required by CancelReservationDto, so always a real, non-empty string.
     await this.reservationRepo.update({ group_id: groupId }, { cancellation_reason: reason });
 
+    // null = there was never an online payment to refund (Stripe disabled,
+    // the client chose "payer sur place", or abandoned checkout without
+    // paying) — distinct from true/false, which both mean a payment existed.
+    let paymentRefunded: boolean | null = null;
+    const payment = await this.paymentsService.findByGroupId(groupId);
+    if (payment && payment.status === 'authorized') {
+      // Still just a hold, never actually charged (the appointment hadn't
+      // been confirmed yet) — always release it, the refund-deadline
+      // policy below only makes sense once real money has moved.
+      try {
+        await this.paymentsService.cancelAuthorization(groupId);
+        paymentRefunded = true;
+      } catch (err) {
+        this.logger.error(`Authorization cancel failed for group ${groupId}: ${(err as Error).message}`);
+        paymentRefunded = false;
+      }
+    } else if (payment && payment.status === 'paid') {
+      const refundDeadlineHours = await this.settingsService.getRefundDeadlineHours();
+      const appointmentStart = new Date(`${rows[0].reservation_date}T${rows[0].start_time}`);
+      const hoursNotice = (appointmentStart.getTime() - Date.now()) / (60 * 60 * 1000);
+      if (hoursNotice >= refundDeadlineHours) {
+        try {
+          await this.paymentsService.refund(groupId);
+          paymentRefunded = true;
+        } catch (err) {
+          // Refund failure must not block the cancellation itself — she'll
+          // see "conservé" in the notification below and can refund by
+          // hand from the Stripe dashboard.
+          this.logger.error(`Refund failed for group ${groupId}: ${(err as Error).message}`);
+          paymentRefunded = false;
+        }
+      } else {
+        paymentRefunded = false;
+      }
+    }
+
     // Only the client-initiated path notifies — an admin changing the
     // status herself (updateGroupStatus called elsewhere) doesn't need a
     // push/email telling her about her own action.
     await this.pushService.notifyAdmins({
       title: 'Rendez-vous annulé par le client',
-      body: `${rows[0].client_name} — ${rows[0].reservation_date} — Motif : ${reason}`,
+      body: `${rows[0].client_name} — ${rows[0].reservation_date} — Motif : ${reason}${paymentRefunded === true ? ' — paiement remboursé' : paymentRefunded === false ? ' — paiement conservé' : ''}`,
       url: '/admin',
     });
     if (guestRows.length > 0) {
@@ -1004,6 +1153,7 @@ export class ReservationsService {
         date: rows[0].reservation_date,
         guests: guestRows.map((r) => ({ name: r.client_name, serviceName: r.service_name, startTime: r.start_time, endTime: r.end_time })),
         cancellationReason: reason,
+        paymentRefunded,
       });
     }
   }

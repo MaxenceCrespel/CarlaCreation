@@ -11,3 +11,5 @@ export { DailyHours } from './daily-hours.entity';
 export { DailyHoursRange } from './daily-hours-range.entity';
 export { PageView } from './page-view.entity';
 export type { TrafficSource, DeviceType } from './page-view.entity';
+export { Payment } from './payment.entity';
+export type { PaymentStatus } from './payment.entity';

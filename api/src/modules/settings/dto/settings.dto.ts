@@ -49,6 +49,13 @@ export class TravelFeeTierDto {
   feeCents!: number;
 }
 
+export class UpdateRefundDeadlineDto {
+  @IsInt()
+  @Min(0)
+  @Max(720)
+  hours!: number;
+}
+
 export class UpdateTravelFeeTiersDto {
   // Replaces the whole schedule at once — simpler to reason about (and to
   // validate as a set: unique thresholds, one starting at 0) than diffing

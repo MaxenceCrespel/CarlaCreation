@@ -2,7 +2,14 @@ import { Body, Controller, Delete, Get, Param, Put, UseGuards } from '@nestjs/co
 import { AdminAuthGuard } from '../../common/admin-auth.guard';
 import { CsrfGuard } from '../../common/csrf';
 import { SettingsService } from './settings.service';
-import { UpdateDailyHoursDto, UpdateTravelBufferDto, UpdateTravelFeeFallbackDto, UpdateTravelFeeTiersDto } from './dto/settings.dto';
+import {
+  UpdateDailyHoursDto,
+  UpdateRefundDeadlineDto,
+  UpdateTravelBufferDto,
+  UpdateTravelFeeFallbackDto,
+  UpdateTravelFeeTiersDto,
+} from './dto/settings.dto';
+import { config } from '../../config';
 
 @UseGuards(AdminAuthGuard)
 @Controller('api/admin/settings')
@@ -59,6 +66,21 @@ export class AdminSettingsController {
   @Put('travel-fee/tiers')
   async setTravelFeeTiers(@Body() dto: UpdateTravelFeeTiersDto) {
     await this.settingsService.setTravelFeeTiers(dto.tiers);
+    return { success: true };
+  }
+
+  @Get('payments')
+  async getPaymentSettings() {
+    return {
+      stripeEnabled: config.STRIPE_ENABLED,
+      refundDeadlineHours: await this.settingsService.getRefundDeadlineHours(),
+    };
+  }
+
+  @UseGuards(CsrfGuard)
+  @Put('payments/refund-deadline')
+  async setRefundDeadline(@Body() dto: UpdateRefundDeadlineDto) {
+    await this.settingsService.setRefundDeadlineHours(dto.hours);
     return { success: true };
   }
 }

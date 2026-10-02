@@ -181,7 +181,7 @@ function BookingSummary({ recapGuests, totalDuration, totalPrice }) {
 let guestKeySeq = 0;
 
 export default function Booking() {
-  const { sitePhone, sitePhoneHref, travelFeeFallbackCents, travelFreeRadiusKm } = useSiteConfig();
+  const { sitePhone, sitePhoneHref, travelFeeFallbackCents, travelFreeRadiusKm, stripeEnabled } = useSiteConfig();
   useSeo({
     title: 'Réserver un rendez-vous à Lille',
     description:
@@ -249,6 +249,11 @@ export default function Booking() {
   const [submitting, setSubmitting] = useState(false);
   const [showRecap, setShowRecap] = useState(false);
   const [showAddonNudge, setShowAddonNudge] = useState(false);
+  // Only meaningful when Stripe is configured (stripeEnabled) — ignored
+  // otherwise, the booking just stays a plain request with no payment step.
+  // 'full' = payer en ligne maintenant; 'on_site' = payer sur place (Carla
+  // encaisse plus tard, hors de ce système — voir paidOnSite côté admin).
+  const [paymentOption, setPaymentOption] = useState('full');
 
   // "Tarif spécial" (dropdown, e.g. tarif étudiant) and "code promo" (typed
   // + validated) are mutually exclusive — picking one clears the other, see
@@ -802,8 +807,20 @@ export default function Booking() {
           clientAddress: atClientHome ? form.clientAddress.trim() : undefined,
           promotionId: selectedPromotionId ? Number(selectedPromotionId) : undefined,
           promoCode: promoCodeState === 'valid' ? appliedPromoCode?.code : undefined,
+          paymentOption: stripeEnabled && paymentOption === 'full' ? 'full' : undefined,
         },
       });
+
+      // Client chose to pay online: hand off to Stripe's own checkout page
+      // rather than showing the usual local success message — the booking
+      // already exists (pending), payment just secures it.
+      // Stripe redirects back to /mon-rendez-vous/:groupId once done either
+      // way (paid or abandoned), see ReservationsService.create.
+      if (reservation.checkoutUrl) {
+        window.location.href = reservation.checkoutUrl;
+        return;
+      }
+
       const totalPeople = guests.length + 1;
       setFeedback({
         type: 'success',
@@ -1354,6 +1371,33 @@ export default function Booking() {
                   )}
                 </dd>
               </div>
+              {stripeEnabled && (
+                <div>
+                  <dt>Paiement</dt>
+                  <dd>
+                    <label className="recap-payment-option">
+                      <input
+                        type="radio"
+                        name="paymentOption"
+                        value="full"
+                        checked={paymentOption === 'full'}
+                        onChange={() => setPaymentOption('full')}
+                      />
+                      Payer en ligne maintenant ({formatPrice(finalPrice)})
+                    </label>
+                    <label className="recap-payment-option">
+                      <input
+                        type="radio"
+                        name="paymentOption"
+                        value="on_site"
+                        checked={paymentOption === 'on_site'}
+                        onChange={() => setPaymentOption('on_site')}
+                      />
+                      Payer sur place
+                    </label>
+                  </dd>
+                </div>
+              )}
               <div>
                 <dt>Contact</dt>
                 <dd>{form.clientEmail}<br />{form.clientPhone}</dd>

@@ -21,6 +21,43 @@ const STATUS_LABELS = {
   refused: 'Refusée',
 };
 
+const PAYMENT_STATUS_LABELS = {
+  pending: 'En attente',
+  paid: 'Réglé',
+  refunded: 'Remboursé',
+  partially_refunded: 'Partiellement remboursé',
+  canceled: 'Annulé',
+};
+const PAYMENT_STATUS_BADGE_CLASS = {
+  pending: 'status-pending',
+  paid: 'status-confirmed',
+  refunded: 'status-completed',
+  partially_refunded: 'status-pending',
+  canceled: 'status-cancelled',
+};
+
+// Shown for a reservation with no online payment on file — "payer sur
+// place" was chosen (or Stripe isn't configured at all). Purely a
+// bookkeeping toggle: Carla flips it herself once she's actually been
+// paid (cash, or the SumUp app's own Tap to Pay on her phone — neither
+// integrated with this system, see project notes). Callers only render
+// this when r.payment_status is falsy (no online payment to show instead).
+function OnSitePaymentToggle({ r, onToggle }) {
+  return (
+    <div className="row-addons">
+      Paiement :{' '}
+      <span className={`status-badge ${r.paid_on_site ? 'status-confirmed' : 'status-pending'}`}>
+        {r.paid_on_site ? 'Réglé sur place' : 'À régler sur place'}
+      </span>
+      <div className="inline-row-buttons">
+        <button type="button" onClick={() => onToggle(r.group_id, !r.paid_on_site)}>
+          {r.paid_on_site ? 'Marquer comme non réglé' : 'Marquer comme réglé'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 const EMPTY_GUEST = () => ({ key: Date.now() + Math.random(), name: '', serviceId: '', addonIds: [] });
 
 const EMPTY_MANUAL_FORM = {
@@ -815,7 +852,7 @@ function ClientMatchModal({ reservation, onClose, onLinked }) {
 // (contact, lieu, note, statut modifiable, actions). Delegates every
 // mutation back to the parent's existing handlers so there's no duplicated
 // business logic, only a different presentation of the same row.
-function ReservationDetailModal({ reservation: r, onClose, onUpdateStatus, onEdit, onRefuse, onDelete, onLinkClient, onUnlinkClient }) {
+function ReservationDetailModal({ reservation: r, onClose, onUpdateStatus, onEdit, onRefuse, onDelete, onLinkClient, onUnlinkClient, onSetPaidOnSite }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card" role="dialog" aria-modal="true" aria-label="Détail de la réservation" onClick={(e) => e.stopPropagation()}>
@@ -904,6 +941,24 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdateStatus, onEdi
             <div>
               <dt>Motif d'annulation</dt>
               <dd>{r.cancellation_reason}</dd>
+            </div>
+          )}
+          {r.payment_status ? (
+            <div>
+              <dt>Paiement en ligne</dt>
+              <dd>
+                <span className={`status-badge ${PAYMENT_STATUS_BADGE_CLASS[r.payment_status] || 'status-pending'}`}>
+                  {PAYMENT_STATUS_LABELS[r.payment_status] || r.payment_status}
+                </span>{' '}
+                {formatPrice(r.payment_amount_cents)}
+              </dd>
+            </div>
+          ) : (
+            <div>
+              <dt>Paiement</dt>
+              <dd>
+                <OnSitePaymentToggle r={r} onToggle={onSetPaidOnSite} />
+              </dd>
             </div>
           )}
         </dl>
@@ -1060,6 +1115,17 @@ export default function ReservationsTab() {
       await apiFetch(`/reservations/group/${groupId}/status`, { method: 'PATCH', body: { status: 'refused' } });
       setReservations((rows) => rows.map((r) => (r.group_id === groupId ? { ...r, status: 'refused' } : r)));
       showToast('Groupe refusé.', 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
+  async function setPaidOnSite(groupId, paid) {
+    try {
+      await apiFetch(`/reservations/group/${groupId}/paid-on-site`, { method: 'PATCH', body: { paid } });
+      setReservations((rows) => rows.map((r) => (r.group_id === groupId ? { ...r, paid_on_site: paid } : r)));
+      setDetailTarget((t) => (t && t.group_id === groupId ? { ...t, paid_on_site: paid } : t));
+      showToast(paid ? 'Marqué comme réglé.' : 'Marqué comme non réglé.', 'success');
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -1300,6 +1366,17 @@ export default function ReservationsTab() {
                             {r.status === 'cancelled' && r.cancellation_reason && (
                               <div className="row-addons">Motif : {r.cancellation_reason}</div>
                             )}
+                            {r.payment_status ? (
+                              <div className="row-addons">
+                                Paiement en ligne :{' '}
+                                <span className={`status-badge ${PAYMENT_STATUS_BADGE_CLASS[r.payment_status] || 'status-pending'}`}>
+                                  {PAYMENT_STATUS_LABELS[r.payment_status] || r.payment_status}
+                                </span>{' '}
+                                {formatPrice(r.payment_amount_cents)}
+                              </div>
+                            ) : (
+                              <OnSitePaymentToggle r={r} onToggle={setPaidOnSite} />
+                            )}
                           </div>
                         </td>
                         <td className="row-actions">
@@ -1400,6 +1477,7 @@ export default function ReservationsTab() {
             unlinkClient(id);
             setDetailTarget(null);
           }}
+          onSetPaidOnSite={setPaidOnSite}
         />
       )}
     </>

@@ -22,6 +22,10 @@ export interface BookingEmailInput {
   // Only ever set on sendAdminCancellationNotification — the client's own
   // reason for a self-cancellation.
   cancellationReason?: string;
+  // Same: null when there was no online payment to begin with (Stripe not
+  // configured, "payer sur place", or the client never paid), true/false
+  // once there was one.
+  paymentRefunded?: boolean | null;
 }
 
 const DAY_NAMES_FR = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
@@ -147,6 +151,13 @@ export class MailService {
         <p><strong>${escapeHtml(input.clientName)}</strong> — ${escapeHtml(input.clientEmail)}${input.clientPhone ? ` — ${escapeHtml(input.clientPhone)}` : ''}</p>
         <p style="margin:16px 0 4px;"><strong>Date :</strong> ${formatDateFr(input.date)}</p>
         ${input.cancellationReason ? `<p style="margin:0 0 16px;"><strong>Motif :</strong> ${escapeHtml(input.cancellationReason)}</p>` : ''}
+        ${
+          input.paymentRefunded === true
+            ? `<p style="margin:0 0 16px;"><strong>Paiement :</strong> remboursé automatiquement.</p>`
+            : input.paymentRefunded === false
+              ? `<p style="margin:0 0 16px;"><strong>Paiement :</strong> conservé (annulation hors délai de remboursement).</p>`
+              : ''
+        }
         <table style="border-collapse:collapse;width:100%;margin:12px 0;">
           <thead>
             <tr style="background:#F8F4EF;">

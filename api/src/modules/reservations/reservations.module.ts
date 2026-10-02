@@ -4,12 +4,13 @@ import { SettingsModule } from '../settings/settings.module';
 import { DistanceModule } from '../distance/distance.module';
 import { PushModule } from '../push/push.module';
 import { PromotionsModule } from '../promotions/promotions.module';
+import { StripeModule } from '../stripe/stripe.module';
 import { ReservationsController } from './reservations.controller';
 import { AdminReservationsController } from './admin-reservations.controller';
 import { ReservationsService } from './reservations.service';
 
 @Module({
-  imports: [AuthModule, SettingsModule, DistanceModule, PushModule, PromotionsModule],
+  imports: [AuthModule, SettingsModule, DistanceModule, PushModule, PromotionsModule, StripeModule],
   controllers: [ReservationsController, AdminReservationsController],
   providers: [ReservationsService],
 })

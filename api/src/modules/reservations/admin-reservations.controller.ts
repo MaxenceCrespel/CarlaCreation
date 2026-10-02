@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, UseGua
 import { AdminAuthGuard } from '../../common/admin-auth.guard';
 import { CsrfGuard } from '../../common/csrf';
 import { ReservationsService } from './reservations.service';
-import { AdminCreateReservationDto, UpdateReservationDto, UpdateReservationStatusDto } from './dto/reservation.dto';
+import { AdminCreateReservationDto, SetPaidOnSiteDto, UpdateReservationDto, UpdateReservationStatusDto } from './dto/reservation.dto';
 
 @UseGuards(AdminAuthGuard)
 @Controller('api/reservations')
@@ -35,6 +35,17 @@ export class AdminReservationsController {
   @Delete('group/:groupId')
   async removeGroup(@Param('groupId') groupId: string) {
     await this.reservationsService.removeGroup(groupId);
+    return { success: true };
+  }
+
+  // Purely a bookkeeping toggle for "payer sur place" bookings — no Stripe
+  // involved, see Reservation.paid_on_site. Carla flips it once she's
+  // actually been paid (cash, or the SumUp app's own Tap to Pay on her
+  // phone, neither integrated here).
+  @UseGuards(CsrfGuard)
+  @Patch('group/:groupId/paid-on-site')
+  async setPaidOnSite(@Param('groupId') groupId: string, @Body() dto: SetPaidOnSiteDto) {
+    await this.reservationsService.setPaidOnSite(groupId, dto.paid);
     return { success: true };
   }
 

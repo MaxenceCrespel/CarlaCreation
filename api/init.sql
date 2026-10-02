@@ -10,6 +10,7 @@
 -- one-command bootstrap path for a brand new database (Docker, or a local
 -- Postgres you're setting up by hand).
 
+DROP TABLE IF EXISTS payments;
 DROP TABLE IF EXISTS page_views;
 DROP TABLE IF EXISTS expenses;
 DROP TABLE IF EXISTS invoice_items;
@@ -171,6 +172,7 @@ CREATE TABLE
         promotion_id INTEGER REFERENCES promotions (id) ON DELETE SET NULL,
         discount_percent INTEGER NOT NULL DEFAULT 0,
         cancellation_reason TEXT,
+        paid_on_site BOOLEAN NOT NULL DEFAULT false,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
@@ -284,10 +286,11 @@ CREATE TABLE
     IF NOT EXISTS app_settings (
         id INTEGER PRIMARY KEY DEFAULT 1,
         travel_buffer_minutes INTEGER NOT NULL DEFAULT 30,
-        travel_fee_fallback_cents INTEGER NOT NULL DEFAULT 200
+        travel_fee_fallback_cents INTEGER NOT NULL DEFAULT 200,
+        refund_deadline_hours INTEGER NOT NULL DEFAULT 48
     );
 
-INSERT INTO app_settings (id, travel_buffer_minutes, travel_fee_fallback_cents) VALUES (1, 30, 200);
+INSERT INTO app_settings (id, travel_buffer_minutes, travel_fee_fallback_cents, refund_deadline_hours) VALUES (1, 30, 200, 48);
 
 CREATE TABLE
     IF NOT EXISTS travel_fee_tiers (
@@ -313,6 +316,23 @@ CREATE TABLE
 
 CREATE INDEX IF NOT EXISTS "IDX_page_views_created_at" ON page_views (created_at);
 CREATE INDEX IF NOT EXISTS "IDX_page_views_visitor_id_created_at" ON page_views (visitor_id, created_at);
+
+CREATE TABLE
+    IF NOT EXISTS payments (
+        id SERIAL PRIMARY KEY,
+        group_id TEXT NOT NULL,
+        amount_cents INTEGER NOT NULL,
+        stripe_checkout_session_id TEXT,
+        stripe_payment_intent_id TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        refunded_amount_cents INTEGER,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        authorized_at TIMESTAMPTZ,
+        paid_at TIMESTAMPTZ,
+        refunded_at TIMESTAMPTZ
+    );
+
+CREATE INDEX IF NOT EXISTS "IDX_payments_group_id" ON payments (group_id);
 
 -- doesn't try to re-run the (already-executed-via-this-file) InitSchema
 -- migration against this database later.
@@ -350,7 +370,9 @@ VALUES
     (1786100000000, 'AddContactMessageIsRead1786100000000'),
     (1786200000000, 'AddReviewAdminReply1786200000000'),
     (1786300000000, 'ContactMessagePhoneInsteadOfEmail1786300000000'),
-    (1786400000000, 'AddPageViews1786400000000');
+    (1786400000000, 'AddPageViews1786400000000'),
+    (1786500000000, 'AddPayments1786500000000'),
+    (1786600000000, 'AddAuthorizedAtAndOnSitePayment1786600000000');
 
 -- Admin account — username "carla", password "Carla0303!" (bcrypt, cost 12).
 -- Change this password after first login in a real deployment.

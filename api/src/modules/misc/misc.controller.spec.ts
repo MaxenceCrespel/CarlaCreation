@@ -32,4 +32,17 @@ describe('MiscController', () => {
 
     expect(result.travelFreeRadiusKm).toBeNull();
   });
+
+  it('getSiteConfig reports Stripe as disabled when no keys are configured', async () => {
+    const settingsService = {
+      getTravelFeeTiers: jest.fn().mockResolvedValue([{ minKm: 0, feeCents: 0 }]),
+      getTravelFeeFallbackCents: jest.fn().mockResolvedValue(200),
+    };
+    const controller = new MiscController(settingsService as any);
+
+    const result = await controller.getSiteConfig();
+
+    // No STRIPE_SECRET_KEY/STRIPE_WEBHOOK_SECRET in the test environment.
+    expect(result.stripeEnabled).toBe(false);
+  });
 });

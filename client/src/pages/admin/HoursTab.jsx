@@ -313,6 +313,85 @@ function TravelBufferCard() {
   );
 }
 
+// Refund-notice-deadline for online payment at booking — see
+// api/src/modules/stripe. Stays read-only (with a clear explanation) when
+// Stripe isn't configured at all, so nothing here looks broken/editable
+// for a setting that doesn't apply yet.
+function PaymentSettingsCard() {
+  const showToast = useToast();
+  const [stripeEnabled, setStripeEnabled] = useState(null);
+  const [refundDeadlineHours, setRefundDeadlineHours] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  function load() {
+    apiFetch('/admin/settings/payments')
+      .then((data) => {
+        setStripeEnabled(data.stripeEnabled);
+        setRefundDeadlineHours(data.refundDeadlineHours.toString());
+      })
+      .catch(() => showToast('Impossible de charger les réglages de paiement.', 'error'));
+  }
+
+  useEffect(load, []);
+
+  async function save(e) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await apiFetch('/admin/settings/payments/refund-deadline', { method: 'PUT', body: { hours: Number(refundDeadlineHours) } });
+      showToast('Réglages de paiement mis à jour.', 'success');
+      load();
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (stripeEnabled === null) {
+    return <p className="loading-text">Chargement…</p>;
+  }
+
+  if (!stripeEnabled) {
+    return (
+      <p className="section-lead">
+        Le paiement en ligne n'est pas encore activé (aucune clé Stripe configurée côté serveur) — les réservations
+        fonctionnent normalement, sans étape de paiement. Une fois Stripe configuré, ce réglage apparaîtra ici.
+      </p>
+    );
+  }
+
+  return (
+    <form className="travel-buffer-card" onSubmit={save}>
+      <p className="section-lead">
+        À la réservation, la cliente choisit de régler l'intégralité en ligne par carte via Stripe, ou de payer sur
+        place. Si elle annule elle-même son rendez-vous suffisamment à l'avance après avoir payé en ligne, le
+        paiement est remboursé automatiquement — sinon, il reste acquis.
+      </p>
+      <div className="form-row two-col">
+        <div>
+          <label htmlFor="refund-deadline-hours">Remboursable si annulé plus de (heures avant le RDV)</label>
+          <input
+            type="number"
+            id="refund-deadline-hours"
+            min={0}
+            max={720}
+            step={1}
+            required
+            value={refundDeadlineHours}
+            onChange={(e) => setRefundDeadlineHours(e.target.value)}
+          />
+        </div>
+      </div>
+      <div className="travel-buffer-save" style={{ marginTop: 16 }}>
+        <button type="submit" className="btn btn-primary" disabled={saving}>
+          {saving ? 'Enregistrement…' : 'Enregistrer'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 export default function HoursTab() {
   const showToast = useToast();
   const [days, setDays] = useState(null);
@@ -394,6 +473,10 @@ export default function HoursTab() {
         hint="Ne sert que si la distance réelle ne peut pas être calculée — à ouvrir seulement si besoin d'ajuster."
       >
         <TravelBufferCard />
+      </CollapsibleCard>
+
+      <CollapsibleCard title="Paiement en ligne" hint="Délai de remboursement en cas d'annulation après paiement en ligne.">
+        <PaymentSettingsCard />
       </CollapsibleCard>
     </>
   );
