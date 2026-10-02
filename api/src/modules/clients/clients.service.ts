@@ -13,6 +13,15 @@ interface ReservationHistoryRow {
   status: string;
 }
 
+// password_hash must never leave this service — every Client row handed
+// back to the (admin) API goes through this first. hasAccount replaces it
+// with the one bit of information actually useful to show: whether this
+// person can log in to their own "compte client" (see ClientAuthService).
+function sanitizeClient<T extends Client>(client: T): Omit<T, 'password_hash'> & { hasAccount: boolean } {
+  const { password_hash, ...rest } = client;
+  return { ...rest, hasAccount: Boolean(password_hash) };
+}
+
 @Injectable()
 export class ClientsService {
   constructor(
@@ -26,13 +35,15 @@ export class ClientsService {
   // reservation count per client is a separate raw query below.
   async findAll(
     q?: string,
-  ): Promise<((Client & { reservationCount: number; hasFiche: true }) | { hasFiche: false; name: string; phone: string; email: string })[]> {
+  ): Promise<
+    | ((Omit<Client, 'password_hash'> & { hasAccount: boolean; reservationCount: number; hasFiche: true }) | { hasFiche: false; name: string; phone: string; email: string })[]
+  > {
     const clients = await this.clientRepo.find({ order: { name: 'ASC' } });
     const needle = q?.trim();
 
     if (!needle) {
       const counts = await this.reservationCountsFor(clients.map((c) => c.id));
-      return clients.map((c) => ({ ...c, reservationCount: counts.get(c.id) ?? 0, hasFiche: true as const }));
+      return clients.map((c) => ({ ...sanitizeClient(c), reservationCount: counts.get(c.id) ?? 0, hasFiche: true as const }));
     }
 
     // Match on name OR phone — a search that only checked the name meant an
@@ -44,7 +55,7 @@ export class ClientsService {
 
     const ficheMatches = clients.filter((c) => c.normalized_name.includes(normalizedNeedle) || matchesPhone(c.phone));
     const counts = await this.reservationCountsFor(ficheMatches.map((c) => c.id));
-    const ficheResults = ficheMatches.map((c) => ({ ...c, reservationCount: counts.get(c.id) ?? 0, hasFiche: true as const }));
+    const ficheResults = ficheMatches.map((c) => ({ ...sanitizeClient(c), reservationCount: counts.get(c.id) ?? 0, hasFiche: true as const }));
 
     // Also surface people who've booked before but were never turned into a
     // "fiche" — the case this was built for: the admin gets a call from a
@@ -75,7 +86,7 @@ export class ClientsService {
     return new Map(counts.map((c) => [c.client_id, Number(c.count)]));
   }
 
-  async findOne(id: number): Promise<Client & { history: ReservationHistoryRow[] }> {
+  async findOne(id: number): Promise<Omit<Client, 'password_hash'> & { hasAccount: boolean; history: ReservationHistoryRow[] }> {
     const client = await this.clientRepo.findOne({ where: { id } });
     if (!client) throw new NotFoundException('Fiche client introuvable.');
 
@@ -87,14 +98,14 @@ export class ClientsService {
       [id],
     );
 
-    return { ...client, history };
+    return { ...sanitizeClient(client), history };
   }
 
   // Suggests existing profiles for the admin to review — an exact match on
   // the normalized name only, never fuzzy. Deliberately does not merge or
   // auto-link anything: the admin always makes the final call (see the
   // "mère qui reprend rdv pour son enfant" case this was built for).
-  async matchCandidates(name: string): Promise<(Client & { history: ReservationHistoryRow[] })[]> {
+  async matchCandidates(name: string): Promise<(Omit<Client, 'password_hash'> & { hasAccount: boolean; history: ReservationHistoryRow[] })[]> {
     const normalized = normalizeClientName(name);
     if (!normalized) return [];
     const candidates = await this.clientRepo.find({ where: { normalized_name: normalized } });
@@ -114,7 +125,7 @@ export class ClientsService {
       historyByClient.set(row.client_id, list);
     }
 
-    return candidates.map((c) => ({ ...c, history: (historyByClient.get(c.id) ?? []).slice(0, 5) }));
+    return candidates.map((c) => ({ ...sanitizeClient(c), history: (historyByClient.get(c.id) ?? []).slice(0, 5) }));
   }
 
   // Autocomplete for the "create a manual reservation" form — sourced from
@@ -141,18 +152,19 @@ export class ClientsService {
     return rows.map((r) => ({ name: r.client_name, email: r.client_email, phone: r.client_phone }));
   }
 
-  async create(dto: CreateClientDto): Promise<Client> {
+  async create(dto: CreateClientDto): Promise<Omit<Client, 'password_hash'> & { hasAccount: boolean }> {
     const client = this.clientRepo.create({
       name: dto.name.trim(),
       normalized_name: normalizeClientName(dto.name),
       phone: dto.phone?.trim() ?? '',
       email: dto.email?.trim() ?? '',
       notes: dto.notes?.trim() ?? '',
+      birthdate: dto.birthdate ?? null,
     });
-    return this.clientRepo.save(client);
+    return sanitizeClient(await this.clientRepo.save(client));
   }
 
-  async createAndLink(dto: CreateAndLinkClientDto): Promise<Client> {
+  async createAndLink(dto: CreateAndLinkClientDto): Promise<Omit<Client, 'password_hash'> & { hasAccount: boolean }> {
     const reservation = await this.reservationRepo.findOne({ where: { id: dto.reservationId } });
     if (!reservation) throw new NotFoundException('Réservation introuvable.');
 
@@ -161,7 +173,7 @@ export class ClientsService {
     return client;
   }
 
-  async update(id: number, dto: UpdateClientDto): Promise<Client> {
+  async update(id: number, dto: UpdateClientDto): Promise<Omit<Client, 'password_hash'> & { hasAccount: boolean }> {
     const client = await this.clientRepo.findOne({ where: { id } });
     if (!client) throw new NotFoundException('Fiche client introuvable.');
 
@@ -172,8 +184,9 @@ export class ClientsService {
     if (dto.phone !== undefined) client.phone = dto.phone.trim();
     if (dto.email !== undefined) client.email = dto.email.trim();
     if (dto.notes !== undefined) client.notes = dto.notes.trim();
+    if (dto.birthdate !== undefined) client.birthdate = dto.birthdate;
 
-    return this.clientRepo.save(client);
+    return sanitizeClient(await this.clientRepo.save(client));
   }
 
   async remove(id: number): Promise<void> {

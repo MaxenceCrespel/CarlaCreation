@@ -144,6 +144,31 @@ img { max-width: 100%; display: block; }
 }
 .nav-toggle span { width: 24px; height: 2px; background: var(--color-text); display: block; }
 
+/* Persistent profile icon, same visual language as the admin's own
+   avatar badge (.admin-avatar-btn) — a round touch target comfortably
+   above the 40px minimum recommended for a tap target, placed outside
+   the collapsible <nav> so it never disappears behind the hamburger. */
+.account-icon-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  margin-left: 8px;
+  border: 1px solid var(--color-bg-alt);
+  border-radius: 50%;
+  color: var(--color-text-soft);
+  text-decoration: none;
+}
+.account-icon-link svg { width: 20px; height: 20px; }
+.account-icon-link:hover { border-color: var(--color-accent); color: var(--color-accent-dark); }
+.account-icon-link[aria-current="page"] {
+  border-color: var(--color-accent);
+  color: var(--color-accent-dark);
+  background: var(--color-bg-alt);
+}
+
 /* Buttons */
 .btn {
   display: inline-block;

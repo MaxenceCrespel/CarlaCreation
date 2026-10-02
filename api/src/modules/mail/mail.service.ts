@@ -237,6 +237,48 @@ export class MailService {
     await this.send(input.clientEmail, subject, html);
   }
 
+  // Sent when a client's *completed* reservation count crosses a fresh
+  // multiple of the configured loyalty threshold — see
+  // RewardsService.checkLoyaltyReward.
+  async sendLoyaltyReward(input: { clientName: string; clientEmail: string; code: string; discountPercent: number; visitsCompleted: number }): Promise<void> {
+    const subject = `Merci de votre fidélité — ${siteConfig.siteName}`;
+    const html = `
+      <div style="font-family: Segoe UI, Arial, sans-serif; color:#3A2E27; max-width:560px; margin:0 auto;">
+        <img src="${config.PUBLIC_ORIGIN}/logo-email.png" alt="${escapeHtml(siteConfig.siteName)}" width="140" style="display:block;margin:0 0 16px;" />
+        <p>Bonjour ${escapeHtml(input.clientName)},</p>
+        <p>Merci pour votre fidélité — c'est déjà votre ${input.visitsCompleted}<sup>e</sup> rendez-vous avec moi !</p>
+        <p>Voici un code promo à utiliser à votre prochaine réservation :</p>
+        <p style="margin:16px 0;font-size:1.4em;font-weight:700;letter-spacing:0.05em;color:#9A5F4B;">${escapeHtml(input.code)}</p>
+        <p>Il vous donne <strong>${input.discountPercent}%</strong> de réduction sur votre prochaine prestation.</p>
+        <p style="margin-top:24px;">
+          <a href="${config.PUBLIC_ORIGIN}/booking" style="display:inline-block;background:#9A5F4B;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;">Prendre rendez-vous</a>
+        </p>
+        <p style="color:#6B5C51;font-size:0.85em;margin-top:32px;">${escapeHtml(siteConfig.siteName)}</p>
+      </div>
+    `;
+    await this.send(input.clientEmail, subject, html);
+  }
+
+  // Sent once a year, around a client's birthday — see
+  // RewardsService.sendBirthdayRewards.
+  async sendBirthdayReward(input: { clientName: string; clientEmail: string; code: string; discountPercent: number }): Promise<void> {
+    const subject = `Joyeux anniversaire ! Un petit cadeau — ${siteConfig.siteName}`;
+    const html = `
+      <div style="font-family: Segoe UI, Arial, sans-serif; color:#3A2E27; max-width:560px; margin:0 auto;">
+        <img src="${config.PUBLIC_ORIGIN}/logo-email.png" alt="${escapeHtml(siteConfig.siteName)}" width="140" style="display:block;margin:0 0 16px;" />
+        <p>Bonjour ${escapeHtml(input.clientName)},</p>
+        <p>Joyeux anniversaire ! 🎉 Pour l'occasion, voici un code promo à utiliser à votre prochaine réservation :</p>
+        <p style="margin:16px 0;font-size:1.4em;font-weight:700;letter-spacing:0.05em;color:#9A5F4B;">${escapeHtml(input.code)}</p>
+        <p>Il vous donne <strong>${input.discountPercent}%</strong> de réduction sur votre prochaine prestation.</p>
+        <p style="margin-top:24px;">
+          <a href="${config.PUBLIC_ORIGIN}/booking" style="display:inline-block;background:#9A5F4B;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;">Prendre rendez-vous</a>
+        </p>
+        <p style="color:#6B5C51;font-size:0.85em;margin-top:32px;">${escapeHtml(siteConfig.siteName)}</p>
+      </div>
+    `;
+    await this.send(input.clientEmail, subject, html);
+  }
+
   private renderBookingEmail(input: BookingEmailInput, introHtml: string, statusLabel?: string, revealAddress = false): string {
     const rows = input.guests
       .map(

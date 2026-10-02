@@ -85,4 +85,31 @@ describe('PromotionsService', () => {
     repo.delete.mockResolvedValue({ affected: 1 });
     await expect(service.remove(1)).resolves.toBeUndefined();
   });
+
+  describe('createAutoCode', () => {
+    it('creates an active, code-required promotion with a freshly generated code', async () => {
+      repo.findOne.mockResolvedValue(null); // no collision
+
+      const promotion = await service.createAutoCode('Fidélité — Jeanne (5e passage)', 15);
+
+      expect(repo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          label: 'Fidélité — Jeanne (5e passage)',
+          discount_percent: 15,
+          requires_code: true,
+          active: true,
+          code: expect.stringMatching(/^[A-Z0-9]{8}$/),
+        }),
+      );
+      expect(promotion.code).toMatch(/^[A-Z0-9]{8}$/);
+    });
+
+    it('retries when a generated code collides with an existing one', async () => {
+      repo.findOne.mockResolvedValueOnce({ id: 1 }).mockResolvedValueOnce(null);
+
+      await service.createAutoCode('Anniversaire — Paul (2026)', 10);
+
+      expect(repo.findOne).toHaveBeenCalledTimes(2);
+    });
+  });
 });

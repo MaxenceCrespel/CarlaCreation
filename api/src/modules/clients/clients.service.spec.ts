@@ -40,7 +40,19 @@ describe('ClientsService', () => {
 
     const result = await service.findAll();
 
-    expect(result).toEqual([{ id: 1, name: 'Alice', normalized_name: 'alice', phone: '0600000000', reservationCount: 3, hasFiche: true }]);
+    expect(result).toEqual([
+      { id: 1, name: 'Alice', normalized_name: 'alice', phone: '0600000000', reservationCount: 3, hasFiche: true, hasAccount: false },
+    ]);
+  });
+
+  it('findAll never leaks password_hash, even for a client with an account', async () => {
+    clientRepo.find.mockResolvedValue([{ id: 1, name: 'Alice', normalized_name: 'alice', phone: '0600000000', password_hash: 'bcrypt-hash' }]);
+    dataSource.query.mockResolvedValue([]);
+
+    const result = await service.findAll();
+
+    expect(result[0]).not.toHaveProperty('password_hash');
+    expect(result[0]).toMatchObject({ hasAccount: true });
   });
 
   it('findAll matches a fiche by phone, not just name', async () => {

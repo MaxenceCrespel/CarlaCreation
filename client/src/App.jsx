@@ -5,6 +5,7 @@ import Services from './pages/Services';
 import Gallery from './pages/Gallery';
 import Booking from './pages/Booking';
 import ManageReservation from './pages/ManageReservation';
+import MyAccount from './pages/MyAccount';
 import Contact from './pages/Contact';
 import NotFound from './pages/NotFound';
 import AdminApp from './pages/admin/AdminApp';
@@ -19,6 +20,7 @@ export default function App() {
         <Route path="/gallery" element={<Gallery />} />
         <Route path="/booking" element={<Booking />} />
         <Route path="/mon-rendez-vous/:groupId" element={<ManageReservation />} />
+        <Route path="/mon-compte" element={<MyAccount />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="*" element={<NotFound />} />
       </Route>

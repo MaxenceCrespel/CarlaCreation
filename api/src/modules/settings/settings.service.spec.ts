@@ -193,3 +193,76 @@ describe('SettingsService — travel fee tiers', () => {
     await expect(service.setRefundDeadlineHours(1000)).rejects.toBeInstanceOf(BadRequestException);
   });
 });
+
+describe('SettingsService — loyalty & birthday rewards', () => {
+  let service: SettingsService;
+  let dataSource: { getRepository: jest.Mock; createQueryBuilder: jest.Mock };
+
+  beforeEach(async () => {
+    dataSource = { getRepository: jest.fn(), createQueryBuilder: jest.fn() };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [SettingsService, { provide: getDataSourceToken(), useValue: dataSource }],
+    }).compile();
+
+    service = module.get(SettingsService);
+  });
+
+  function mockUpsert() {
+    const execute = jest.fn().mockResolvedValue(undefined);
+    const orUpdate = jest.fn().mockReturnValue({ execute });
+    const values = jest.fn().mockReturnValue({ orUpdate });
+    const into = jest.fn().mockReturnValue({ values });
+    const insert = jest.fn().mockReturnValue({ into });
+    dataSource.createQueryBuilder.mockReturnValue({ insert });
+    return { values, orUpdate, execute };
+  }
+
+  it('getLoyaltyVisitsRequired returns the stored value, defaulting to 5', async () => {
+    dataSource.getRepository.mockReturnValue({ findOne: jest.fn().mockResolvedValue({ id: 1, loyalty_visits_required: 8 }) });
+    await expect(service.getLoyaltyVisitsRequired()).resolves.toBe(8);
+
+    dataSource.getRepository.mockReturnValue({ findOne: jest.fn().mockResolvedValue(null) });
+    await expect(service.getLoyaltyVisitsRequired()).resolves.toBe(5);
+  });
+
+  it('setLoyaltyVisitsRequired rejects values outside 1-100', async () => {
+    await expect(service.setLoyaltyVisitsRequired(0)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.setLoyaltyVisitsRequired(101)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.setLoyaltyVisitsRequired(3.5)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('setLoyaltyVisitsRequired upserts a valid value', async () => {
+    const { values, orUpdate } = mockUpsert();
+    await service.setLoyaltyVisitsRequired(8);
+    expect(values).toHaveBeenCalledWith({ id: 1, loyalty_visits_required: 8 });
+    expect(orUpdate).toHaveBeenCalledWith(['loyalty_visits_required'], ['id']);
+  });
+
+  it('getLoyaltyDiscountPercent returns the stored value, defaulting to 15', async () => {
+    dataSource.getRepository.mockReturnValue({ findOne: jest.fn().mockResolvedValue(null) });
+    await expect(service.getLoyaltyDiscountPercent()).resolves.toBe(15);
+  });
+
+  it('setLoyaltyDiscountPercent rejects values outside 0-100', async () => {
+    await expect(service.setLoyaltyDiscountPercent(-1)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.setLoyaltyDiscountPercent(101)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('getBirthdayDiscountPercent returns the stored value, defaulting to 10', async () => {
+    dataSource.getRepository.mockReturnValue({ findOne: jest.fn().mockResolvedValue(null) });
+    await expect(service.getBirthdayDiscountPercent()).resolves.toBe(10);
+  });
+
+  it('setBirthdayDiscountPercent rejects values outside 0-100', async () => {
+    await expect(service.setBirthdayDiscountPercent(-1)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.setBirthdayDiscountPercent(101)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('setBirthdayDiscountPercent upserts a valid value', async () => {
+    const { values, orUpdate } = mockUpsert();
+    await service.setBirthdayDiscountPercent(12);
+    expect(values).toHaveBeenCalledWith({ id: 1, birthday_discount_percent: 12 });
+    expect(orUpdate).toHaveBeenCalledWith(['birthday_discount_percent'], ['id']);
+  });
+});

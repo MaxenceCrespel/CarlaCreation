@@ -3,7 +3,10 @@ import { AdminAuthGuard } from '../../common/admin-auth.guard';
 import { CsrfGuard } from '../../common/csrf';
 import { SettingsService } from './settings.service';
 import {
+  UpdateBirthdayDiscountDto,
   UpdateDailyHoursDto,
+  UpdateLoyaltyDiscountDto,
+  UpdateLoyaltyVisitsDto,
   UpdateRefundDeadlineDto,
   UpdateTravelBufferDto,
   UpdateTravelFeeFallbackDto,
@@ -81,6 +84,36 @@ export class AdminSettingsController {
   @Put('payments/refund-deadline')
   async setRefundDeadline(@Body() dto: UpdateRefundDeadlineDto) {
     await this.settingsService.setRefundDeadlineHours(dto.hours);
+    return { success: true };
+  }
+
+  @Get('loyalty')
+  async getLoyalty() {
+    return {
+      visitsRequired: await this.settingsService.getLoyaltyVisitsRequired(),
+      loyaltyDiscountPercent: await this.settingsService.getLoyaltyDiscountPercent(),
+      birthdayDiscountPercent: await this.settingsService.getBirthdayDiscountPercent(),
+    };
+  }
+
+  @UseGuards(CsrfGuard)
+  @Put('loyalty/visits-required')
+  async setLoyaltyVisits(@Body() dto: UpdateLoyaltyVisitsDto) {
+    await this.settingsService.setLoyaltyVisitsRequired(dto.visits);
+    return { success: true };
+  }
+
+  @UseGuards(CsrfGuard)
+  @Put('loyalty/discount-percent')
+  async setLoyaltyDiscount(@Body() dto: UpdateLoyaltyDiscountDto) {
+    await this.settingsService.setLoyaltyDiscountPercent(dto.percent);
+    return { success: true };
+  }
+
+  @UseGuards(CsrfGuard)
+  @Put('loyalty/birthday-discount-percent')
+  async setBirthdayDiscount(@Body() dto: UpdateBirthdayDiscountDto) {
+    await this.settingsService.setBirthdayDiscountPercent(dto.percent);
     return { success: true };
   }
 }

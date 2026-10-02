@@ -392,6 +392,108 @@ function PaymentSettingsCard() {
   );
 }
 
+// Loyalty (every N completed visits linked to a Client) + birthday reward
+// percentages — see api/src/modules/rewards. Both auto-issue a one-time
+// promo code and email it; nothing here needs the booking flow to change.
+function LoyaltySettingsCard() {
+  const showToast = useToast();
+  const [visitsRequired, setVisitsRequired] = useState(null);
+  const [loyaltyDiscountPercent, setLoyaltyDiscountPercent] = useState(null);
+  const [birthdayDiscountPercent, setBirthdayDiscountPercent] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  function load() {
+    apiFetch('/admin/settings/loyalty')
+      .then((data) => {
+        setVisitsRequired(data.visitsRequired.toString());
+        setLoyaltyDiscountPercent(data.loyaltyDiscountPercent.toString());
+        setBirthdayDiscountPercent(data.birthdayDiscountPercent.toString());
+      })
+      .catch(() => showToast('Impossible de charger les réglages de fidélité.', 'error'));
+  }
+
+  useEffect(load, []);
+
+  async function save(e) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await Promise.all([
+        apiFetch('/admin/settings/loyalty/visits-required', { method: 'PUT', body: { visits: Number(visitsRequired) } }),
+        apiFetch('/admin/settings/loyalty/discount-percent', { method: 'PUT', body: { percent: Number(loyaltyDiscountPercent) } }),
+        apiFetch('/admin/settings/loyalty/birthday-discount-percent', { method: 'PUT', body: { percent: Number(birthdayDiscountPercent) } }),
+      ]);
+      showToast('Réglages de fidélité mis à jour.', 'success');
+      load();
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (visitsRequired === null || loyaltyDiscountPercent === null || birthdayDiscountPercent === null) {
+    return <p className="loading-text">Chargement…</p>;
+  }
+
+  return (
+    <form className="travel-buffer-card" onSubmit={save}>
+      <p className="section-lead">
+        Un code promo à usage unique est envoyé par email automatiquement : à la cliente qui atteint le nombre de
+        passages ci-dessous (renouvelé à chaque nouveau palier), et à chaque cliente pour son anniversaire (si sa
+        date de naissance est renseignée). Le code s'utilise ensuite normalement dans le champ "code promo" de la
+        réservation.
+      </p>
+      <div className="form-row two-col">
+        <div>
+          <label htmlFor="loyalty-visits-required">Passages requis pour une réduction fidélité</label>
+          <input
+            type="number"
+            id="loyalty-visits-required"
+            min={1}
+            max={100}
+            step={1}
+            required
+            value={visitsRequired}
+            onChange={(e) => setVisitsRequired(e.target.value)}
+          />
+        </div>
+        <div>
+          <label htmlFor="loyalty-discount-percent">Réduction fidélité (%)</label>
+          <input
+            type="number"
+            id="loyalty-discount-percent"
+            min={0}
+            max={100}
+            step={5}
+            required
+            value={loyaltyDiscountPercent}
+            onChange={(e) => setLoyaltyDiscountPercent(e.target.value)}
+          />
+        </div>
+      </div>
+      <div className="form-row">
+        <label htmlFor="birthday-discount-percent">Réduction anniversaire (%)</label>
+        <input
+          type="number"
+          id="birthday-discount-percent"
+          min={0}
+          max={100}
+          step={5}
+          required
+          value={birthdayDiscountPercent}
+          onChange={(e) => setBirthdayDiscountPercent(e.target.value)}
+        />
+      </div>
+      <div className="travel-buffer-save" style={{ marginTop: 16 }}>
+        <button type="submit" className="btn btn-primary" disabled={saving}>
+          {saving ? 'Enregistrement…' : 'Enregistrer'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 export default function HoursTab() {
   const showToast = useToast();
   const [days, setDays] = useState(null);
@@ -477,6 +579,13 @@ export default function HoursTab() {
 
       <CollapsibleCard title="Paiement en ligne" hint="Délai de remboursement en cas d'annulation après paiement en ligne.">
         <PaymentSettingsCard />
+      </CollapsibleCard>
+
+      <CollapsibleCard
+        title="Fidélité & anniversaire"
+        hint="Codes promo automatiques : carte de fidélité et cadeau d'anniversaire."
+      >
+        <LoyaltySettingsCard />
       </CollapsibleCard>
     </>
   );

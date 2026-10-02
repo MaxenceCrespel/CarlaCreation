@@ -1,12 +1,18 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import type { Request } from 'express';
+import { JwtService } from '@nestjs/jwt';
 import { CsrfGuard } from '../../common/csrf';
+import { extractOptionalClient } from '../../common/client-auth.guard';
 import { ReservationsService } from './reservations.service';
 import { AvailabilityQueryDto, CancelReservationDto, CreateReservationDto, DayAvailabilityQueryDto, NextAvailableQueryDto, TravelEstimateQueryDto } from './dto/reservation.dto';
 
 @Controller('api/reservations')
 export class ReservationsController {
-  constructor(private readonly reservationsService: ReservationsService) {}
+  constructor(
+    private readonly reservationsService: ReservationsService,
+    private readonly jwtService: JwtService,
+  ) {}
 
   @Get('availability')
   availability(@Query() query: AvailabilityQueryDto) {
@@ -37,8 +43,12 @@ export class ReservationsController {
   @Throttle({ default: { limit: 20, ttl: 3_600_000 } })
   @UseGuards(CsrfGuard)
   @Post()
-  async create(@Body() dto: CreateReservationDto) {
-    const reservation = await this.reservationsService.create(dto);
+  async create(@Body() dto: CreateReservationDto, @Req() req: Request) {
+    // Booking stays guest-friendly either way — a logged-in client just
+    // gets their own row auto-linked (see ReservationsService.create), no
+    // separate "book as me" step needed.
+    const client = extractOptionalClient(req, this.jwtService);
+    const reservation = await this.reservationsService.create(dto, client?.sub ?? null);
     return { success: true, reservation };
   }
 

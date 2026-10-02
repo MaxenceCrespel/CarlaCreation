@@ -10,7 +10,7 @@ const STATUS_LABELS = {
   refused: 'Refusée',
 };
 
-const EMPTY_CLIENT_FORM = { name: '', phone: '', notes: '' };
+const EMPTY_CLIENT_FORM = { name: '', phone: '', notes: '', birthdate: '' };
 
 function AddClientForm({ onCreated, onCancel, prefill }) {
   const showToast = useToast();
@@ -32,6 +32,7 @@ function AddClientForm({ onCreated, onCancel, prefill }) {
           name: form.name.trim(),
           phone: form.phone.trim(),
           notes: form.notes.trim(),
+          birthdate: form.birthdate || undefined,
         },
       });
       onCreated(created);
@@ -58,6 +59,10 @@ function AddClientForm({ onCreated, onCancel, prefill }) {
         </div>
       </div>
       <div className="form-row">
+        <label htmlFor="client-add-birthdate">Date de naissance (optionnel — pour le cadeau d'anniversaire)</label>
+        <input type="date" id="client-add-birthdate" value={form.birthdate} onChange={update('birthdate')} />
+      </div>
+      <div className="form-row">
         <label htmlFor="client-add-notes">Notes (optionnel)</label>
         <textarea id="client-add-notes" rows={3} maxLength={5000} placeholder="Ex : a fait un 4.1 au dernier rdv…" value={form.notes} onChange={update('notes')} />
       </div>
@@ -78,6 +83,7 @@ function ClientDetail({ client, onClose, onUpdated, onDeleted }) {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [notes, setNotes] = useState('');
+  const [birthdate, setBirthdate] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -87,6 +93,7 @@ function ClientDetail({ client, onClose, onUpdated, onDeleted }) {
         setName(data.name);
         setPhone(data.phone);
         setNotes(data.notes);
+        setBirthdate(data.birthdate || '');
       })
       .catch((err) => setError(err.message));
   }, [client.id]);
@@ -96,7 +103,7 @@ function ClientDetail({ client, onClose, onUpdated, onDeleted }) {
     try {
       const updated = await apiFetch(`/admin/clients/${client.id}`, {
         method: 'PATCH',
-        body: { name: name.trim(), phone: phone.trim(), notes: notes.trim() },
+        body: { name: name.trim(), phone: phone.trim(), notes: notes.trim(), birthdate: birthdate || undefined },
       });
       onUpdated(updated);
       showToast('Fiche mise à jour.', 'success');
@@ -121,7 +128,14 @@ function ClientDetail({ client, onClose, onUpdated, onDeleted }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card" role="dialog" aria-modal="true" aria-label="Fiche client" onClick={(e) => e.stopPropagation()}>
-        <h2>Fiche client</h2>
+        <h2>
+          Fiche client{' '}
+          {detail && (
+            <span className={`status-badge ${detail.hasAccount ? 'status-confirmed' : 'status-pending'}`} style={{ fontSize: '0.6em', verticalAlign: 'middle' }}>
+              {detail.hasAccount ? 'Compte créé' : 'Pas de compte'}
+            </span>
+          )}
+        </h2>
 
         {error && <p className="form-feedback error">{error}</p>}
         {!error && !detail && <p className="loading-text">Chargement…</p>}
@@ -137,6 +151,10 @@ function ClientDetail({ client, onClose, onUpdated, onDeleted }) {
                 <label htmlFor="client-detail-phone">Téléphone</label>
                 <input type="text" id="client-detail-phone" maxLength={50} value={phone} onChange={(e) => setPhone(e.target.value)} />
               </div>
+            </div>
+            <div className="form-row">
+              <label htmlFor="client-detail-birthdate">Date de naissance (pour le cadeau d'anniversaire)</label>
+              <input type="date" id="client-detail-birthdate" value={birthdate} onChange={(e) => setBirthdate(e.target.value)} />
             </div>
             <div className="form-row">
               <label htmlFor="client-detail-notes">Notes</label>
