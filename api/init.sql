@@ -49,6 +49,10 @@ CREATE TABLE
         phone TEXT NOT NULL DEFAULT '',
         email TEXT NOT NULL DEFAULT '',
         notes TEXT NOT NULL DEFAULT '',
+        password_hash TEXT,
+        birthdate TEXT,
+        loyalty_reward_at_visits INTEGER,
+        birthday_reward_year INTEGER,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
@@ -284,10 +288,14 @@ CREATE TABLE
     IF NOT EXISTS app_settings (
         id INTEGER PRIMARY KEY DEFAULT 1,
         travel_buffer_minutes INTEGER NOT NULL DEFAULT 30,
-        travel_fee_fallback_cents INTEGER NOT NULL DEFAULT 200
+        travel_fee_fallback_cents INTEGER NOT NULL DEFAULT 200,
+        loyalty_visits_required INTEGER NOT NULL DEFAULT 5,
+        loyalty_discount_percent INTEGER NOT NULL DEFAULT 15,
+        birthday_discount_percent INTEGER NOT NULL DEFAULT 10
     );
 
-INSERT INTO app_settings (id, travel_buffer_minutes, travel_fee_fallback_cents) VALUES (1, 30, 200);
+INSERT INTO app_settings (id, travel_buffer_minutes, travel_fee_fallback_cents, loyalty_visits_required, loyalty_discount_percent, birthday_discount_percent)
+VALUES (1, 30, 200, 5, 15, 10);
 
 CREATE TABLE
     IF NOT EXISTS travel_fee_tiers (
@@ -350,7 +358,8 @@ VALUES
     (1786100000000, 'AddContactMessageIsRead1786100000000'),
     (1786200000000, 'AddReviewAdminReply1786200000000'),
     (1786300000000, 'ContactMessagePhoneInsteadOfEmail1786300000000'),
-    (1786400000000, 'AddPageViews1786400000000');
+    (1786400000000, 'AddPageViews1786400000000'),
+    (1786500000000, 'AddClientAccountsAndLoyalty1786500000000');
 
 -- Admin account — username "carla", password "Carla0303!" (bcrypt, cost 12).
 -- Change this password after first login in a real deployment.

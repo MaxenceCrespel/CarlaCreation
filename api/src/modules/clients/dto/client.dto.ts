@@ -1,4 +1,4 @@
-import { IsInt, IsOptional, IsString, Length } from 'class-validator';
+import { IsDateString, IsInt, IsOptional, IsString, Length } from 'class-validator';
 
 export class CreateClientDto {
   @IsString()
@@ -19,6 +19,12 @@ export class CreateClientDto {
   @IsString()
   @Length(0, 5000)
   notes?: string;
+
+  // Lets the admin fill it in for a client who booked in person/by phone
+  // and never self-registered — see RewardsService.dispatchBirthdayRewards.
+  @IsOptional()
+  @IsDateString()
+  birthdate?: string;
 }
 
 export class UpdateClientDto {
@@ -41,6 +47,10 @@ export class UpdateClientDto {
   @IsString()
   @Length(0, 5000)
   notes?: string;
+
+  @IsOptional()
+  @IsDateString()
+  birthdate?: string;
 }
 
 export class CreateAndLinkClientDto extends CreateClientDto {

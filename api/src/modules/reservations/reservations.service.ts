@@ -16,6 +16,7 @@ import { SettingsService } from '../settings/settings.service';
 import { DistanceService } from '../distance/distance.service';
 import { PushService } from '../push/push.service';
 import { PromotionsService } from '../promotions/promotions.service';
+import { RewardsService } from '../rewards/rewards.service';
 import { siteConfig } from '../../site-config';
 
 interface Guest {
@@ -89,6 +90,7 @@ export class ReservationsService {
     private readonly distanceService: DistanceService,
     private readonly pushService: PushService,
     private readonly promotionsService: PromotionsService,
+    private readonly rewardsService: RewardsService,
   ) {}
 
   // Resolves each guest's OWN discount, not a single value for the whole
@@ -274,7 +276,7 @@ export class ReservationsService {
   // are booked back-to-back as one linked group, sharing group_id, contact
   // info and date. The whole combined-duration block must be a genuinely
   // free, pre-computed slot — re-validated here to avoid race/tampering.
-  async create(dto: CreateReservationDto) {
+  async create(dto: CreateReservationDto, loggedInClientId: number | null = null) {
     const guests: Guest[] = [
       { name: dto.clientName, serviceId: dto.serviceId, addonIds: dto.addonIds ?? [], promotionId: dto.promotionId },
       ...(dto.additionalGuests ?? []).map((g: AdditionalGuestDto) => ({ name: g.name, serviceId: g.serviceId, addonIds: g.addonIds ?? [], promotionId: g.promotionId })),
@@ -314,6 +316,7 @@ export class ReservationsService {
       travelDistanceKm: travel.distanceKm,
       travelDurationMinutes: travel.durationMinutes,
       travelFeeCents: travel.feeCents,
+      primaryClientId: loggedInClientId,
     });
 
     await this.mailService.sendBookingReceived({
@@ -414,6 +417,7 @@ export class ReservationsService {
       travelDistanceKm: travel.distanceKm,
       travelDurationMinutes: travel.durationMinutes,
       travelFeeCents: travel.feeCents,
+      primaryClientId: null,
     });
 
     // A manual booking is usually entered as already-confirmed, so send the
@@ -506,6 +510,11 @@ export class ReservationsService {
       travelDistanceKm: number | null;
       travelDurationMinutes: number | null;
       travelFeeCents: number | null;
+      // Auto-links only the FIRST guest's row (the account holder booking
+      // for themselves) — additional guests (e.g. a mother booking for her
+      // child too) are never auto-linked, same as the admin's own manual
+      // "fiche" matching stays a deliberate, per-person decision.
+      primaryClientId: number | null;
     },
   ): Promise<{ groupId: string; date: string; startTime: string; endTime: string; guests: BookedGuest[]; atClientHome: boolean; clientAddress: string | null }> {
     const groupId = crypto.randomUUID();
@@ -540,6 +549,7 @@ export class ReservationsService {
           travel_fee_cents: common.travelFeeCents,
           promotion_id: guestDiscounts[i].promotionId,
           discount_percent: guestDiscounts[i].discountPercent,
+          client_id: i === 0 ? common.primaryClientId : null,
         });
         const reservationId = Number(inserted.identifiers[0].id);
 
@@ -775,13 +785,17 @@ export class ReservationsService {
       service_name: string;
       at_client_home: boolean;
       client_address: string | null;
+      client_id: number | null;
     }[] = await this.dataSource.query(
       `SELECT r.group_id, r.client_name, r.client_email, r.reservation_date, r.start_time, r.end_time,
-              r.at_client_home, r.client_address, s.name AS service_name
+              r.at_client_home, r.client_address, r.client_id, s.name AS service_name
        FROM reservations r JOIN services s ON s.id = r.service_id WHERE r.id = $1`,
       [id],
     );
     const row = rows[0];
+    if (status === 'completed' && row?.client_id) {
+      await this.rewardsService.checkLoyaltyReward(row.client_id);
+    }
     if (row) {
       await this.mailService.sendStatusUpdate({
         clientName: row.client_name,
@@ -858,12 +872,20 @@ export class ReservationsService {
       service_name: string;
       at_client_home: boolean;
       client_address: string | null;
+      client_id: number | null;
     }[] = await this.dataSource.query(
       `SELECT r.client_name, r.client_email, r.reservation_date, r.start_time, r.end_time,
-              r.at_client_home, r.client_address, s.name AS service_name
+              r.at_client_home, r.client_address, r.client_id, s.name AS service_name
        FROM reservations r JOIN services s ON s.id = r.service_id WHERE r.group_id = $1 ORDER BY r.start_time ASC`,
       [groupId],
     );
+
+    if (status === 'completed') {
+      const clientIds = [...new Set(rows.map((r) => r.client_id).filter((id): id is number => id !== null))];
+      for (const clientId of clientIds) {
+        await this.rewardsService.checkLoyaltyReward(clientId);
+      }
+    }
 
     if (rows.length > 0) {
       const [primary] = rows;

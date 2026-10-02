@@ -22,6 +22,11 @@ const DEFAULT_TRAVEL_FEE_TIERS: TravelFeeTierDto[] = [
   { minKm: 0, feeCents: 0 },
   { minKm: 10, feeCents: 200 },
 ];
+// Same fallback rationale as above, mirroring the AddClientAccountsAndLoyalty
+// migration's defaults.
+const DEFAULT_LOYALTY_VISITS_REQUIRED = 5;
+const DEFAULT_LOYALTY_DISCOUNT_PERCENT = 15;
+const DEFAULT_BIRTHDAY_DISCOUNT_PERCENT = 10;
 
 @Injectable()
 export class SettingsService {
@@ -134,6 +139,62 @@ export class SettingsService {
       .into(AppSettings)
       .values({ id: 1, travel_fee_fallback_cents: cents })
       .orUpdate(['travel_fee_fallback_cents'], ['id'])
+      .execute();
+  }
+
+  // How many *completed* reservations linked to the same Client earn a
+  // one-time loyalty promo code — see RewardsService.checkLoyaltyReward.
+  async getLoyaltyVisitsRequired(): Promise<number> {
+    const row = await this.dataSource.getRepository(AppSettings).findOne({ where: { id: 1 } });
+    return row?.loyalty_visits_required ?? DEFAULT_LOYALTY_VISITS_REQUIRED;
+  }
+
+  async setLoyaltyVisitsRequired(visits: number): Promise<void> {
+    if (!Number.isInteger(visits) || visits < 1 || visits > 100) {
+      throw new BadRequestException('Le nombre de passages doit être un entier entre 1 et 100.');
+    }
+    await this.dataSource
+      .createQueryBuilder()
+      .insert()
+      .into(AppSettings)
+      .values({ id: 1, loyalty_visits_required: visits })
+      .orUpdate(['loyalty_visits_required'], ['id'])
+      .execute();
+  }
+
+  async getLoyaltyDiscountPercent(): Promise<number> {
+    const row = await this.dataSource.getRepository(AppSettings).findOne({ where: { id: 1 } });
+    return row?.loyalty_discount_percent ?? DEFAULT_LOYALTY_DISCOUNT_PERCENT;
+  }
+
+  async setLoyaltyDiscountPercent(percent: number): Promise<void> {
+    if (!Number.isInteger(percent) || percent < 0 || percent > 100) {
+      throw new BadRequestException('Le pourcentage de fidélité doit être un entier entre 0 et 100.');
+    }
+    await this.dataSource
+      .createQueryBuilder()
+      .insert()
+      .into(AppSettings)
+      .values({ id: 1, loyalty_discount_percent: percent })
+      .orUpdate(['loyalty_discount_percent'], ['id'])
+      .execute();
+  }
+
+  async getBirthdayDiscountPercent(): Promise<number> {
+    const row = await this.dataSource.getRepository(AppSettings).findOne({ where: { id: 1 } });
+    return row?.birthday_discount_percent ?? DEFAULT_BIRTHDAY_DISCOUNT_PERCENT;
+  }
+
+  async setBirthdayDiscountPercent(percent: number): Promise<void> {
+    if (!Number.isInteger(percent) || percent < 0 || percent > 100) {
+      throw new BadRequestException("Le pourcentage d'anniversaire doit être un entier entre 0 et 100.");
+    }
+    await this.dataSource
+      .createQueryBuilder()
+      .insert()
+      .into(AppSettings)
+      .values({ id: 1, birthday_discount_percent: percent })
+      .orUpdate(['birthday_discount_percent'], ['id'])
       .execute();
   }
 

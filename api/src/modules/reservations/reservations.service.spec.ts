@@ -10,6 +10,7 @@ import { SettingsService } from '../settings/settings.service';
 import { DistanceService } from '../distance/distance.service';
 import { PushService } from '../push/push.service';
 import { PromotionsService } from '../promotions/promotions.service';
+import { RewardsService } from '../rewards/rewards.service';
 
 describe('ReservationsService', () => {
   let service: ReservationsService;
@@ -28,6 +29,7 @@ describe('ReservationsService', () => {
   let distanceService: { estimate: jest.Mock };
   let pushService: { notifyAdmins: jest.Mock };
   let promotionsService: { findSelectable: jest.Mock; findByCode: jest.Mock; findAll: jest.Mock };
+  let rewardsService: { checkLoyaltyReward: jest.Mock };
 
   const HAIRCUT = { id: 1, name: 'Coupe Femme', duration_minutes: 45, active: true };
   const MANICURE = { id: 7, name: 'Manucure Classique', duration_minutes: 30, active: true };
@@ -81,6 +83,7 @@ describe('ReservationsService', () => {
       findByCode: jest.fn().mockRejectedValue(new NotFoundException('Code promo invalide ou expiré.')),
       findAll: jest.fn().mockResolvedValue([]),
     };
+    rewardsService = { checkLoyaltyReward: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -94,6 +97,7 @@ describe('ReservationsService', () => {
         { provide: DistanceService, useValue: distanceService },
         { provide: PushService, useValue: pushService },
         { provide: PromotionsService, useValue: promotionsService },
+        { provide: RewardsService, useValue: rewardsService },
       ],
     }).compile();
 
@@ -772,6 +776,78 @@ describe('ReservationsService', () => {
         cancellationReason: 'Empêchement de dernière minute',
       }),
     );
+  });
+
+  describe('updateStatus / updateGroupStatus — loyalty trigger', () => {
+    function mockSingleRow(clientId: number | null) {
+      reservationRepo.update.mockResolvedValue({ affected: 1 });
+      dataSource.query.mockResolvedValue([
+        {
+          group_id: null,
+          client_name: 'Jeanne',
+          client_email: 'jeanne@example.com',
+          reservation_date: '2026-01-01',
+          start_time: '10:00',
+          end_time: '10:45',
+          at_client_home: false,
+          client_address: null,
+          client_id: clientId,
+          service_name: 'Coupe Femme',
+        },
+      ]);
+    }
+
+    it('updateStatus checks for a loyalty reward when a linked reservation becomes completed', async () => {
+      mockSingleRow(42);
+      await service.updateStatus(1, 'completed');
+      expect(rewardsService.checkLoyaltyReward).toHaveBeenCalledWith(42);
+    });
+
+    it('updateStatus does not check loyalty for an unlinked reservation', async () => {
+      mockSingleRow(null);
+      await service.updateStatus(1, 'completed');
+      expect(rewardsService.checkLoyaltyReward).not.toHaveBeenCalled();
+    });
+
+    it('updateStatus does not check loyalty for a status other than completed', async () => {
+      mockSingleRow(42);
+      await service.updateStatus(1, 'confirmed');
+      expect(rewardsService.checkLoyaltyReward).not.toHaveBeenCalled();
+    });
+
+    it('updateGroupStatus checks loyalty for every distinct linked client in the group', async () => {
+      reservationRepo.update.mockResolvedValue({ affected: 2 });
+      dataSource.query.mockResolvedValue([
+        {
+          client_name: 'Jeanne',
+          client_email: 'jeanne@example.com',
+          reservation_date: '2026-01-01',
+          start_time: '10:00',
+          end_time: '10:45',
+          at_client_home: false,
+          client_address: null,
+          client_id: 42,
+          service_name: 'Coupe Femme',
+        },
+        {
+          client_name: 'Alice',
+          client_email: 'alice@example.com',
+          reservation_date: '2026-01-01',
+          start_time: '10:45',
+          end_time: '11:15',
+          at_client_home: false,
+          client_address: null,
+          client_id: 43,
+          service_name: 'Manucure Classique',
+        },
+      ]);
+
+      await service.updateGroupStatus('group-1', 'completed');
+
+      expect(rewardsService.checkLoyaltyReward).toHaveBeenCalledWith(42);
+      expect(rewardsService.checkLoyaltyReward).toHaveBeenCalledWith(43);
+      expect(rewardsService.checkLoyaltyReward).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('promotions', () => {
