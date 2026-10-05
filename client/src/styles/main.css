@@ -858,6 +858,19 @@ textarea.field-invalid {
 .footer-links, .social-links { list-style: none; display: flex; gap: 18px; padding: 0; margin: 0; }
 .footer-links a, .social-links a { color: var(--color-bg); text-decoration: none; font-size: 0.9rem; }
 .footer-links a:hover, .social-links a:hover { color: var(--color-accent); }
+.footer-links-legal a { font-size: 0.8rem; color: #cdbfb2; }
+.footer-links-legal a:hover { color: var(--color-accent); }
+
+/* Pages de texte (mentions légales, CGV, confidentialité) — colonne de
+   largeur lisible plutôt que la pleine largeur du container, comme pour
+   n'importe quel long texte à lire en continu. */
+.legal-content {
+  max-width: 680px;
+  margin: 0 auto;
+}
+.legal-content h2 { margin-top: 32px; font-size: 1.15rem; }
+.legal-content ul { padding-left: 20px; }
+.legal-content li { margin-bottom: 6px; }
 
 /* Toast */
 .toast {

@@ -373,15 +373,26 @@ une fois les autres jobs au vert). La **prod** est volontairement différée
 **Architecture** : un seul VPS pas cher (~4€/mois, OVH VPS Value ou
 Hetzner CX22 par exemple), un conteneur **Caddy** en reverse proxy
 (HTTPS automatique via Let's Encrypt, `deploy/Caddyfile`) qui route
-`staging.<domaine>` vers le port `127.0.0.1:3001`, sur lequel écoute la
+`preprod.<domaine>` vers le port `127.0.0.1:3001`, sur lequel écoute la
 stack applicative (`docker-compose.yml` + l'override
 `docker-compose.staging.yml`). Le service `web` staging n'est jamais
 exposé directement — seul Caddy écoute sur 80/443.
 
+> Avant que la prod n'existe, cet environnement vivait sur
+> `staging.<domaine>` — en l'absence d'un vrai site de prod, ce lien a pu
+> être partagé/favorisé par de vraies clientes. Il vit maintenant sur
+> `preprod.<domaine>`, et `staging.<domaine>` redirige en permanence vers
+> la prod (voir plus bas) pour ne perdre personne.
+
 ### Checklist de mise en place (une fois, manuelle)
 
-1. Acheter un nom de domaine, puis créer un enregistrement DNS **A**
-   `staging.<domaine>` → IP du VPS.
+1. Acheter un nom de domaine, puis créer les enregistrements DNS **A**
+   suivants, tous vers l'IP du VPS : `preprod.<domaine>` (environnement
+   de pré-release continu), `<domaine>` racine (prod, à faire pointer
+   dès maintenant même si le premier déploiement prod attend encore le
+   SIRET — Caddy ne sert simplement rien tant que rien n'a été déployé
+   derrière), et `staging.<domaine>` s'il n'existe pas déjà (sert
+   uniquement à la redirection permanente vers la prod).
 2. Commander un VPS (Ubuntu 22.04/24.04).
 3. Sur le VPS : installer Docker + le plugin Compose, créer un utilisateur
    dédié au déploiement, générer une paire de clés SSH réservée à GitHub
@@ -410,19 +421,74 @@ exposé directement — seul Caddy écoute sur 80/443.
    docker compose exec -T web npm run migration:run
    ```
 8. **Important** : une fois le site accessible publiquement sur
-   `https://staging.<domaine>`, connectez-vous en admin
+   `https://preprod.<domaine>`, connectez-vous en admin
    (`carla` / `Carla0303!`, le compte pré-créé par `init.sql`) et changez
    immédiatement le mot de passe — ce compte par défaut n'est prévu que
    pour un premier lancement local.
 
-### Prod, plus tard
+### Prod
 
-Même mécanisme, dupliqué : un `docker-compose.prod.yml` (port
-`127.0.0.1:3000`), un bloc `{$DOMAIN} { reverse_proxy 127.0.0.1:3000 }` à
-décommenter dans `deploy/Caddyfile`, un `deploy-production.yml` équivalent
-à `deploy-staging.yml` avec des secrets `PRODUCTION_SSH_*`, et un nouveau
-job dans `main.yml`. Peut tourner sur le même VPS que le staging (deux
-stacks Compose distinctes, un seul Caddy) ou sur un second VPS séparé.
+Même mécanisme que staging, dupliqué : `docker-compose.prod.yml` (port
+`127.0.0.1:3000`), le bloc `{$DOMAIN} { reverse_proxy 127.0.0.1:3000 }`
+dans `deploy/Caddyfile`, et `.github/workflows/deploy-production.yml`.
+Peut tourner sur le même VPS que le staging (deux stacks Compose
+distinctes, un seul Caddy) ou sur un second VPS séparé.
+
+Différence volontaire avec staging : **la prod ne se déploie jamais
+automatiquement**. `deploy-production.yml` n'est pas appelé depuis
+`main.yml` — c'est un workflow à part, déclenché à la main depuis l'onglet
+Actions de GitHub ("Run workflow"), avec un champ à taper
+(`deploy`) en confirmation. Rien ne pousse de l'argent réel en prod sans
+une action humaine déliberée.
+
+### Checklist "jour J" — quand Carla a son SIRET
+
+Tout le code (paiement Stripe, pages légales) est prêt et testé en
+amont ; ce qui reste est de la configuration, pas du développement :
+
+1. **Stripe** : passer le compte Stripe en mode live (SIRET + IBAN
+   demandés par Stripe à cette étape), récupérer les clés `sk_live_...`
+   et créer un endpoint webhook live dans le dashboard Stripe pointant
+   vers `https://<domaine>/api/stripe/webhook` (le secret `whsec_...`
+   correspondant est différent de celui de test).
+2. Sur le VPS, dans `api/.env` (celui que le conteneur `web` charge),
+   remplacer les clés `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` de test
+   par les clés live, et configurer un vrai `SMTP_*` si pas déjà fait
+   (sans ça, les emails de confirmation ne partent jamais réellement).
+3. Compléter les pages légales (voir section dédiée) avec le SIRET une
+   fois reçu — `api/src/site-config.ts`, champ `siret`.
+4. Dans les secrets GitHub Actions, ajouter `PRODUCTION_SSH_HOST`,
+   `PRODUCTION_SSH_USER`, `PRODUCTION_SSH_KEY`, et dans le `.env` racine
+   du VPS, `PROD_JWT_SECRET` (généré séparément du `JWT_SECRET` de
+   staging — voir `.env.example`).
+5. Vérifier que l'enregistrement DNS **A** `<domaine>` (racine) existe
+   bien et pointe vers l'IP du VPS (voir la checklist de mise en place
+   ci-dessus — à faire en avance, pas besoin d'attendre ce jour précis).
+6. Fusionner cette branche (`feature/launch-prep`, et `feature/stripe-payments`
+   une fois les deux ensemble) sur `main`. Sur le VPS, relancer Caddy pour
+   qu'il prenne en compte le nouveau `deploy/Caddyfile` (bascule de
+   l'environnement de pré-release vers `preprod.<domaine>` et activation
+   de la redirection permanente `staging.<domaine>` → prod) — Caddy est
+   une stack à part, pas redéployée par `Deploy Production` :
+   ```bash
+   cd /opt/carla-creation
+   git pull
+   docker compose --env-file .env -f deploy/docker-compose.caddy.yml up -d
+   ```
+7. Déclencher manuellement le workflow **Deploy Production** depuis
+   l'onglet Actions de GitHub.
+8. Se connecter en admin sur le site de prod et changer immédiatement le
+   mot de passe par défaut.
+
+## Pages légales
+
+`client/src/pages/MentionsLegales.jsx`, `CGV.jsx` et
+`Confidentialite.jsx` — texte standard pour une micro-entreprise de
+services à la personne, à relire par Carla (ou un professionnel) avant
+la mise en ligne réelle ; ce n'est pas un conseil juridique. Le SIRET et
+la forme juridique sont centralisés dans `api/src/site-config.ts` (champs
+`siret`, `legalForm`) — un seul endroit à éditer une fois le SIRET
+obtenu, les trois pages le lisent depuis `GET /api/site-config`.
 
 ## Emails de confirmation
 

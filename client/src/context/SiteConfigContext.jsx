@@ -8,6 +8,8 @@ const FALLBACK = {
   sitePhoneHref: '',
   siteEmail: '',
   sitePublicArea: '',
+  legalForm: '',
+  siret: '',
   siteUrl: '',
   travelFeeFallbackCents: 200,
   travelFreeRadiusKm: 10,

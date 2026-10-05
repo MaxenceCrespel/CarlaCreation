@@ -6,6 +6,9 @@ import Gallery from './pages/Gallery';
 import Booking from './pages/Booking';
 import ManageReservation from './pages/ManageReservation';
 import Contact from './pages/Contact';
+import MentionsLegales from './pages/MentionsLegales';
+import CGV from './pages/CGV';
+import Confidentialite from './pages/Confidentialite';
 import NotFound from './pages/NotFound';
 import AdminApp from './pages/admin/AdminApp';
 
@@ -20,6 +23,9 @@ export default function App() {
         <Route path="/booking" element={<Booking />} />
         <Route path="/mon-rendez-vous/:groupId" element={<ManageReservation />} />
         <Route path="/contact" element={<Contact />} />
+        <Route path="/mentions-legales" element={<MentionsLegales />} />
+        <Route path="/cgv" element={<CGV />} />
+        <Route path="/confidentialite" element={<Confidentialite />} />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>

@@ -1,0 +1,20 @@
+# Override de production — s'utilise EN PLUS de docker-compose.yml, jamais
+# seul:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Même mécanisme que docker-compose.staging.yml (voir ce fichier), pour le
+# domaine racine plutôt que staging.<domaine>, sur le port dédié
+# 127.0.0.1:3000 (voir deploy/Caddyfile) — jamais exposé directement, seul
+# Caddy écoute sur 80/443.
+#
+# PROD_JWT_SECRET est volontairement distinct du JWT_SECRET de staging
+# (même VPS, même .env racine) : une session admin volée en staging ne doit
+# jamais pouvoir se faire passer pour une session de prod, ou inversement.
+services:
+  web:
+    ports: !override
+      - '127.0.0.1:3000:3000'
+    environment:
+      JWT_SECRET: ${PROD_JWT_SECRET}
+      COOKIE_SECURE: "true"
+      PUBLIC_ORIGIN: https://${DOMAIN}

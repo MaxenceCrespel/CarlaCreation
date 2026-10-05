@@ -17,6 +17,11 @@ export default function Footer() {
           <li><Link to="/booking">Réserver</Link></li>
           <li><Link to="/contact">Contact</Link></li>
         </ul>
+        <ul className="footer-links footer-links-legal">
+          <li><Link to="/mentions-legales">Mentions légales</Link></li>
+          <li><Link to="/cgv">CGV</Link></li>
+          <li><Link to="/confidentialite">Confidentialité</Link></li>
+        </ul>
         <ul className="social-links" aria-label="Réseaux sociaux">
           <li><a href="#" aria-label="Instagram">Instagram</a></li>
           <li><a href="#" aria-label="Facebook">Facebook</a></li>

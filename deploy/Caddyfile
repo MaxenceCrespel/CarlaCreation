@@ -4,14 +4,30 @@
 #
 # {$DOMAIN} est lu depuis le .env racine du VPS (voir .env.example).
 
-staging.{$DOMAIN} {
+# L'environnement de pré-release continue (déployé à chaque push sur main,
+# voir Deploy-Staging) vit maintenant ici, PAS sur staging.{$DOMAIN} — voir
+# le bloc de redirection plus bas pour pourquoi.
+preprod.{$DOMAIN} {
 	reverse_proxy 127.0.0.1:3001
 }
 
-# Prod — décommenter quand le VPS de prod (ou cette même machine) est prêt.
-# La stack applicative correspondante (docker-compose.prod.yml) écoutera
-# alors sur 127.0.0.1:3000, comme le service `web` par défaut.
-#
-# {$DOMAIN} {
-# 	reverse_proxy 127.0.0.1:3000
-# }
+# Prod — la stack applicative correspondante (docker-compose.prod.yml)
+# écoute sur 127.0.0.1:3000. Le déploiement lui-même reste manuel (voir
+# .github/workflows/deploy-production.yml) ; ce bloc Caddy, lui, peut être
+# actif en permanence sans risque — Caddy ne fait que router du trafic vers
+# un port sur lequel rien n'écoute avant le premier déploiement prod.
+{$DOMAIN} {
+	reverse_proxy 127.0.0.1:3000
+}
+
+# staging.{$DOMAIN} a servi de site "public" de fait avant que la prod
+# n'existe — redirection permanente pour que les clientes qui ont ce lien
+# en favori (ou Google, s'il a été indexé) retombent sur le vrai site.
+# Ce fichier entier (y compris le déplacement de preprod ci-dessus) n'est
+# déployé sur le VPS que le jour du lancement prod, en même temps que le
+# reste de cette branche — jusque-là, le Caddyfile réellement en place sur
+# le VPS reste l'ancienne version, staging.{$DOMAIN} continue de servir
+# l'environnement de pré-release normalement.
+staging.{$DOMAIN} {
+	redir https://{$DOMAIN}{uri} permanent
+}
