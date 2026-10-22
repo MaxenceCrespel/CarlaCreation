@@ -10,7 +10,7 @@ import { formatPrice } from '../../utils/format';
 function reservationTotalCents(r) {
   const addonsSum = (r.addons ?? []).reduce((sum, a) => sum + a.extra_price_cents, 0);
   const fullPrice = r.price_cents + addonsSum;
-  return Math.round(fullPrice * (1 - (r.discount_percent ?? 0) / 100));
+  return Math.max(0, Math.round(fullPrice * (1 - (r.discount_percent ?? 0) / 100)) - (r.discount_cents ?? 0));
 }
 
 const STATUS_LABELS = {
@@ -870,9 +870,9 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdateStatus, onEdi
               {r.addons && r.addons.length > 0 && (
                 <div className="row-addons">+ {r.addons.map((a) => `${a.name} (${formatPrice(a.extra_price_cents)})`).join(', ')}</div>
               )}
-              {r.discount_percent > 0 ? (
+              {r.discount_percent > 0 || r.discount_cents > 0 ? (
                 <div className="row-addons">
-                  -{r.discount_percent}% {r.promotion_label ? `(${r.promotion_label})` : '(code promo)'} → total {formatPrice(reservationTotalCents(r))}
+                  {r.discount_cents > 0 ? `-${formatPrice(r.discount_cents)}` : `-${r.discount_percent}%`} {r.promotion_label ? `(${r.promotion_label})` : '(code promo)'} → total {formatPrice(reservationTotalCents(r))}
                 </div>
               ) : (
                 <div className="row-addons">Total : {formatPrice(reservationTotalCents(r))}</div>
@@ -1311,9 +1311,9 @@ export default function ReservationsTab() {
                           {r.addons && r.addons.length > 0 && (
                             <div className="row-addons">+ {r.addons.map((a) => `${a.name} (${formatPrice(a.extra_price_cents)})`).join(', ')}</div>
                           )}
-                          {r.discount_percent > 0 ? (
+                          {r.discount_percent > 0 || r.discount_cents > 0 ? (
                             <div className="row-addons">
-                              -{r.discount_percent}% {r.promotion_label ? `(${r.promotion_label})` : '(code promo)'} → {formatPrice(reservationTotalCents(r))}
+                              {r.discount_cents > 0 ? `-${formatPrice(r.discount_cents)}` : `-${r.discount_percent}%`} {r.promotion_label ? `(${r.promotion_label})` : '(code promo)'} → {formatPrice(reservationTotalCents(r))}
                             </div>
                           ) : (
                             <div className="row-addons">Total : {formatPrice(reservationTotalCents(r))}</div>

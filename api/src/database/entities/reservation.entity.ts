@@ -94,6 +94,11 @@ export class Reservation {
   @Column({ type: 'int', default: 0 })
   discount_percent: number;
 
+  // Fixed euro reward (loyalty points redeemed through a personal code),
+  // taken off after discount_percent. 0 when none.
+  @Column({ type: 'int', default: 0 })
+  discount_cents: number;
+
   // Only ever set by the client's own self-cancellation flow (see
   // ReservationsService.cancelByGroupId) — never by the admin cancelling a
   // reservation herself, since she already knows why.

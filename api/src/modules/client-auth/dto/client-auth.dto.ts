@@ -1,4 +1,4 @@
-import { IsDateString, IsEmail, IsOptional, IsString, Length } from 'class-validator';
+import { IsDateString, IsEmail, IsInt, IsOptional, IsString, Length } from 'class-validator';
 
 export class SignupDto {
   @IsString()
@@ -22,6 +22,17 @@ export class SignupDto {
   @IsOptional()
   @IsDateString()
   birthdate?: string;
+
+  // A sponsor's code (see Client.referral_code). Optional.
+  @IsOptional()
+  @IsString()
+  @Length(0, 20)
+  referralCode?: string;
+}
+
+export class RedeemRewardDto {
+  @IsInt()
+  points!: number;
 }
 
 export class ClientLoginDto {

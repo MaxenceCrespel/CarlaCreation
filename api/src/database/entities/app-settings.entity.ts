@@ -23,15 +23,6 @@ export class AppSettings {
   @Column({ default: 48 })
   refund_deadline_hours: number;
 
-  // Number of *completed* reservations (see Reservation.status) linked to
-  // the same Client (see RewardsService.checkLoyaltyReward) that earns a
-  // one-time promo code — every multiple of this, not just the first.
-  @Column({ default: 5 })
-  loyalty_visits_required: number;
-
-  @Column({ default: 15 })
-  loyalty_discount_percent: number;
-
   @Column({ default: 10 })
   birthday_discount_percent: number;
 }

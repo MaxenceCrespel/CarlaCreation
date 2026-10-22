@@ -24,7 +24,8 @@ export class ClientAuthGuard implements CanActivate {
     }
 
     try {
-      const payload = this.jwtService.verify<ClientPayload>(token);
+      const payload = this.jwtService.verify<ClientPayload & { role?: string }>(token);
+      if (payload.role !== 'client') throw new Error('not a client token');
       req.client = { sub: payload.sub, email: payload.email };
       return true;
     } catch {
@@ -41,7 +42,8 @@ export function extractOptionalClient(req: Request, jwtService: JwtService): Cli
   const token = req.cookies?.client_session;
   if (!token) return null;
   try {
-    const payload = jwtService.verify<ClientPayload>(token);
+    const payload = jwtService.verify<ClientPayload & { role?: string }>(token);
+    if (payload.role !== 'client') return null;
     return { sub: payload.sub, email: payload.email };
   } catch {
     return null;

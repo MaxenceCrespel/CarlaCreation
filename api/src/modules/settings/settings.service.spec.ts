@@ -218,37 +218,6 @@ describe('SettingsService — loyalty & birthday rewards', () => {
     return { values, orUpdate, execute };
   }
 
-  it('getLoyaltyVisitsRequired returns the stored value, defaulting to 5', async () => {
-    dataSource.getRepository.mockReturnValue({ findOne: jest.fn().mockResolvedValue({ id: 1, loyalty_visits_required: 8 }) });
-    await expect(service.getLoyaltyVisitsRequired()).resolves.toBe(8);
-
-    dataSource.getRepository.mockReturnValue({ findOne: jest.fn().mockResolvedValue(null) });
-    await expect(service.getLoyaltyVisitsRequired()).resolves.toBe(5);
-  });
-
-  it('setLoyaltyVisitsRequired rejects values outside 1-100', async () => {
-    await expect(service.setLoyaltyVisitsRequired(0)).rejects.toBeInstanceOf(BadRequestException);
-    await expect(service.setLoyaltyVisitsRequired(101)).rejects.toBeInstanceOf(BadRequestException);
-    await expect(service.setLoyaltyVisitsRequired(3.5)).rejects.toBeInstanceOf(BadRequestException);
-  });
-
-  it('setLoyaltyVisitsRequired upserts a valid value', async () => {
-    const { values, orUpdate } = mockUpsert();
-    await service.setLoyaltyVisitsRequired(8);
-    expect(values).toHaveBeenCalledWith({ id: 1, loyalty_visits_required: 8 });
-    expect(orUpdate).toHaveBeenCalledWith(['loyalty_visits_required'], ['id']);
-  });
-
-  it('getLoyaltyDiscountPercent returns the stored value, defaulting to 15', async () => {
-    dataSource.getRepository.mockReturnValue({ findOne: jest.fn().mockResolvedValue(null) });
-    await expect(service.getLoyaltyDiscountPercent()).resolves.toBe(15);
-  });
-
-  it('setLoyaltyDiscountPercent rejects values outside 0-100', async () => {
-    await expect(service.setLoyaltyDiscountPercent(-1)).rejects.toBeInstanceOf(BadRequestException);
-    await expect(service.setLoyaltyDiscountPercent(101)).rejects.toBeInstanceOf(BadRequestException);
-  });
-
   it('getBirthdayDiscountPercent returns the stored value, defaulting to 10', async () => {
     dataSource.getRepository.mockReturnValue({ findOne: jest.fn().mockResolvedValue(null) });
     await expect(service.getBirthdayDiscountPercent()).resolves.toBe(10);

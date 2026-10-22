@@ -10,6 +10,7 @@
 -- one-command bootstrap path for a brand new database (Docker, or a local
 -- Postgres you're setting up by hand).
 
+DROP TABLE IF EXISTS loyalty_points;
 DROP TABLE IF EXISTS payments;
 DROP TABLE IF EXISTS page_views;
 DROP TABLE IF EXISTS expenses;
@@ -52,13 +53,27 @@ CREATE TABLE
         notes TEXT NOT NULL DEFAULT '',
         password_hash TEXT,
         birthdate TEXT,
-        loyalty_reward_at_visits INTEGER,
+        referral_code TEXT UNIQUE,
+        referred_by_client_id INTEGER REFERENCES clients (id) ON DELETE SET NULL,
+        referral_rewarded_at TIMESTAMPTZ,
         birthday_reward_year INTEGER,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
 CREATE INDEX IF NOT EXISTS "IDX_clients_normalized_name" ON clients (normalized_name);
+
+CREATE TABLE
+    IF NOT EXISTS loyalty_points (
+        id SERIAL PRIMARY KEY,
+        client_id INTEGER NOT NULL REFERENCES clients (id) ON DELETE CASCADE,
+        points INTEGER NOT NULL,
+        reason TEXT NOT NULL,
+        dedupe_key TEXT UNIQUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+CREATE INDEX IF NOT EXISTS "IDX_loyalty_points_client_id" ON loyalty_points (client_id);
 
 CREATE TABLE
     IF NOT EXISTS push_subscriptions (
@@ -147,6 +162,10 @@ CREATE TABLE
         requires_code BOOLEAN NOT NULL DEFAULT false,
         code TEXT,
         active BOOLEAN NOT NULL DEFAULT true,
+        client_id INTEGER,
+        used_at TIMESTAMPTZ,
+        discount_cents INTEGER,
+        expires_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
@@ -175,6 +194,7 @@ CREATE TABLE
         client_id INTEGER REFERENCES clients (id) ON DELETE SET NULL,
         promotion_id INTEGER REFERENCES promotions (id) ON DELETE SET NULL,
         discount_percent INTEGER NOT NULL DEFAULT 0,
+        discount_cents INTEGER NOT NULL DEFAULT 0,
         cancellation_reason TEXT,
         paid_on_site BOOLEAN NOT NULL DEFAULT false,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -292,13 +312,11 @@ CREATE TABLE
         travel_buffer_minutes INTEGER NOT NULL DEFAULT 30,
         travel_fee_fallback_cents INTEGER NOT NULL DEFAULT 200,
         refund_deadline_hours INTEGER NOT NULL DEFAULT 48,
-        loyalty_visits_required INTEGER NOT NULL DEFAULT 5,
-        loyalty_discount_percent INTEGER NOT NULL DEFAULT 15,
         birthday_discount_percent INTEGER NOT NULL DEFAULT 10
     );
 
-INSERT INTO app_settings (id, travel_buffer_minutes, travel_fee_fallback_cents, refund_deadline_hours, loyalty_visits_required, loyalty_discount_percent, birthday_discount_percent)
-VALUES (1, 30, 200, 48, 5, 15, 10);
+INSERT INTO app_settings (id, travel_buffer_minutes, travel_fee_fallback_cents, refund_deadline_hours, birthday_discount_percent)
+VALUES (1, 30, 200, 48, 10);
 
 CREATE TABLE
     IF NOT EXISTS travel_fee_tiers (
@@ -381,7 +399,9 @@ VALUES
     (1786400000000, 'AddPageViews1786400000000'),
     (1786500000000, 'AddPayments1786500000000'),
     (1786600000000, 'AddAuthorizedAtAndOnSitePayment1786600000000'),
-    (1786700000000, 'AddClientAccountsAndLoyalty1786700000000');
+    (1786700000000, 'AddClientAccountsAndLoyalty1786700000000'),
+    (1786800000000, 'AddPromotionOwnerAndUsage1786800000000'),
+    (1786900000000, 'AddPointsLoyaltyAndReferral1786900000000');
 
 -- Admin account — username "carla", password "Carla0303!" (bcrypt, cost 12).
 -- Change this password after first login in a real deployment.

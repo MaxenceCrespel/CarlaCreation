@@ -16,10 +16,9 @@ export const siteConfig = {
   // Statut légal, affiché sur les mentions légales/CGV — à ajuster si
   // jamais elle change de statut (ex: passage en société).
   legalForm: 'Entreprise individuelle (micro-entreprise)',
-  // Vide tant qu'elle n'a pas encore son SIRET — les pages légales
-  // l'affichent alors comme "en cours d'immatriculation" plutôt que de
-  // montrer un champ vide ou un faux numéro. À compléter dès réception.
-  siret: '',
+  // Vide = les pages légales affichent "en cours d'immatriculation".
+  // NB : 9 chiffres = un SIREN ; un SIRET complet en compte 14 (SIREN + NIC).
+  siret: '109 692 541 00013',
   navLinks: [
     { href: '/', label: 'Accueil', key: 'home' },
     { href: '/services', label: 'Prestations', key: 'services' },

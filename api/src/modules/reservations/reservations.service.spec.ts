@@ -38,7 +38,7 @@ describe('ReservationsService', () => {
   let promotionsService: { findSelectable: jest.Mock; findByCode: jest.Mock; findAll: jest.Mock };
   let stripeService: { isEnabled: jest.Mock; createCheckoutSession: jest.Mock };
   let paymentsService: { findByGroupId: jest.Mock; createPending: jest.Mock; refund: jest.Mock; capture: jest.Mock; cancelAuthorization: jest.Mock };
-  let rewardsService: { checkLoyaltyReward: jest.Mock };
+  let rewardsService: { onReservationsCompleted: jest.Mock };
 
   const HAIRCUT = { id: 1, name: 'Coupe Femme', duration_minutes: 45, active: true };
   const MANICURE = { id: 7, name: 'Manucure Classique', duration_minutes: 30, active: true };
@@ -106,7 +106,7 @@ describe('ReservationsService', () => {
       capture: jest.fn(),
       cancelAuthorization: jest.fn(),
     };
-    rewardsService = { checkLoyaltyReward: jest.fn() };
+    rewardsService = { onReservationsCompleted: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -1006,8 +1006,8 @@ describe('ReservationsService', () => {
     });
   });
 
-  describe('updateStatus / updateGroupStatus — loyalty trigger', () => {
-    function mockSingleRow(clientId: number | null) {
+  describe('updateStatus / updateGroupStatus — points trigger', () => {
+    function mockSingleRow() {
       reservationRepo.update.mockResolvedValue({ affected: 1 });
       dataSource.query.mockResolvedValue([
         {
@@ -1019,62 +1019,32 @@ describe('ReservationsService', () => {
           end_time: '10:45',
           at_client_home: false,
           client_address: null,
-          client_id: clientId,
           service_name: 'Coupe Femme',
         },
       ]);
     }
 
-    it('updateStatus checks for a loyalty reward when a linked reservation becomes completed', async () => {
-      mockSingleRow(42);
+    it('updateStatus awards points when a reservation becomes completed', async () => {
+      mockSingleRow();
       await service.updateStatus(1, 'completed');
-      expect(rewardsService.checkLoyaltyReward).toHaveBeenCalledWith(42);
+      expect(rewardsService.onReservationsCompleted).toHaveBeenCalledWith([1]);
     });
 
-    it('updateStatus does not check loyalty for an unlinked reservation', async () => {
-      mockSingleRow(null);
-      await service.updateStatus(1, 'completed');
-      expect(rewardsService.checkLoyaltyReward).not.toHaveBeenCalled();
-    });
-
-    it('updateStatus does not check loyalty for a status other than completed', async () => {
-      mockSingleRow(42);
+    it('updateStatus does not award points for any other status', async () => {
+      mockSingleRow();
       await service.updateStatus(1, 'confirmed');
-      expect(rewardsService.checkLoyaltyReward).not.toHaveBeenCalled();
+      expect(rewardsService.onReservationsCompleted).not.toHaveBeenCalled();
     });
 
-    it('updateGroupStatus checks loyalty for every distinct linked client in the group', async () => {
+    it('updateGroupStatus awards points for every reservation of the group', async () => {
       reservationRepo.update.mockResolvedValue({ affected: 2 });
-      dataSource.query.mockResolvedValue([
-        {
-          client_name: 'Jeanne',
-          client_email: 'jeanne@example.com',
-          reservation_date: '2026-01-01',
-          start_time: '10:00',
-          end_time: '10:45',
-          at_client_home: false,
-          client_address: null,
-          client_id: 42,
-          service_name: 'Coupe Femme',
-        },
-        {
-          client_name: 'Alice',
-          client_email: 'alice@example.com',
-          reservation_date: '2026-01-01',
-          start_time: '10:45',
-          end_time: '11:15',
-          at_client_home: false,
-          client_address: null,
-          client_id: 43,
-          service_name: 'Manucure Classique',
-        },
-      ]);
+      dataSource.query.mockImplementation(async (sql: string) =>
+        sql.includes('SELECT id FROM reservations') ? [{ id: 10 }, { id: 11 }] : [{ client_name: 'Jeanne', client_email: 'j@e.com', reservation_date: '2026-01-01', start_time: '10:00', end_time: '10:45', at_client_home: false, client_address: null, service_name: 'Coupe Femme' }],
+      );
 
       await service.updateGroupStatus('group-1', 'completed');
 
-      expect(rewardsService.checkLoyaltyReward).toHaveBeenCalledWith(42);
-      expect(rewardsService.checkLoyaltyReward).toHaveBeenCalledWith(43);
-      expect(rewardsService.checkLoyaltyReward).toHaveBeenCalledTimes(2);
+      expect(rewardsService.onReservationsCompleted).toHaveBeenCalledWith([10, 11]);
     });
   });
 
@@ -1088,7 +1058,7 @@ describe('ReservationsService', () => {
         { name: 'Étudiante', serviceId: 1, addonIds: [], promotionId: 1 },
         { name: 'Sa mère', serviceId: 1, addonIds: [] },
       ];
-      const result = await (service as any).resolvePublicGuestDiscounts(guests, undefined);
+      const result = (await (service as any).resolvePublicGuestDiscounts(guests, undefined, null)).discounts;
       expect(result).toEqual([
         { promotionId: 1, discountPercent: 10 },
         { promotionId: null, discountPercent: 0 },
@@ -1098,7 +1068,7 @@ describe('ReservationsService', () => {
     it('resolvePublicGuestDiscounts rejects a promotionId not in the selectable list', async () => {
       promotionsService.findSelectable.mockResolvedValue([STUDENT_RATE]);
       const guests = [{ name: 'Test', serviceId: 1, addonIds: [], promotionId: 999 }];
-      await expect((service as any).resolvePublicGuestDiscounts(guests, undefined)).rejects.toBeInstanceOf(BadRequestException);
+      await expect((service as any).resolvePublicGuestDiscounts(guests, undefined, null)).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('resolvePublicGuestDiscounts applies a valid promo code to every guest without their own rate', async () => {
@@ -1108,7 +1078,7 @@ describe('ReservationsService', () => {
         { name: 'Alice', serviceId: 1, addonIds: [] },
         { name: 'Bob', serviceId: 1, addonIds: [] },
       ];
-      const result = await (service as any).resolvePublicGuestDiscounts(guests, 'bienvenue20');
+      const result = (await (service as any).resolvePublicGuestDiscounts(guests, 'bienvenue20', null)).discounts;
       expect(result).toEqual([
         { promotionId: 2, discountPercent: 20 },
         { promotionId: 2, discountPercent: 20 },
@@ -1122,7 +1092,7 @@ describe('ReservationsService', () => {
         { name: 'Étudiante', serviceId: 1, addonIds: [], promotionId: 1 },
         { name: 'Sa mère', serviceId: 1, addonIds: [] },
       ];
-      const result = await (service as any).resolvePublicGuestDiscounts(guests, 'bienvenue20');
+      const result = (await (service as any).resolvePublicGuestDiscounts(guests, 'bienvenue20', null)).discounts;
       expect(result).toEqual([
         { promotionId: 1, discountPercent: 10 }, // her own rate, not the code
         { promotionId: 2, discountPercent: 20 }, // the order-wide code
@@ -1132,7 +1102,7 @@ describe('ReservationsService', () => {
     it('resolvePublicGuestDiscounts gives no discount when neither a rate nor a code is given', async () => {
       promotionsService.findSelectable.mockResolvedValue([]);
       const guests = [{ name: 'Test', serviceId: 1, addonIds: [] }];
-      const result = await (service as any).resolvePublicGuestDiscounts(guests, undefined);
+      const result = (await (service as any).resolvePublicGuestDiscounts(guests, undefined, null)).discounts;
       expect(result).toEqual([{ promotionId: null, discountPercent: 0 }]);
     });
 

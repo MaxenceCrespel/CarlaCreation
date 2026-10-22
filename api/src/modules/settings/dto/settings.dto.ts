@@ -68,20 +68,6 @@ export class UpdateTravelFeeTiersDto {
   tiers!: TravelFeeTierDto[];
 }
 
-export class UpdateLoyaltyVisitsDto {
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  visits!: number;
-}
-
-export class UpdateLoyaltyDiscountDto {
-  @IsInt()
-  @Min(0)
-  @Max(100)
-  percent!: number;
-}
-
 export class UpdateBirthdayDiscountDto {
   @IsInt()
   @Min(0)

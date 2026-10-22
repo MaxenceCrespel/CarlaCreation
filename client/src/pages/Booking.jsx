@@ -305,7 +305,7 @@ export default function Booking() {
     setPromoCodeState('loading');
     try {
       const promo = await apiFetch(`/promotions/by-code/${encodeURIComponent(code)}`);
-      setAppliedPromoCode({ code, label: promo.label, discount_percent: promo.discount_percent });
+      setAppliedPromoCode({ code, label: promo.label, discount_percent: promo.discount_percent, discount_cents: promo.discount_cents ?? 0 });
       setPromoCodeState('valid');
     } catch {
       setAppliedPromoCode(null);
@@ -379,6 +379,7 @@ export default function Booking() {
           priceCents: priceFor(selectedService, selectedAddonIds),
           discountPercent: promo ? promo.discount_percent : codePercent,
           discountLabel: promo ? promo.label : appliedPromoCode?.label,
+          usesCode: !promo,
         };
       })(),
       ...guests.map((g) => {
@@ -389,10 +390,22 @@ export default function Booking() {
           priceCents: priceFor(svc, g.addonIds),
           discountPercent: promo ? promo.discount_percent : codePercent,
           discountLabel: promo ? promo.label : appliedPromoCode?.label,
+          usesCode: !promo,
         };
       }),
     ];
-    return rows.map((r) => ({ ...r, discountCents: Math.round(r.priceCents * (r.discountPercent / 100)) }));
+    // A fixed-euro code (loyalty reward) comes off the guests that took the
+    // code, in order, never below zero — same allocation as the backend.
+    let remainingFixed = appliedPromoCode?.discount_cents ?? 0;
+    return rows.map((r) => {
+      const percentCents = Math.round(r.priceCents * (r.discountPercent / 100));
+      let fixedCents = 0;
+      if (r.usesCode && remainingFixed > 0) {
+        fixedCents = Math.min(remainingFixed, r.priceCents - percentCents);
+        remainingFixed -= fixedCents;
+      }
+      return { ...r, discountCents: percentCents + fixedCents };
+    });
   }, [form.clientName, selectedService, selectedAddonIds, selectedPromotionId, guests, services, promotions, appliedPromoCode]);
   const discountCents = useMemo(() => pricedGuests.reduce((sum, g) => sum + g.discountCents, 0), [pricedGuests]);
   const finalPrice = totalPrice - discountCents;
@@ -1240,7 +1253,7 @@ export default function Booking() {
                     </button>
                   </div>
                   {promoCodeState === 'valid' && (
-                    <p className="form-feedback success">Code appliqué : {appliedPromoCode.label} (-{appliedPromoCode.discount_percent}%)</p>
+                    <p className="form-feedback success">Code appliqué : {appliedPromoCode.label} ({appliedPromoCode.discount_cents ? `-${formatPrice(appliedPromoCode.discount_cents)}` : `-${appliedPromoCode.discount_percent}%`})</p>
                   )}
                   {promoCodeState === 'invalid' && <p className="form-feedback error">Code promo invalide ou expiré.</p>}
                 </div>

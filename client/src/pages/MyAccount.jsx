@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import { useToast } from '../context/ToastContext';
 import { useSeo } from '../hooks/useSeo';
+import { formatPrice } from '../utils/format';
 
 const STATUS_LABELS = {
   pending: 'En attente',
@@ -24,14 +25,15 @@ function formatDateFr(dateStr) {
   return `${DAY_NAMES_FR[date.getDay()]} ${d} ${MONTH_NAMES_FR[m - 1]} ${y}`;
 }
 
-const EMPTY_SIGNUP = { name: '', email: '', phone: '', password: '', birthdate: '' };
+const EMPTY_SIGNUP = { name: '', email: '', phone: '', password: '', birthdate: '', referralCode: '' };
 const EMPTY_LOGIN = { email: '', password: '' };
 
 function LoginSignupForms({ onLoggedIn }) {
   const showToast = useToast();
-  const [mode, setMode] = useState('login'); // 'login' | 'signup'
+  const [mode, setMode] = useState(searchParams.get('parrain') ? 'signup' : 'login'); // 'login' | 'signup'
   const [loginForm, setLoginForm] = useState(EMPTY_LOGIN);
-  const [signupForm, setSignupForm] = useState(EMPTY_SIGNUP);
+  const [searchParams] = useSearchParams();
+  const [signupForm, setSignupForm] = useState({ ...EMPTY_SIGNUP, referralCode: (searchParams.get('parrain') || '').toUpperCase() });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
@@ -56,7 +58,7 @@ function LoginSignupForms({ onLoggedIn }) {
     try {
       await apiFetch('/client-auth/signup', {
         method: 'POST',
-        body: { ...signupForm, birthdate: signupForm.birthdate || undefined },
+        body: { ...signupForm, birthdate: signupForm.birthdate || undefined, referralCode: signupForm.referralCode.trim() || undefined },
       });
       showToast('Compte créé !', 'success');
       onLoggedIn();
@@ -158,10 +160,16 @@ function LoginSignupForms({ onLoggedIn }) {
               onChange={(e) => setSignupForm((f) => ({ ...f, password: e.target.value }))}
             />
           </div>
-          <p className="section-lead" style={{ fontSize: '0.85em' }}>
-            Un compte permet de suivre vos rendez-vous et de profiter de la carte de fidélité (une réduction tous les
-            quelques passages) et d'un code promo pour votre anniversaire.
-          </p>
+          <div className="form-row">
+            <label htmlFor="signup-referral">Code de parrainage (optionnel)</label>
+            <input
+              type="text"
+              id="signup-referral"
+              maxLength={20}
+              value={signupForm.referralCode}
+              onChange={(e) => setSignupForm((f) => ({ ...f, referralCode: e.target.value.toUpperCase() }))}
+            />
+          </div>
           {error && <p className="form-feedback error">{error}</p>}
           <button type="submit" className="btn btn-primary" disabled={submitting}>
             {submitting ? 'Création…' : 'Créer mon compte'}
@@ -218,8 +226,39 @@ function AccountDashboard({ profile, onUpdated }) {
     onUpdated();
   }
 
-  const { visitsCompleted, visitsRequired, visitsRemaining } = profile.loyalty;
-  const progressPercent = Math.round(((visitsRequired - visitsRemaining) / visitsRequired) * 100);
+  const { points, tiers, pointsToNextTier, nextTierPoints } = profile.loyalty;
+  // Equal spacing between steps (departure + each tier): the bar reaches a
+  // step exactly when the balance reaches it, filling proportionally to the
+  // points inside the current segment.
+  const stops = [0, ...tiers.map((t) => t.points)];
+  const lastIndex = stops.length - 1;
+  let segment = 0;
+  while (segment < lastIndex && points >= stops[segment + 1]) segment += 1;
+  const progress = segment >= lastIndex ? 1 : (segment + (points - stops[segment]) / (stops[segment + 1] - stops[segment])) / lastIndex;
+  const referralLink = `${window.location.origin}/mon-compte?parrain=${profile.referral.code}`;
+
+  async function redeem(tierPoints) {
+    if (!window.confirm(`Échanger ${tierPoints} points contre cette récompense ?`)) return;
+    setSaving(true);
+    try {
+      const res = await apiFetch('/client-auth/me/redeem', { method: 'POST', body: { points: tierPoints } });
+      showToast(`Code ${res.code} créé — il vous a aussi été envoyé par email.`, 'success');
+      onUpdated();
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function copyReferralLink() {
+    try {
+      await navigator.clipboard.writeText(referralLink);
+      showToast('Lien copié !', 'success');
+    } catch {
+      showToast(referralLink, 'info');
+    }
+  }
 
   return (
     <>
@@ -299,15 +338,80 @@ function AccountDashboard({ profile, onUpdated }) {
         )}
       </div>
 
-      <div className="card" style={{ marginTop: 16 }}>
-        <h2 style={{ marginTop: 0 }}>Carte de fidélité</h2>
-        <p className="section-lead">
-          {visitsCompleted} passage{visitsCompleted > 1 ? 's' : ''} effectué{visitsCompleted > 1 ? 's' : ''} — encore{' '}
-          <strong>{visitsRemaining}</strong> avant votre prochaine réduction (un code promo vous sera envoyé par email).
-        </p>
-        <div style={{ background: 'var(--color-bg-alt)', borderRadius: 8, height: 10, overflow: 'hidden' }}>
-          <div style={{ background: 'var(--color-accent)', height: '100%', width: `${progressPercent}%`, transition: 'width 0.3s' }} />
+      <div className="card loyalty-card" style={{ marginTop: 16 }}>
+        <div className="loyalty-hero">
+          <div>
+            <p className="loyalty-hero-eyebrow">Carte de fidélité</p>
+            <p className="loyalty-hero-points">
+              {points} <span>point{points > 1 ? 's' : ''}</span>
+            </p>
+          </div>
+          <p className="loyalty-hero-hint">
+            1 point tous les 4 € dépensés.
+            <br />
+            {nextTierPoints ? `Encore ${pointsToNextTier} point${pointsToNextTier > 1 ? 's' : ''} avant votre prochain cadeau.` : 'Vous avez atteint le palier maximum !'}
+          </p>
         </div>
+
+        <ol className="htl" style={{ '--p': progress }}>
+          <li className="htl-track" aria-hidden="true">
+            <span className="htl-fill" />
+          </li>
+          {stops.map((stop, i) => {
+            const tier = i === 0 ? null : tiers[i - 1];
+            const reached = points >= stop;
+            const seg = i === lastIndex ? 0 : Math.max(0, Math.min(1, (points - stop) / (stops[i + 1] - stop)));
+            return (
+              <li key={stop} className={`htl-step ${reached ? 'is-reached' : ''}`} style={{ '--seg': `${Math.round(seg * 100)}%` }}>
+                <span className="htl-dot">{reached ? '✓' : i}</span>
+                <div className="htl-label">
+                  {tier ? (
+                    <>
+                      <strong className="htl-reward">{formatPrice(tier.amountCents)} offerts</strong>
+                      <span className="htl-pts">{stop} points</span>
+                      {tier.affordable ? (
+                        <button type="button" className="btn btn-primary btn-sm htl-btn" disabled={saving} onClick={() => redeem(stop)}>
+                          Échanger
+                        </button>
+                      ) : (
+                        <span className="htl-missing">encore {stop - points} pt{stop - points > 1 ? 's' : ''}</span>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <strong className="htl-reward">Départ</strong>
+                      <span className="htl-pts">0 point</span>
+                    </>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
+
+      {profile.codes.length > 0 && (
+        <div className="card" style={{ marginTop: 16 }}>
+          <h2 style={{ marginTop: 0 }}>Mes codes</h2>
+          <p className="section-lead">À saisir dans le champ « code promo » de la réservation, une seule fois, depuis ce compte.</p>
+          {profile.codes.map((c) => (
+            <p key={c.code} style={{ margin: '4px 0' }}>
+              <strong style={{ letterSpacing: '0.05em' }}>{c.code}</strong> — {c.discount_cents ? `${formatPrice(c.discount_cents)} offerts` : `-${c.discount_percent}%`}
+              {c.expires_at ? ` (jusqu'au ${formatDateFr(c.expires_at.slice(0, 10))})` : ''}
+            </p>
+          ))}
+        </div>
+      )}
+
+      <div className="card" style={{ marginTop: 16 }}>
+        <h2 style={{ marginTop: 0 }}>Parrainage</h2>
+        <p className="section-lead">
+          Parrainez une amie : quand son premier rendez-vous est terminé, vous gagnez <strong>20 points</strong> et elle en gagne <strong>10</strong>.
+        </p>
+        <p>Votre code : <strong style={{ letterSpacing: '0.05em' }}>{profile.referral.code}</strong>
+          {profile.referral.validatedCount > 0 && ` — ${profile.referral.validatedCount} parrainage${profile.referral.validatedCount > 1 ? 's' : ''} validé${profile.referral.validatedCount > 1 ? 's' : ''}`}
+        </p>
+        <button type="button" className="btn btn-outline" onClick={copyReferralLink}>Copier mon lien de parrainage</button>
       </div>
 
       <div className="card" style={{ marginTop: 16 }}>

@@ -4,7 +4,8 @@ import { DataSource, Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { Client, normalizeClientName } from '../../database/entities/client.entity';
-import { SettingsService } from '../settings/settings.service';
+import { RewardsService } from '../rewards/rewards.service';
+import { REWARD_TIERS } from '../rewards/loyalty.constants';
 import { SignupDto, UpdateClientProfileDto } from './dto/client-auth.dto';
 
 // Same rationale as AuthService's DUMMY_HASH — keeps a login attempt's
@@ -26,7 +27,7 @@ export class ClientAuthService {
     @InjectRepository(Client) private readonly clientRepo: Repository<Client>,
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly jwtService: JwtService,
-    private readonly settingsService: SettingsService,
+    private readonly rewardsService: RewardsService,
   ) {}
 
   // A fiche can already exist for this email — created earlier by the
@@ -44,12 +45,25 @@ export class ClientAuthService {
 
     const passwordHash = bcrypt.hashSync(dto.password, 12);
 
+    // The referral only counts for someone genuinely new: a claimed fiche
+    // that already has completed visits is not "joining".
+    let sponsorId: number | null = null;
+    if (dto.referralCode?.trim()) {
+      const sponsor = await this.clientRepo.findOne({ where: { referral_code: dto.referralCode.trim().toUpperCase() } });
+      if (!sponsor) throw new BadRequestException('Code de parrainage invalide.');
+      const alreadyClient = client
+        ? Number((await this.dataSource.query(`SELECT COUNT(*)::int AS n FROM reservations WHERE client_id = $1 AND status = 'completed'`, [client.id]))[0].n) > 0
+        : false;
+      if (!alreadyClient && sponsor.id !== client?.id) sponsorId = sponsor.id;
+    }
+
     if (client) {
       client.name = dto.name.trim();
       client.normalized_name = normalizeClientName(dto.name);
       client.password_hash = passwordHash;
       if (dto.phone) client.phone = dto.phone.trim();
       if (dto.birthdate) client.birthdate = dto.birthdate;
+      if (sponsorId && !client.referred_by_client_id) client.referred_by_client_id = sponsorId;
     } else {
       client = this.clientRepo.create({
         name: dto.name.trim(),
@@ -58,6 +72,7 @@ export class ClientAuthService {
         phone: dto.phone?.trim() ?? '',
         password_hash: passwordHash,
         birthdate: dto.birthdate ?? null,
+        referred_by_client_id: sponsorId,
       });
     }
     await this.clientRepo.save(client);
@@ -82,6 +97,11 @@ export class ClientAuthService {
     const client = await this.clientRepo.findOne({ where: { id: clientId } });
     if (!client) throw new NotFoundException('Compte introuvable.');
 
+    if (!client.referral_code) {
+      client.referral_code = await this.generateReferralCode();
+      await this.clientRepo.save(client);
+    }
+
     const history: ReservationHistoryRow[] = await this.dataSource.query(
       `SELECT r.id, r.reservation_date, r.start_time, r.status, s.name AS service_name
        FROM reservations r JOIN services s ON s.id = r.service_id
@@ -89,13 +109,21 @@ export class ClientAuthService {
        ORDER BY r.reservation_date DESC, r.start_time DESC`,
       [clientId],
     );
-    const visitsCompleted = history.filter((h) => h.status === 'completed').length;
-    const visitsRequired = await this.settingsService.getLoyaltyVisitsRequired();
-    // How many more completed visits until the next reward — a remainder
-    // of 0 means either "brand new" (0 visits) or "just hit a milestone",
-    // both of which need a full fresh cycle of visitsRequired.
-    const remainder = visitsCompleted % visitsRequired;
-    const visitsRemaining = remainder === 0 ? visitsRequired : visitsRequired - remainder;
+    const points = await this.rewardsService.getBalance(clientId);
+    const nextTier = REWARD_TIERS.find((t) => t.points > points) ?? null;
+
+    // Personal codes (loyalty redemptions, birthday): shown so a code lost
+    // from an email can be found again.
+    const codes: { code: string; label: string; discount_percent: number; discount_cents: number | null; expires_at: Date | null; used_at: Date | null }[] =
+      await this.dataSource.query(
+        `SELECT code, label, discount_percent, discount_cents, expires_at, used_at FROM promotions
+         WHERE client_id = $1 AND active = true ORDER BY created_at DESC LIMIT 20`,
+        [clientId],
+      );
+    const [{ n }]: { n: number }[] = await this.dataSource.query(
+      `SELECT COUNT(*)::int AS n FROM clients WHERE referred_by_client_id = $1 AND referral_rewarded_at IS NOT NULL`,
+      [clientId],
+    );
 
     return {
       name: client.name,
@@ -103,8 +131,30 @@ export class ClientAuthService {
       phone: client.phone,
       birthdate: client.birthdate,
       history,
-      loyalty: { visitsCompleted, visitsRequired, visitsRemaining },
+      loyalty: {
+        points,
+        tiers: REWARD_TIERS.map((t) => ({ points: t.points, amountCents: t.amountCents, affordable: points >= t.points })),
+        pointsToNextTier: nextTier ? nextTier.points - points : 0,
+        nextTierPoints: nextTier?.points ?? null,
+      },
+      referral: { code: client.referral_code, validatedCount: n },
+      codes: codes.filter((c) => !c.used_at && (!c.expires_at || c.expires_at.getTime() > Date.now())),
     };
+  }
+
+  redeemReward(clientId: number, points: number) {
+    return this.rewardsService.redeem(clientId, points);
+  }
+
+  private async generateReferralCode(): Promise<string> {
+    // Same unambiguous alphabet as promo codes (no 0/O/1/I).
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      let code = '';
+      for (let i = 0; i < 6; i += 1) code += alphabet[Math.floor(Math.random() * alphabet.length)];
+      if (!(await this.clientRepo.findOne({ where: { referral_code: code } }))) return code;
+    }
+    throw new BadRequestException('Impossible de générer un code de parrainage, réessayez.');
   }
 
   async updateProfile(clientId: number, dto: UpdateClientProfileDto): Promise<{ token: string; client: Client }> {
@@ -130,6 +180,6 @@ export class ClientAuthService {
   }
 
   private issueToken(client: Client): string {
-    return this.jwtService.sign({ sub: client.id, email: client.email }, { expiresIn: '30d' });
+    return this.jwtService.sign({ sub: client.id, email: client.email, role: 'client' }, { expiresIn: '30d' });
   }
 }

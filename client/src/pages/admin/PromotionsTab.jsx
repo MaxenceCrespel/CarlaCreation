@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
+import { formatPrice } from '../../utils/format';
 
 const EMPTY_FORM = { label: '', discountPercent: '10', requiresCode: false, code: '' };
 
@@ -114,6 +115,26 @@ function PromotionRow({ promotion, onSave, onRemove }) {
     } catch (err) {
       showToast(err.message, 'error');
     }
+  }
+
+  // Personal reward codes (loyalty redemptions, birthday) are issued
+  // automatically to one client — shown read-only, only (de)activation.
+  if (promotion.client_id != null) {
+    const amount = promotion.discount_cents ? formatPrice(promotion.discount_cents) : `${promotion.discount_percent}%`;
+    const state = promotion.used_at ? 'Utilisé' : promotion.expires_at && new Date(promotion.expires_at) < new Date() ? 'Expiré' : promotion.active ? 'Active' : 'Désactivée';
+    return (
+      <tr>
+        <td data-label="Libellé">{promotion.label}</td>
+        <td data-label="Type">Code personnel (usage unique)</td>
+        <td data-label="Code">{promotion.code}</td>
+        <td data-label="Réduction">{amount}</td>
+        <td data-label="Statut"><span className={`status-badge ${state === 'Active' ? 'status-confirmed' : 'status-cancelled'}`}>{state}</span></td>
+        <td className="row-actions">
+          <button type="button" onClick={toggleActive}>{promotion.active ? 'Désactiver' : 'Activer'}</button>
+          <button type="button" className="danger" onClick={() => onRemove(promotion.id)}>Supprimer</button>
+        </td>
+      </tr>
+    );
   }
 
   return (

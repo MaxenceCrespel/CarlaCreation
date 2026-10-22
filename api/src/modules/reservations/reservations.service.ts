@@ -61,6 +61,7 @@ interface ReservationWithServiceRow {
   client_id: number | null;
   promotion_id: number | null;
   discount_percent: number;
+  discount_cents: number;
   promotion_label: string | null;
   cancellation_reason: string | null;
   paid_on_site: boolean;
@@ -130,17 +131,18 @@ export class ReservationsService {
 
   // The dropdown-selectable "tarif spécial" catalogue + the order-wide
   // promo code (if any) — combined per-guest by resolveGuestDiscounts.
-  private async resolvePublicGuestDiscounts(guests: Guest[], promoCode: string | undefined) {
+  private async resolvePublicGuestDiscounts(guests: Guest[], promoCode: string | undefined, clientId: number | null) {
     const [selectable, codePromotion] = await Promise.all([
       this.promotionsService.findSelectable(),
-      promoCode ? this.promotionsService.findByCode(promoCode) : Promise.resolve(null),
+      promoCode ? this.promotionsService.findByCode(promoCode, clientId) : Promise.resolve(null),
     ]);
-    return this.resolveGuestDiscounts(
+    const discounts = this.resolveGuestDiscounts(
       guests,
       selectable,
       codePromotion ? { id: codePromotion.id, discountPercent: codePromotion.discount_percent } : null,
       'Tarif spécial invalide.',
     );
+    return { discounts, codePromotion };
   }
 
   // Admin picker: any active promotion (rate or code) can be applied
@@ -313,7 +315,28 @@ export class ReservationsService {
       throw new ConflictException("Ce créneau n'est plus disponible. Merci d'en choisir un autre.");
     }
 
-    const guestDiscounts = await this.resolvePublicGuestDiscounts(guests, dto.promoCode);
+    const { discounts, codePromotion } = await this.resolvePublicGuestDiscounts(guests, dto.promoCode, loggedInClientId);
+
+    // A fixed-euro reward code (loyalty points) comes off the guests that
+    // took the code (not the ones with their own rate), in order, never
+    // below zero for any one prestation.
+    let remainingFixedCents = codePromotion?.discount_cents ?? 0;
+    const guestDiscounts = discounts.map((d, i) => {
+      if (remainingFixedCents <= 0 || d.promotionId !== codePromotion?.id) return { ...d, discountCents: 0 };
+      const addonsCents = addonsPerGuest[i].reduce((a, addon) => a + addon.extra_price_cents, 0);
+      const net = Math.round((services[i].price_cents + addonsCents) * (1 - d.discountPercent / 100));
+      const applied = Math.min(remainingFixedCents, net);
+      remainingFixedCents -= applied;
+      return { ...d, discountCents: applied };
+    });
+
+    // A personal reward code is consumed by the booking that uses it —
+    // claimed atomically before inserting, released if the insert fails.
+    const consumedPersonalCodeId =
+      codePromotion?.client_id != null && guestDiscounts.some((d) => d.promotionId === codePromotion.id) ? codePromotion.id : null;
+    if (consumedPersonalCodeId !== null && !(await this.promotionsService.markUsed(consumedPersonalCodeId))) {
+      throw new NotFoundException('Ce code promo a déjà été utilisé.');
+    }
 
     // Same per-guest discount math as the admin reservations list — see
     // resolveGuestDiscounts — summed across the group, plus the shared
@@ -322,23 +345,29 @@ export class ReservationsService {
       services.reduce((sum, s, i) => {
         const addonsCents = addonsPerGuest[i].reduce((a, addon) => a + addon.extra_price_cents, 0);
         const fullPrice = s.price_cents + addonsCents;
-        return sum + Math.round(fullPrice * (1 - guestDiscounts[i].discountPercent / 100));
+        return sum + Math.round(fullPrice * (1 - guestDiscounts[i].discountPercent / 100)) - guestDiscounts[i].discountCents;
       }, 0) + (travel.feeCents ?? 0);
 
-    const result = await this.insertGroup(guests, services, addonsPerGuest, guestDiscounts, {
-      date: dto.date,
-      startTime: dto.startTime,
-      clientEmail: dto.clientEmail,
-      clientPhone: dto.clientPhone,
-      notes: dto.notes || '',
-      status: 'pending',
-      atClientHome,
-      clientAddress,
-      travelDistanceKm: travel.distanceKm,
-      travelDurationMinutes: travel.durationMinutes,
-      travelFeeCents: travel.feeCents,
-      primaryClientId: loggedInClientId,
-    });
+    let result: Awaited<ReturnType<typeof this.insertGroup>>;
+    try {
+      result = await this.insertGroup(guests, services, addonsPerGuest, guestDiscounts, {
+        date: dto.date,
+        startTime: dto.startTime,
+        clientEmail: dto.clientEmail,
+        clientPhone: dto.clientPhone,
+        notes: dto.notes || '',
+        status: 'pending',
+        atClientHome,
+        clientAddress,
+        travelDistanceKm: travel.distanceKm,
+        travelDurationMinutes: travel.durationMinutes,
+        travelFeeCents: travel.feeCents,
+        primaryClientId: loggedInClientId,
+      });
+    } catch (err) {
+      if (consumedPersonalCodeId !== null) await this.promotionsService.releaseUse(consumedPersonalCodeId);
+      throw err;
+    }
 
     // Stripe is entirely optional (config.STRIPE_ENABLED) — when it isn't
     // configured, the client chose "payer sur place", or the checkout
@@ -543,7 +572,7 @@ export class ReservationsService {
     // Aligned with `guests` by index — each guest's own resolved discount,
     // see resolveGuestDiscounts (never a single value blanket-applied to
     // the whole group).
-    guestDiscounts: { promotionId: number | null; discountPercent: number }[],
+    guestDiscounts: { promotionId: number | null; discountPercent: number; discountCents?: number }[],
     common: {
       date: string;
       startTime: string;
@@ -595,6 +624,7 @@ export class ReservationsService {
           travel_fee_cents: common.travelFeeCents,
           promotion_id: guestDiscounts[i].promotionId,
           discount_percent: guestDiscounts[i].discountPercent,
+          discount_cents: guestDiscounts[i].discountCents ?? 0,
           client_id: i === 0 ? common.primaryClientId : null,
         });
         const reservationId = Number(inserted.identifiers[0].id);
@@ -642,7 +672,7 @@ export class ReservationsService {
               r.start_time, r.end_time, r.notes, r.status, r.created_at, r.service_id, r.client_id,
               r.at_client_home, r.client_address,
               r.travel_distance_km::float8 AS travel_distance_km, r.travel_duration_minutes, r.travel_fee_cents,
-              r.promotion_id, r.discount_percent, p.label AS promotion_label, r.cancellation_reason, r.paid_on_site,
+              r.promotion_id, r.discount_percent, r.discount_cents, p.label AS promotion_label, r.cancellation_reason, r.paid_on_site,
               s.name AS service_name, s.price_cents
        FROM reservations r
        JOIN services s ON s.id = r.service_id
@@ -763,10 +793,14 @@ export class ReservationsService {
 
     let promotionId = existing.promotion_id;
     let discountPercent = existing.discount_percent;
+    let discountCents = existing.discount_cents;
     if (dto.promotionId !== undefined) {
       const promotion = await this.resolveAdminPromotion(dto.promotionId);
       promotionId = promotion?.id ?? null;
       discountPercent = promotion?.discountPercent ?? 0;
+      // A fixed-euro reward belongs to the code it came from: changing the
+      // promotion drops it.
+      discountCents = 0;
     }
 
     await this.dataSource.transaction(async (manager) => {
@@ -786,6 +820,7 @@ export class ReservationsService {
         travel_fee_cents: travel.feeCents,
         promotion_id: promotionId,
         discount_percent: discountPercent,
+        discount_cents: discountCents,
       });
 
       if (dto.addonIds !== undefined) {
@@ -850,10 +885,9 @@ export class ReservationsService {
       service_name: string;
       at_client_home: boolean;
       client_address: string | null;
-      client_id: number | null;
     }[] = await this.dataSource.query(
       `SELECT r.group_id, r.client_name, r.client_email, r.reservation_date, r.start_time, r.end_time,
-              r.at_client_home, r.client_address, r.client_id, s.name AS service_name
+              r.at_client_home, r.client_address, s.name AS service_name
        FROM reservations r JOIN services s ON s.id = r.service_id WHERE r.id = $1`,
       [id],
     );
@@ -861,8 +895,8 @@ export class ReservationsService {
     if (row?.group_id) {
       await this.settlePaymentForGroupStatus(row.group_id, status);
     }
-    if (status === 'completed' && row?.client_id) {
-      await this.rewardsService.checkLoyaltyReward(row.client_id);
+    if (status === 'completed') {
+      await this.rewardsService.onReservationsCompleted([id]);
     }
     if (row) {
       await this.mailService.sendStatusUpdate({
@@ -970,19 +1004,16 @@ export class ReservationsService {
       service_name: string;
       at_client_home: boolean;
       client_address: string | null;
-      client_id: number | null;
     }[] = await this.dataSource.query(
       `SELECT r.client_name, r.client_email, r.reservation_date, r.start_time, r.end_time,
-              r.at_client_home, r.client_address, r.client_id, s.name AS service_name
+              r.at_client_home, r.client_address, s.name AS service_name
        FROM reservations r JOIN services s ON s.id = r.service_id WHERE r.group_id = $1 ORDER BY r.start_time ASC`,
       [groupId],
     );
 
     if (status === 'completed') {
-      const clientIds = [...new Set(rows.map((r) => r.client_id).filter((id): id is number => id !== null))];
-      for (const clientId of clientIds) {
-        await this.rewardsService.checkLoyaltyReward(clientId);
-      }
+      const ids: { id: number }[] = await this.dataSource.query(`SELECT id FROM reservations WHERE group_id = $1`, [groupId]);
+      await this.rewardsService.onReservationsCompleted(ids.map((r) => r.id));
     }
 
     if (rows.length > 0) {

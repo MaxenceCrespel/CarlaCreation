@@ -90,7 +90,7 @@ describe('PromotionsService', () => {
     it('creates an active, code-required promotion with a freshly generated code', async () => {
       repo.findOne.mockResolvedValue(null); // no collision
 
-      const promotion = await service.createAutoCode('Fidélité — Jeanne (5e passage)', 15);
+      const promotion = await service.createAutoCode('Fidélité — Jeanne (5e passage)', 15, 7);
 
       expect(repo.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -98,6 +98,7 @@ describe('PromotionsService', () => {
           discount_percent: 15,
           requires_code: true,
           active: true,
+          client_id: 7,
           code: expect.stringMatching(/^[A-Z0-9]{8}$/),
         }),
       );
@@ -107,9 +108,55 @@ describe('PromotionsService', () => {
     it('retries when a generated code collides with an existing one', async () => {
       repo.findOne.mockResolvedValueOnce({ id: 1 }).mockResolvedValueOnce(null);
 
-      await service.createAutoCode('Anniversaire — Paul (2026)', 10);
+      await service.createAutoCode('Anniversaire — Paul (2026)', 10, 8);
 
       expect(repo.findOne).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('personal reward codes', () => {
+    const PERSONAL = { id: 5, code: 'ABCD2345', active: true, requires_code: true, client_id: 7, used_at: null };
+
+    it('accepts a personal code for its owner', async () => {
+      repo.findOne.mockResolvedValue(PERSONAL);
+      await expect(service.findByCode('abcd2345', 7)).resolves.toBe(PERSONAL);
+    });
+
+    it('rejects it for another account or a guest, without revealing it exists', async () => {
+      repo.findOne.mockResolvedValue(PERSONAL);
+      await expect(service.findByCode('ABCD2345', 8)).rejects.toThrow('Code promo invalide ou expiré.');
+      await expect(service.findByCode('ABCD2345', null)).rejects.toThrow('Code promo invalide ou expiré.');
+    });
+
+    it('rejects an already used code', async () => {
+      repo.findOne.mockResolvedValue({ ...PERSONAL, used_at: new Date() });
+      await expect(service.findByCode('ABCD2345', 7)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('leaves admin-created (ownerless) codes usable by anyone', async () => {
+      const shared = { id: 1, code: 'BIENVENUE10', active: true, requires_code: true, client_id: null, used_at: null };
+      repo.findOne.mockResolvedValue(shared);
+      await expect(service.findByCode('BIENVENUE10', null)).resolves.toBe(shared);
+    });
+  });
+
+  describe('expiry and euro codes', () => {
+    it('rejects an expired code', async () => {
+      repo.findOne.mockResolvedValue({ id: 5, code: 'ANNIV123', active: true, requires_code: true, client_id: 7, used_at: null, expires_at: new Date(Date.now() - 1000) });
+      await expect(service.findByCode('ANNIV123', 7)).rejects.toThrow('Ce code promo a expiré.');
+    });
+
+    it('accepts a code that has not expired yet', async () => {
+      const promo = { id: 5, code: 'ANNIV123', active: true, requires_code: true, client_id: 7, used_at: null, expires_at: new Date(Date.now() + 86_400_000) };
+      repo.findOne.mockResolvedValue(promo);
+      await expect(service.findByCode('ANNIV123', 7)).resolves.toBe(promo);
+    });
+
+    it('createAutoCode stores a fixed euro amount with 0 %, and an expiry', async () => {
+      repo.findOne.mockResolvedValue(null);
+      const expiresAt = new Date();
+      await service.createAutoCode('Fidélité', 0, 7, { amountCents: 500, expiresAt });
+      expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({ discount_percent: 0, discount_cents: 500, expires_at: expiresAt }));
     });
   });
 });

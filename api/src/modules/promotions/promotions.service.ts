@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { Promotion } from '../../database/entities/promotion.entity';
 import { CreatePromotionDto, UpdatePromotionDto } from './dto/promotion.dto';
 
@@ -33,37 +33,70 @@ export class PromotionsService {
     return this.promotionRepo.find({ where: { active: true, requires_code: false }, order: { label: 'ASC' } });
   }
 
-  async findByCode(code: string): Promise<Promotion> {
+  // clientId = the logged-in client, if any. A personal reward code
+  // (client_id set) is only valid for its owner, and only until used.
+  async findByCode(code: string, clientId: number | null = null): Promise<Promotion> {
     const promotion = await this.promotionRepo.findOne({ where: { code: normalizeCode(code), active: true, requires_code: true } });
-    if (!promotion) throw new NotFoundException('Code promo invalide ou expiré.');
+    // Same message for "not yours" as for "unknown": don't reveal that a
+    // personal code exists.
+    if (!promotion || (promotion.client_id != null && promotion.client_id !== clientId)) {
+      throw new NotFoundException('Code promo invalide ou expiré.');
+    }
+    if (promotion.used_at) throw new NotFoundException('Ce code promo a déjà été utilisé.');
+    if (promotion.expires_at && promotion.expires_at.getTime() < Date.now()) throw new NotFoundException('Ce code promo a expiré.');
     return promotion;
+  }
+
+  // Atomic claim: only one concurrent booking can win a single-use code.
+  async markUsed(id: number): Promise<boolean> {
+    const result = await this.promotionRepo
+      .createQueryBuilder()
+      .update(Promotion)
+      .set({ used_at: () => 'now()' })
+      .where('id = :id AND used_at IS NULL', { id })
+      .execute();
+    return (result.affected ?? 0) > 0;
+  }
+
+  async releaseUse(id: number): Promise<void> {
+    await this.promotionRepo.update(id, { used_at: null });
   }
 
   // Issues a fresh, randomly-generated one-time code for an automated
   // reward (loyalty milestone, birthday) — see RewardsService. Reuses the
   // exact same Promotion row/redemption path as an admin-created code
   // (findByCode above), so nothing about the booking flow needs to know
-  // these codes exist. Note: like every other promo code in this system,
-  // it stays active (reusable) until an admin deactivates it by hand —
-  // there's no built-in single-use enforcement.
-  async createAutoCode(label: string, discountPercent: number): Promise<Promotion> {
+  // these codes exist. Unlike admin codes, they are single-use and tied
+  // to their owner via client_id/used_at (enforced in findByCode).
+  async createAutoCode(
+    label: string,
+    discountPercent: number,
+    clientId: number,
+    // amountCents: fixed euro reward instead of a percentage; manager: run
+    // inside the caller's transaction (points redemption).
+    opts: { amountCents?: number; expiresAt?: Date; manager?: EntityManager } = {},
+  ): Promise<Promotion> {
+    const repo = opts.manager ? opts.manager.getRepository(Promotion) : this.promotionRepo;
     let code: string;
     let attempts = 0;
     do {
       code = generateRandomCode();
       attempts += 1;
-      const existing = await this.promotionRepo.findOne({ where: { code } });
+      const existing = await repo.findOne({ where: { code } });
       if (!existing) break;
     } while (attempts < 5);
 
-    const promotion = this.promotionRepo.create({
+    const promotion = repo.create({
       label,
-      discount_percent: discountPercent,
+      discount_percent: opts.amountCents ? 0 : discountPercent,
+      discount_cents: opts.amountCents ?? null,
+      expires_at: opts.expiresAt ?? null,
       requires_code: true,
       code,
       active: true,
+      client_id: clientId,
     });
-    return this.promotionRepo.save(promotion);
+    return repo.save(promotion);
   }
 
   async create(dto: CreatePromotionDto): Promise<Promotion> {

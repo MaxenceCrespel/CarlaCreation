@@ -5,20 +5,20 @@ import { ConflictException, NotFoundException, UnauthorizedException } from '@ne
 import * as bcrypt from 'bcryptjs';
 import { ClientAuthService } from './client-auth.service';
 import { Client } from '../../database/entities/client.entity';
-import { SettingsService } from '../settings/settings.service';
+import { RewardsService } from '../rewards/rewards.service';
 
 describe('ClientAuthService', () => {
   let service: ClientAuthService;
   let clientRepo: { findOne: jest.Mock; create: jest.Mock; save: jest.Mock };
   let dataSource: { query: jest.Mock };
   let jwtService: { sign: jest.Mock };
-  let settingsService: { getLoyaltyVisitsRequired: jest.Mock };
+  let rewardsService: { getBalance: jest.Mock; redeem: jest.Mock };
 
   beforeEach(async () => {
     clientRepo = { findOne: jest.fn(), create: jest.fn((v) => v), save: jest.fn((v) => Promise.resolve({ id: 1, ...v })) };
     dataSource = { query: jest.fn().mockResolvedValue([]) };
     jwtService = { sign: jest.fn().mockReturnValue('signed.jwt.token') };
-    settingsService = { getLoyaltyVisitsRequired: jest.fn().mockResolvedValue(5) };
+    rewardsService = { getBalance: jest.fn().mockResolvedValue(0), redeem: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -26,7 +26,7 @@ describe('ClientAuthService', () => {
         { provide: getRepositoryToken(Client), useValue: clientRepo },
         { provide: getDataSourceToken(), useValue: dataSource },
         { provide: JwtService, useValue: jwtService },
-        { provide: SettingsService, useValue: settingsService },
+        { provide: RewardsService, useValue: rewardsService },
       ],
     }).compile();
 
@@ -100,26 +100,57 @@ describe('ClientAuthService', () => {
       await expect(service.getProfile(999)).rejects.toBeInstanceOf(NotFoundException);
     });
 
-    it('computes loyalty progress from the completed-visit history', async () => {
-      clientRepo.findOne.mockResolvedValue({ id: 1, name: 'Jeanne', email: 'jeanne@example.com', phone: '', birthdate: null });
-      dataSource.query.mockResolvedValue([
-        { id: 1, status: 'completed' },
-        { id: 2, status: 'completed' },
-        { id: 3, status: 'cancelled' },
-      ]);
+    it('exposes the points balance, reward tiers and the next tier to reach', async () => {
+      clientRepo.findOne.mockResolvedValue({ id: 1, name: 'Jeanne', email: 'j@e.com', phone: '', birthdate: null, referral_code: 'ABC234' });
+      rewardsService.getBalance.mockResolvedValue(60);
+      dataSource.query.mockImplementation(async (sql: string) => (sql.includes('COUNT(*)') ? [{ n: 0 }] : []));
 
       const profile = await service.getProfile(1);
 
-      expect(profile.loyalty).toEqual({ visitsCompleted: 2, visitsRequired: 5, visitsRemaining: 3 });
+      expect(profile.loyalty.points).toBe(60);
+      expect(profile.loyalty.nextTierPoints).toBe(100);
+      expect(profile.loyalty.pointsToNextTier).toBe(40);
+      expect(profile.loyalty.tiers.map((t) => [t.points, t.affordable])).toEqual([[50, true], [100, false], [150, false], [250, false]]);
+      expect(profile.referral.code).toBe('ABC234');
     });
 
-    it('reports a full fresh cycle remaining right after hitting a milestone', async () => {
-      clientRepo.findOne.mockResolvedValue({ id: 1, name: 'Jeanne', email: 'jeanne@example.com', phone: '', birthdate: null });
-      dataSource.query.mockResolvedValue(Array.from({ length: 5 }, (_, i) => ({ id: i, status: 'completed' })));
+    it('generates a referral code the first time the profile is loaded', async () => {
+      const client = { id: 1, name: 'Jeanne', email: 'j@e.com', phone: '', birthdate: null, referral_code: null };
+      clientRepo.findOne.mockImplementation(async ({ where }: { where: { id?: number } }) => (where.id ? client : null));
+      dataSource.query.mockImplementation(async (sql: string) => (sql.includes('COUNT(*)') ? [{ n: 0 }] : []));
 
       const profile = await service.getProfile(1);
 
-      expect(profile.loyalty).toEqual({ visitsCompleted: 5, visitsRequired: 5, visitsRemaining: 5 });
+      expect(profile.referral.code).toMatch(/^[A-Z2-9]{6}$/);
+      expect(clientRepo.save).toHaveBeenCalledWith(expect.objectContaining({ referral_code: profile.referral.code }));
+    });
+  });
+
+  describe('signup referral', () => {
+    it('links a new account to its sponsor', async () => {
+      clientRepo.findOne.mockImplementation(async ({ where }: { where: { email?: string; referral_code?: string } }) =>
+        where.referral_code ? { id: 9 } : null,
+      );
+
+      await service.signup({ name: 'Nouvelle', email: 'n@e.com', password: 'motdepasse123', referralCode: ' abc234 ' });
+
+      expect(clientRepo.create).toHaveBeenCalledWith(expect.objectContaining({ referred_by_client_id: 9 }));
+    });
+
+    it('rejects an unknown referral code', async () => {
+      clientRepo.findOne.mockResolvedValue(null);
+      await expect(service.signup({ name: 'N', email: 'n@e.com', password: 'motdepasse123', referralCode: 'NOPE' })).rejects.toThrow('Code de parrainage invalide.');
+    });
+
+    it('ignores the referral for an existing fiche that already has completed visits', async () => {
+      clientRepo.findOne.mockImplementation(async ({ where }: { where: { email?: string; referral_code?: string } }) =>
+        where.referral_code ? { id: 9 } : { id: 3, name: 'Old', email: 'o@e.com', password_hash: null, phone: '' },
+      );
+      dataSource.query.mockResolvedValue([{ n: 2 }]);
+
+      await service.signup({ name: 'Old', email: 'o@e.com', password: 'motdepasse123', referralCode: 'ABC234' });
+
+      expect(clientRepo.save).toHaveBeenCalledWith(expect.not.objectContaining({ referred_by_client_id: 9 }));
     });
   });
 

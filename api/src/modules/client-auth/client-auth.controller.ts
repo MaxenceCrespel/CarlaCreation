@@ -5,7 +5,7 @@ import { config } from '../../config';
 import { CsrfGuard } from '../../common/csrf';
 import { ClientAuthGuard, ClientPayload } from '../../common/client-auth.guard';
 import { ClientAuthService } from './client-auth.service';
-import { ClientLoginDto, SignupDto, UpdateClientProfileDto } from './dto/client-auth.dto';
+import { ClientLoginDto, RedeemRewardDto, SignupDto, UpdateClientProfileDto } from './dto/client-auth.dto';
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
@@ -53,6 +53,14 @@ export class ClientAuthController {
   @Get('me')
   me(@Req() req: Request & { client?: ClientPayload }) {
     return this.clientAuthService.getProfile(req.client!.sub);
+  }
+
+  @Throttle({ default: { limit: 10, ttl: 900_000 } })
+  @UseGuards(ClientAuthGuard, CsrfGuard)
+  @Post('me/redeem')
+  @HttpCode(200)
+  async redeem(@Req() req: Request & { client?: ClientPayload }, @Body() dto: RedeemRewardDto) {
+    return { success: true, ...(await this.clientAuthService.redeemReward(req.client!.sub, dto.points)) };
   }
 
   @Throttle({ default: { limit: 10, ttl: 900_000 } })

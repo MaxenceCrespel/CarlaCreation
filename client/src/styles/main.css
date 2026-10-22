@@ -1962,3 +1962,37 @@ textarea.field-invalid {
 
   .day-editor-times { grid-template-columns: 1fr; max-width: none; }
 }
+
+/* Carte de fidélité (Mon compte) */
+.loyalty-card { padding: 0; overflow: hidden; }
+.loyalty-hero { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; padding: 22px 24px; background: linear-gradient(135deg, var(--color-accent-dark), var(--color-accent)); color: var(--color-white); }
+.loyalty-hero-eyebrow { margin: 0 0 4px; font-size: 0.8rem; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.85; }
+.loyalty-hero-points { margin: 0; font-size: 3rem; font-weight: 700; line-height: 1; }
+.loyalty-hero-points span { font-size: 1.1rem; font-weight: 500; opacity: 0.9; }
+.loyalty-hero-hint { margin: 0; font-size: 0.9rem; opacity: 0.95; max-width: 260px; }
+
+.htl { --p: 0; list-style: none; margin: 0; padding: 36px 20px 30px; position: relative; display: grid; grid-template-columns: repeat(5, 1fr); }
+.htl-track { position: absolute; top: 54px; left: calc(20px + 10%); right: calc(20px + 10%); height: 6px; margin-top: -3px; background: var(--color-bg-alt); border-radius: 999px; }
+.htl-fill { display: block; height: 100%; width: calc(var(--p) * 100%); background: linear-gradient(90deg, var(--color-accent-dark), var(--color-accent)); border-radius: 999px; transition: width 0.4s; }
+.htl-step { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px; }
+.htl-dot { width: 38px; height: 38px; border-radius: 50%; box-sizing: border-box; display: flex; align-items: center; justify-content: center; background: var(--color-white); border: 3px solid var(--color-bg-alt); color: var(--color-muted); font-weight: 700; font-size: 0.95rem; z-index: 1; }
+.htl-step.is-reached .htl-dot { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-white); box-shadow: 0 0 0 5px rgba(184, 115, 90, 0.18); }
+.htl-label { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.htl-reward { font-size: 1rem; line-height: 1.2; }
+.htl-pts { font-size: 0.8rem; color: var(--color-muted); }
+.htl-missing { font-size: 0.78rem; color: var(--color-muted); margin-top: 4px; }
+.htl-btn { margin-top: 6px; }
+
+@media (max-width: 600px) {
+  .loyalty-hero { padding: 18px 18px; }
+  .htl { grid-template-columns: 1fr; row-gap: 22px; padding: 24px 18px 22px; }
+  .htl-track { display: none; }
+  .htl-step { flex-direction: row; align-items: flex-start; text-align: left; gap: 16px; min-height: 38px; }
+  /* Vertical connector from this step's dot down to the next one, filled
+     proportionally to the points inside this segment. */
+  .htl-step:not(:last-child)::after { content: ''; position: absolute; left: 16px; top: 19px; bottom: -41px; width: 6px; border-radius: 999px; background: linear-gradient(to bottom, var(--color-accent) var(--seg), var(--color-bg-alt) var(--seg)); }
+  .htl-label { align-items: flex-start; flex: 1; min-height: 38px; justify-content: center; }
+  .htl-label:has(.htl-btn) { display: grid; grid-template-columns: 1fr auto; column-gap: 12px; align-items: center; }
+  .htl-label:has(.htl-btn) .htl-reward, .htl-label:has(.htl-btn) .htl-pts { grid-column: 1; }
+  .htl-label:has(.htl-btn) .htl-btn { grid-column: 2; grid-row: 1 / span 2; margin: 0; }
+}

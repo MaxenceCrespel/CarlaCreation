@@ -392,23 +392,17 @@ function PaymentSettingsCard() {
   );
 }
 
-// Loyalty (every N completed visits linked to a Client) + birthday reward
-// percentages — see api/src/modules/rewards. Both auto-issue a one-time
-// promo code and email it; nothing here needs the booking flow to change.
+// Birthday gift percentage — see api/src/modules/rewards. The loyalty
+// points scale (1 pt / 4 €, 50/100/150/250 pts tiers) and the referral
+// bonuses are fixed in code (rewards/loyalty.constants.ts), not editable here.
 function LoyaltySettingsCard() {
   const showToast = useToast();
-  const [visitsRequired, setVisitsRequired] = useState(null);
-  const [loyaltyDiscountPercent, setLoyaltyDiscountPercent] = useState(null);
   const [birthdayDiscountPercent, setBirthdayDiscountPercent] = useState(null);
   const [saving, setSaving] = useState(false);
 
   function load() {
     apiFetch('/admin/settings/loyalty')
-      .then((data) => {
-        setVisitsRequired(data.visitsRequired.toString());
-        setLoyaltyDiscountPercent(data.loyaltyDiscountPercent.toString());
-        setBirthdayDiscountPercent(data.birthdayDiscountPercent.toString());
-      })
+      .then((data) => setBirthdayDiscountPercent(data.birthdayDiscountPercent.toString()))
       .catch(() => showToast('Impossible de charger les réglages de fidélité.', 'error'));
   }
 
@@ -418,12 +412,8 @@ function LoyaltySettingsCard() {
     e.preventDefault();
     setSaving(true);
     try {
-      await Promise.all([
-        apiFetch('/admin/settings/loyalty/visits-required', { method: 'PUT', body: { visits: Number(visitsRequired) } }),
-        apiFetch('/admin/settings/loyalty/discount-percent', { method: 'PUT', body: { percent: Number(loyaltyDiscountPercent) } }),
-        apiFetch('/admin/settings/loyalty/birthday-discount-percent', { method: 'PUT', body: { percent: Number(birthdayDiscountPercent) } }),
-      ]);
-      showToast('Réglages de fidélité mis à jour.', 'success');
+      await apiFetch('/admin/settings/loyalty/birthday-discount-percent', { method: 'PUT', body: { percent: Number(birthdayDiscountPercent) } });
+      showToast('Réglage mis à jour.', 'success');
       load();
     } catch (err) {
       showToast(err.message, 'error');
@@ -432,46 +422,18 @@ function LoyaltySettingsCard() {
     }
   }
 
-  if (visitsRequired === null || loyaltyDiscountPercent === null || birthdayDiscountPercent === null) {
+  if (birthdayDiscountPercent === null) {
     return <p className="loading-text">Chargement…</p>;
   }
 
   return (
     <form className="travel-buffer-card" onSubmit={save}>
       <p className="section-lead">
-        Un code promo à usage unique est envoyé par email automatiquement : à la cliente qui atteint le nombre de
-        passages ci-dessous (renouvelé à chaque nouveau palier), et à chaque cliente pour son anniversaire (si sa
-        date de naissance est renseignée). Le code s'utilise ensuite normalement dans le champ "code promo" de la
-        réservation.
+        Carte de fidélité : 1 point par tranche de 4 € dépensés, crédité quand le rendez-vous est passé en « terminé ».
+        À 50, 100, 150 et 250 points, la cliente peut échanger ses points contre 5 €, 12 €, 20 € ou 35 € offerts
+        (code personnel à usage unique). Parrainage : 20 points pour la marraine et 10 pour la filleule, une fois le
+        premier rendez-vous de la filleule marqué « terminé ». Anniversaire : un code personnel valable 1 mois.
       </p>
-      <div className="form-row two-col">
-        <div>
-          <label htmlFor="loyalty-visits-required">Passages requis pour une réduction fidélité</label>
-          <input
-            type="number"
-            id="loyalty-visits-required"
-            min={1}
-            max={100}
-            step={1}
-            required
-            value={visitsRequired}
-            onChange={(e) => setVisitsRequired(e.target.value)}
-          />
-        </div>
-        <div>
-          <label htmlFor="loyalty-discount-percent">Réduction fidélité (%)</label>
-          <input
-            type="number"
-            id="loyalty-discount-percent"
-            min={0}
-            max={100}
-            step={5}
-            required
-            value={loyaltyDiscountPercent}
-            onChange={(e) => setLoyaltyDiscountPercent(e.target.value)}
-          />
-        </div>
-      </div>
       <div className="form-row">
         <label htmlFor="birthday-discount-percent">Réduction anniversaire (%)</label>
         <input

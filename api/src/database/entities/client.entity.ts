@@ -43,12 +43,19 @@ export class Client {
   @Column({ type: 'text', nullable: true })
   birthdate: string | null;
 
-  // The completed-visit count at which the last loyalty reward code was
-  // issued — compared against a fresh count each time, so reaching the
-  // same multiple twice (shouldn't happen, but) never double-issues. Null
-  // = never rewarded yet. See RewardsService.checkLoyaltyReward.
+  // Shareable code ("parrainage") — generated lazily the first time the
+  // client's account is loaded. See ClientAuthService.getProfile.
+  @Column({ type: 'text', nullable: true, unique: true })
+  referral_code: string | null;
+
+  // Set at signup when the client entered a sponsor's code. The points for
+  // both sides are only granted once this client's first reservation is
+  // marked completed by the admin (referral_rewarded_at then records it).
   @Column({ type: 'int', nullable: true })
-  loyalty_reward_at_visits: number | null;
+  referred_by_client_id: number | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  referral_rewarded_at: Date | null;
 
   // The calendar year a birthday reward was last issued — prevents
   // resending every day for the rest of the week the cron's lookahead
