@@ -115,7 +115,7 @@ function ClientDetail({ client, onClose, onUpdated, onDeleted }) {
   }
 
   async function remove() {
-    if (!window.confirm(`Supprimer définitivement la fiche de ${client.name} ? Ses rendez-vous resteront mais ne seront plus liés.`)) return;
+    if (!window.confirm(`Supprimer définitivement la fiche de ${client.name} ? Cette action est définitive : ses points, codes et données personnelles sont effacés, ses rendez-vous restent mais sont anonymisés (les factures émises sont conservées).`)) return;
     try {
       await apiFetch(`/admin/clients/${client.id}`, { method: 'DELETE' });
       onDeleted(client.id);
@@ -162,7 +162,7 @@ function ClientDetail({ client, onClose, onUpdated, onDeleted }) {
             </div>
 
             <div className="modal-actions">
-              <button type="button" className="danger" onClick={remove}>Supprimer la fiche</button>
+              <button type="button" className="btn btn-outline-danger" onClick={remove}>Supprimer la fiche</button>
               <button type="button" className="btn btn-primary" disabled={saving} onClick={save}>
                 {saving ? 'Enregistrement…' : 'Enregistrer'}
               </button>
@@ -174,11 +174,10 @@ function ClientDetail({ client, onClose, onUpdated, onDeleted }) {
                 <p className="loading-text">Aucun rendez-vous enregistré sur cette fiche.</p>
               ) : (
                 <div className="table-wrap" style={{ marginTop: 8 }}>
-                  <table className="admin-table">
+                  <table className="admin-table history-table">
                     <thead>
                       <tr>
                         <th>Date</th>
-                        <th>Heure</th>
                         <th>Prestation</th>
                         <th>Statut</th>
                       </tr>
@@ -186,8 +185,7 @@ function ClientDetail({ client, onClose, onUpdated, onDeleted }) {
                     <tbody>
                       {detail.history.map((h) => (
                         <tr key={h.id}>
-                          <td data-label="Date">{h.reservation_date}</td>
-                          <td data-label="Heure">{h.start_time}</td>
+                          <td data-label="Date">{h.reservation_date} · {h.start_time}</td>
                           <td data-label="Prestation">{h.service_name}</td>
                           <td data-label="Statut"><span className={`status-badge status-${h.status}`}>{STATUS_LABELS[h.status] || h.status}</span></td>
                         </tr>
@@ -279,7 +277,7 @@ export default function ClientsTab() {
 
       {!error && clients !== null && clients.length > 0 && (
         <div className="table-wrap">
-          <table className="admin-table">
+          <table className="admin-table clients-table">
             <thead>
               <tr>
                 <th>Nom</th>

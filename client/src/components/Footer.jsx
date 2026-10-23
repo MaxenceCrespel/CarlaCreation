@@ -23,8 +23,11 @@ export default function Footer() {
           <li><Link to="/confidentialite">Confidentialité</Link></li>
         </ul>
         <ul className="social-links" aria-label="Réseaux sociaux">
-          <li><a href="#" aria-label="Instagram">Instagram</a></li>
-          <li><a href="#" aria-label="Facebook">Facebook</a></li>
+          <li>
+            <a href="https://www.instagram.com/creationbycarla/" target="_blank" rel="noopener noreferrer" aria-label="Instagram">
+              Instagram
+            </a>
+          </li>
         </ul>
       </div>
     </footer>

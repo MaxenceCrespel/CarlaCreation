@@ -58,7 +58,6 @@ export default function ManageReservation() {
   const [showCancelForm, setShowCancelForm] = useState(false);
   const [cancelReasonSelect, setCancelReasonSelect] = useState('');
   const [cancelReasonDetails, setCancelReasonDetails] = useState('');
-  const [cancelError, setCancelError] = useState(null);
 
   useSeo({ title: 'Mon rendez-vous', path: `/mon-rendez-vous/${groupId}` });
 
@@ -71,16 +70,21 @@ export default function ManageReservation() {
 
   useEffect(load, [groupId]);
 
+  function closeCancelForm() {
+    setShowCancelForm(false);
+    setCancelReasonSelect('');
+    setCancelReasonDetails('');
+  }
+
   async function handleCancel(e) {
     e.preventDefault();
     if (!cancelReasonSelect) {
-      setCancelError('Merci de choisir un motif.');
+      showToast('Merci de choisir un motif.', 'error');
       return;
     }
     const details = cancelReasonDetails.trim();
     const reason = details ? `${cancelReasonSelect} — ${details}` : cancelReasonSelect;
     if (!window.confirm('Confirmez-vous l\'annulation de ce rendez-vous ?')) return;
-    setCancelError(null);
     setCancelling(true);
     try {
       await apiFetch(`/reservations/lookup/${groupId}/cancel`, { method: 'POST', body: { reason } });
@@ -109,7 +113,10 @@ export default function ManageReservation() {
                 ? 'Ce lien de rendez-vous est invalide ou a expiré.'
                 : `Erreur : ${error}`}
             </p>
-            <Link to="/booking" className="btn btn-primary">Prendre un nouveau rendez-vous</Link>
+            <div className="not-found-actions">
+              <Link to="/booking" className="btn btn-primary">Prendre un nouveau rendez-vous</Link>
+              <Link to="/contact" className="btn btn-outline">Contacter Carla</Link>
+            </div>
           </div>
         )}
 
@@ -134,6 +141,19 @@ export default function ManageReservation() {
                 {STATUS_LABELS[reservation.status] || reservation.status}
               </span>
             </p>
+            {['pending', 'confirmed', 'completed'].includes(reservation.status) && (
+              <ol className="track-steps" aria-label="Avancement du rendez-vous">
+                {[['pending', 'Réservé'], ['confirmed', 'Confirmé'], ['completed', 'Terminé']].map(([key, label], i) => {
+                  const order = ['pending', 'confirmed', 'completed'];
+                  return (
+                    <li key={key} className={order.indexOf(reservation.status) >= i ? 'is-done' : ''}>
+                      <span className="track-bar" />
+                      <span className="track-label">{label}</span>
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
             {reservation.payment && (
               <p>
                 <strong>Paiement en ligne ({formatPrice(reservation.payment.amountCents)}) :</strong>{' '}
@@ -177,55 +197,61 @@ export default function ManageReservation() {
             )}
 
             {(reservation.status === 'pending' || reservation.status === 'confirmed') && showCancelForm && (
-              <form onSubmit={handleCancel}>
-                <div className="form-row">
-                  <label htmlFor="cancel-reason-select">Motif de l'annulation</label>
-                  <select
-                    id="cancel-reason-select"
-                    value={cancelReasonSelect}
-                    onChange={(e) => {
-                      setCancelReasonSelect(e.target.value);
-                      if (cancelError) setCancelError(null);
-                    }}
-                  >
-                    <option value="">Choisissez un motif</option>
+              <div className="modal-overlay is-sheet" onClick={closeCancelForm}>
+                <form
+                  className="modal-card modal-sheet"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="cancel-title"
+                  onClick={(e) => e.stopPropagation()}
+                  onSubmit={handleCancel}
+                >
+                  <div className="sheet-handle" aria-hidden="true" />
+                  <h2 id="cancel-title">Annuler le rendez-vous ?</h2>
+                  <p>Le {formatDateFr(reservation.date)} · le créneau sera libéré pour quelqu'un d'autre.</p>
+                  <fieldset className="cancel-reasons">
+                    <legend>Motif</legend>
                     {CANCEL_REASONS.map((r) => (
-                      <option key={r} value={r}>{r}</option>
+                      <label key={r} className={`cancel-reason ${cancelReasonSelect === r ? 'is-selected' : ''}`}>
+                        <input
+                          type="radio"
+                          name="cancel-reason"
+                          value={r}
+                          checked={cancelReasonSelect === r}
+                          onChange={() => {
+                            setCancelReasonSelect(r);
+                          }}
+                        />
+                        {r}
+                      </label>
                     ))}
-                  </select>
-                </div>
-                <div className="form-row">
-                  <label htmlFor="cancel-reason-details">Précision (optionnel)</label>
-                  <textarea
-                    id="cancel-reason-details"
-                    rows={3}
-                    maxLength={500}
-                    placeholder="Des détails à ajouter ?"
-                    value={cancelReasonDetails}
-                    onChange={(e) => setCancelReasonDetails(e.target.value)}
-                  />
-                </div>
-                {cancelError && <p className="form-feedback error">{cancelError}</p>}
-                <div className="manual-reservation-form-actions">
-                  <button type="submit" className="btn btn-outline-danger" disabled={cancelling}>
-                    {cancelling ? 'Annulation…' : 'Confirmer l\'annulation'}
+                  </fieldset>
+                  <div className="form-row">
+                    <label htmlFor="cancel-reason-details">Précision (facultatif)</label>
+                    <textarea
+                      id="cancel-reason-details"
+                      rows={3}
+                      maxLength={500}
+                      placeholder="Des détails à ajouter ?"
+                      value={cancelReasonDetails}
+                      onChange={(e) => setCancelReasonDetails(e.target.value)}
+                    />
+                  </div>
+                  <button type="submit" className="btn btn-danger btn-block" disabled={cancelling}>
+                    {cancelling ? 'Annulation…' : "Confirmer l'annulation"}
                   </button>
-                  <button
-                    type="button"
-                    className="btn btn-outline"
-                    onClick={() => {
-                      setShowCancelForm(false);
-                      setCancelReasonSelect('');
-                      setCancelReasonDetails('');
-                      setCancelError(null);
-                    }}
-                  >
-                    Ne pas annuler
+                  <button type="button" className="btn btn-outline btn-block" onClick={closeCancelForm}>
+                    Garder mon rendez-vous
                   </button>
-                </div>
-              </form>
+                </form>
+              </div>
             )}
-            {reservation.status === 'cancelled' && <p className="loading-text">Ce rendez-vous a été annulé.</p>}
+            {reservation.status === 'cancelled' && (
+              <>
+                <p className="form-feedback success" role="status">Votre annulation est enregistrée, le créneau est libéré.</p>
+                <Link to="/booking" className="btn btn-primary">Reprendre rendez-vous</Link>
+              </>
+            )}
           </div>
         )}
       </div>

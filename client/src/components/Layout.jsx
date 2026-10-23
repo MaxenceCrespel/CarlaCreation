@@ -1,9 +1,11 @@
 import { useEffect } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Link, Outlet, useLocation } from 'react-router-dom';
 import Header from './Header';
 import Footer from './Footer';
+import InstallAppBanner from './InstallAppBanner';
 import { useSiteConfig } from '../context/SiteConfigContext';
 import { usePageViewTracking } from '../hooks/usePageViewTracking';
+import { storeReferral } from '../utils/referralStorage';
 
 // Injects/updates a single site-wide LocalBusiness JSON-LD script so search
 // engines can show rich results (phone, email) — this only needs to exist
@@ -37,9 +39,27 @@ function useLocalBusinessSchema() {
   }, [siteName, sitePhoneHref, siteEmail, siteUrl]);
 }
 
+// Fixed bottom bar on phones only (CSS), hidden where it would compete with
+// the booking flow's own primary button.
+function MobileCtaBar() {
+  const { pathname } = useLocation();
+  if (pathname === '/booking' || pathname.startsWith('/mon-rendez-vous')) return null;
+  return (
+    <div className="mobile-cta-bar">
+      <Link to="/booking" className="btn btn-primary btn-block">Prendre rendez-vous</Link>
+    </div>
+  );
+}
+
 export default function Layout() {
   useLocalBusinessSchema();
   usePageViewTracking();
+  // Remember a sponsor's ?parrain=CODE whichever page the visitor lands on.
+  const { search } = useLocation();
+  useEffect(() => {
+    const code = new URLSearchParams(search).get('parrain');
+    if (code) storeReferral(code);
+  }, [search]);
 
   return (
     <>
@@ -49,9 +69,8 @@ export default function Layout() {
         <Outlet />
       </main>
       <Footer />
-      {/* InstallAppBanner disabled until the final prod domain is locked in —
-          PWA installs are origin-scoped, so installing from staging would
-          break when the site moves. */}
+      <MobileCtaBar />
+      <InstallAppBanner />
     </>
   );
 }

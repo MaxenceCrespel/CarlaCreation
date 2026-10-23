@@ -11,7 +11,8 @@ export default function Header() {
     <header className="site-header">
       <div className="container header-inner">
         <Link className="brand" to="/" onClick={() => setIsOpen(false)}>
-          <img className="brand-logo" src={logo} alt={siteName} />
+          <img className="brand-logo" src={logo} alt="" />
+          <span className="brand-text">{siteName}</span>
         </Link>
 
         <nav className={`main-nav ${isOpen ? 'is-open' : ''}`} aria-label="Navigation principale">

@@ -27,8 +27,7 @@ describe('Client self-cancellation', () => {
         cy.contains('button', 'Suivant').click();
         cy.get('.day-chip', { timeout: 15000 }).eq(openedDayIndex).click();
         cy.wait('@getSlots');
-        cy.get('#slot').should('not.be.disabled');
-        cy.get('#slot').select(0);
+        cy.get('#slot .slot-chip', { timeout: 15000 }).first().click();
         cy.contains('button', 'Suivant').click();
         cy.get('#clientEmail').type('cypress-cancel@example.com');
         cy.get('#clientPhone').type('0600000098');
@@ -48,7 +47,7 @@ describe('Client self-cancellation', () => {
         cy.contains('.status-badge', 'Annulé').should('not.exist');
 
         // Picking a reason (+ an optional free-text detail) actually cancels it.
-        cy.get('#cancel-reason-select').select('Contrainte professionnelle');
+        cy.contains('label.cancel-reason', 'Contrainte professionnelle').click();
         cy.get('#cancel-reason-details').type('Réunion imprévue au travail.');
         cy.contains('button', "Confirmer l'annulation").click();
         cy.contains('.status-badge', 'Annulé', { timeout: 10000 }).should('be.visible');

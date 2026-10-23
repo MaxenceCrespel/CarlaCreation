@@ -1,5 +1,6 @@
 import { useSiteConfig } from '../context/SiteConfigContext';
 import { useSeo } from '../hooks/useSeo';
+import LegalToc from '../components/LegalToc';
 
 export default function MentionsLegales() {
   const { siteName, legalForm, siret, sitePhone, siteEmail, sitePublicArea } = useSiteConfig();
@@ -10,6 +11,7 @@ export default function MentionsLegales() {
       <div className="container legal-content">
         <p className="eyebrow center">Informations légales</p>
         <h1 className="center">Mentions légales</h1>
+        <LegalToc />
 
         <h2>Édition du site</h2>
         <p>

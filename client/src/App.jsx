@@ -6,6 +6,8 @@ import Gallery from './pages/Gallery';
 import Booking from './pages/Booking';
 import ManageReservation from './pages/ManageReservation';
 import MyAccount from './pages/MyAccount';
+import VerifyEmail from './pages/VerifyEmail';
+import ForgotPassword from './pages/ForgotPassword';
 import Contact from './pages/Contact';
 import MentionsLegales from './pages/MentionsLegales';
 import CGV from './pages/CGV';
@@ -24,6 +26,8 @@ export default function App() {
         <Route path="/booking" element={<Booking />} />
         <Route path="/mon-rendez-vous/:groupId" element={<ManageReservation />} />
         <Route path="/mon-compte" element={<MyAccount />} />
+        <Route path="/verification-email" element={<VerifyEmail />} />
+        <Route path="/mot-de-passe-oublie" element={<ForgotPassword />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/mentions-legales" element={<MentionsLegales />} />
         <Route path="/cgv" element={<CGV />} />

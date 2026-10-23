@@ -1,5 +1,6 @@
 import { useSiteConfig } from '../context/SiteConfigContext';
 import { useSeo } from '../hooks/useSeo';
+import LegalToc from '../components/LegalToc';
 
 export default function CGV() {
   const { siteName, legalForm, siret, siteEmail, sitePhone } = useSiteConfig();
@@ -10,6 +11,7 @@ export default function CGV() {
       <div className="container legal-content">
         <p className="eyebrow center">Avant de réserver</p>
         <h1 className="center">Conditions générales de vente</h1>
+        <LegalToc />
 
         <p className="section-lead">
           Les présentes conditions régissent les prestations de coiffure et de soins des ongles proposées par{' '}

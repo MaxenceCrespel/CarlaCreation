@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import { useToast } from '../context/ToastContext';
 import { useSeo } from '../hooks/useSeo';
 import { formatPrice } from '../utils/format';
+import AccountAuthForms from '../components/AccountAuthForms';
+import ReferralCodeForm from '../components/ReferralCodeForm';
 
 const STATUS_LABELS = {
   pending: 'En attente',
@@ -25,161 +27,6 @@ function formatDateFr(dateStr) {
   return `${DAY_NAMES_FR[date.getDay()]} ${d} ${MONTH_NAMES_FR[m - 1]} ${y}`;
 }
 
-const EMPTY_SIGNUP = { name: '', email: '', phone: '', password: '', birthdate: '', referralCode: '' };
-const EMPTY_LOGIN = { email: '', password: '' };
-
-function LoginSignupForms({ onLoggedIn }) {
-  const showToast = useToast();
-  const [mode, setMode] = useState(searchParams.get('parrain') ? 'signup' : 'login'); // 'login' | 'signup'
-  const [loginForm, setLoginForm] = useState(EMPTY_LOGIN);
-  const [searchParams] = useSearchParams();
-  const [signupForm, setSignupForm] = useState({ ...EMPTY_SIGNUP, referralCode: (searchParams.get('parrain') || '').toUpperCase() });
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState(null);
-
-  async function handleLogin(e) {
-    e.preventDefault();
-    setSubmitting(true);
-    setError(null);
-    try {
-      await apiFetch('/client-auth/login', { method: 'POST', body: loginForm });
-      onLoggedIn();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function handleSignup(e) {
-    e.preventDefault();
-    setSubmitting(true);
-    setError(null);
-    try {
-      await apiFetch('/client-auth/signup', {
-        method: 'POST',
-        body: { ...signupForm, birthdate: signupForm.birthdate || undefined, referralCode: signupForm.referralCode.trim() || undefined },
-      });
-      showToast('Compte créé !', 'success');
-      onLoggedIn();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <div className="card">
-      <div className="manual-reservation-form-actions" style={{ marginBottom: 16 }}>
-        <button type="button" className={`btn ${mode === 'login' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setMode('login')}>
-          Se connecter
-        </button>
-        <button type="button" className={`btn ${mode === 'signup' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setMode('signup')}>
-          Créer un compte
-        </button>
-      </div>
-
-      {mode === 'login' ? (
-        <form onSubmit={handleLogin}>
-          <div className="form-row">
-            <label htmlFor="login-email">Email</label>
-            <input
-              type="email"
-              id="login-email"
-              required
-              value={loginForm.email}
-              onChange={(e) => setLoginForm((f) => ({ ...f, email: e.target.value }))}
-            />
-          </div>
-          <div className="form-row">
-            <label htmlFor="login-password">Mot de passe</label>
-            <input
-              type="password"
-              id="login-password"
-              required
-              value={loginForm.password}
-              onChange={(e) => setLoginForm((f) => ({ ...f, password: e.target.value }))}
-            />
-          </div>
-          {error && <p className="form-feedback error">{error}</p>}
-          <button type="submit" className="btn btn-primary" disabled={submitting}>
-            {submitting ? 'Connexion…' : 'Se connecter'}
-          </button>
-        </form>
-      ) : (
-        <form onSubmit={handleSignup}>
-          <div className="form-row">
-            <label htmlFor="signup-name">Nom</label>
-            <input
-              type="text"
-              id="signup-name"
-              required
-              value={signupForm.name}
-              onChange={(e) => setSignupForm((f) => ({ ...f, name: e.target.value }))}
-            />
-          </div>
-          <div className="form-row">
-            <label htmlFor="signup-email">Email</label>
-            <input
-              type="email"
-              id="signup-email"
-              required
-              value={signupForm.email}
-              onChange={(e) => setSignupForm((f) => ({ ...f, email: e.target.value }))}
-            />
-          </div>
-          <div className="form-row two-col">
-            <div>
-              <label htmlFor="signup-phone">Téléphone (optionnel)</label>
-              <input
-                type="tel"
-                id="signup-phone"
-                value={signupForm.phone}
-                onChange={(e) => setSignupForm((f) => ({ ...f, phone: e.target.value }))}
-              />
-            </div>
-            <div>
-              <label htmlFor="signup-birthdate">Date de naissance (optionnel)</label>
-              <input
-                type="date"
-                id="signup-birthdate"
-                value={signupForm.birthdate}
-                onChange={(e) => setSignupForm((f) => ({ ...f, birthdate: e.target.value }))}
-              />
-            </div>
-          </div>
-          <div className="form-row">
-            <label htmlFor="signup-password">Mot de passe (10 caractères minimum)</label>
-            <input
-              type="password"
-              id="signup-password"
-              required
-              minLength={10}
-              value={signupForm.password}
-              onChange={(e) => setSignupForm((f) => ({ ...f, password: e.target.value }))}
-            />
-          </div>
-          <div className="form-row">
-            <label htmlFor="signup-referral">Code de parrainage (optionnel)</label>
-            <input
-              type="text"
-              id="signup-referral"
-              maxLength={20}
-              value={signupForm.referralCode}
-              onChange={(e) => setSignupForm((f) => ({ ...f, referralCode: e.target.value.toUpperCase() }))}
-            />
-          </div>
-          {error && <p className="form-feedback error">{error}</p>}
-          <button type="submit" className="btn btn-primary" disabled={submitting}>
-            {submitting ? 'Création…' : 'Créer mon compte'}
-          </button>
-        </form>
-      )}
-    </div>
-  );
-}
-
 function AccountDashboard({ profile, onUpdated }) {
   const showToast = useToast();
   const [editing, setEditing] = useState(false);
@@ -187,19 +34,20 @@ function AccountDashboard({ profile, onUpdated }) {
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '' });
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(null);
+  const [redeemTier, setRedeemTier] = useState(null);
+  const [showDelete, setShowDelete] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
 
   async function saveProfile(e) {
     e.preventDefault();
     setSaving(true);
-    setError(null);
     try {
       await apiFetch('/client-auth/me', { method: 'PATCH', body: { ...form, birthdate: form.birthdate || undefined } });
       showToast('Profil mis à jour.', 'success');
       setEditing(false);
       onUpdated();
     } catch (err) {
-      setError(err.message);
+      showToast(err.message, 'error');
     } finally {
       setSaving(false);
     }
@@ -208,14 +56,13 @@ function AccountDashboard({ profile, onUpdated }) {
   async function savePassword(e) {
     e.preventDefault();
     setSaving(true);
-    setError(null);
     try {
       await apiFetch('/client-auth/me', { method: 'PATCH', body: passwordForm });
       showToast('Mot de passe mis à jour.', 'success');
       setShowPasswordForm(false);
       setPasswordForm({ currentPassword: '', newPassword: '' });
     } catch (err) {
-      setError(err.message);
+      showToast(err.message, 'error');
     } finally {
       setSaving(false);
     }
@@ -238,11 +85,39 @@ function AccountDashboard({ profile, onUpdated }) {
   const referralLink = `${window.location.origin}/mon-compte?parrain=${profile.referral.code}`;
 
   async function redeem(tierPoints) {
-    if (!window.confirm(`Échanger ${tierPoints} points contre cette récompense ?`)) return;
     setSaving(true);
     try {
       const res = await apiFetch('/client-auth/me/redeem', { method: 'POST', body: { points: tierPoints } });
       showToast(`Code ${res.code} créé — il vous a aussi été envoyé par email.`, 'success');
+      setRedeemTier(null);
+      onUpdated();
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function exportData() {
+    try {
+      const data = await apiFetch('/client-auth/me/export');
+      const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'mes-donnees.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
+  async function deleteAccount(e) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await apiFetch('/client-auth/me', { method: 'DELETE', body: { password: deletePassword } });
+      showToast('Votre compte a été supprimé.', 'success');
       onUpdated();
     } catch (err) {
       showToast(err.message, 'error');
@@ -265,7 +140,13 @@ function AccountDashboard({ profile, onUpdated }) {
       <div className="card">
         <div className="manual-reservation-form-actions" style={{ justifyContent: 'space-between', marginBottom: 16 }}>
           <h2 style={{ margin: 0 }}>Bonjour {profile.name.split(' ')[0]}</h2>
-          <button type="button" className="btn btn-outline" onClick={logout}>Se déconnecter</button>
+          <button type="button" className="admin-logout-btn" onClick={logout} aria-label="Se déconnecter" title="Se déconnecter">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+          </button>
         </div>
 
         {!editing ? (
@@ -301,7 +182,6 @@ function AccountDashboard({ profile, onUpdated }) {
                 />
               </div>
             </div>
-            {error && <p className="form-feedback error">{error}</p>}
             <div className="manual-reservation-form-actions">
               <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Enregistrement…' : 'Enregistrer'}</button>
               <button type="button" className="btn btn-outline" onClick={() => setEditing(false)}>Annuler</button>
@@ -332,7 +212,6 @@ function AccountDashboard({ profile, onUpdated }) {
                 onChange={(e) => setPasswordForm((f) => ({ ...f, newPassword: e.target.value }))}
               />
             </div>
-            {error && <p className="form-feedback error">{error}</p>}
             <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Enregistrement…' : 'Changer le mot de passe'}</button>
           </form>
         )}
@@ -370,7 +249,7 @@ function AccountDashboard({ profile, onUpdated }) {
                       <strong className="htl-reward">{formatPrice(tier.amountCents)} offerts</strong>
                       <span className="htl-pts">{stop} points</span>
                       {tier.affordable ? (
-                        <button type="button" className="btn btn-primary btn-sm htl-btn" disabled={saving} onClick={() => redeem(stop)}>
+                        <button type="button" className="btn btn-primary btn-sm htl-btn" disabled={saving} onClick={() => setRedeemTier({ points: stop, amountCents: tier.amountCents })}>
                           Échanger
                         </button>
                       ) : (
@@ -389,6 +268,25 @@ function AccountDashboard({ profile, onUpdated }) {
           })}
         </ol>
       </div>
+
+      {redeemTier && (
+        <div className="modal-overlay" onClick={() => !saving && setRedeemTier(null)}>
+          <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="redeem-title" onClick={(e) => e.stopPropagation()}>
+            <h2 id="redeem-title">Échanger vos points ?</h2>
+            <p>
+              <strong>{redeemTier.points} points</strong> seront débités pour obtenir un code de{' '}
+              <strong>{formatPrice(redeemTier.amountCents)}</strong>, à usage unique. Cette action est définitive.
+            </p>
+            <p className="section-lead">Il vous restera {points - redeemTier.points} point{points - redeemTier.points > 1 ? 's' : ''}.</p>
+            <button type="button" className="btn btn-primary btn-block" disabled={saving} onClick={() => redeem(redeemTier.points)}>
+              {saving ? 'Échange…' : "Confirmer l'échange"}
+            </button>
+            <button type="button" className="btn btn-outline btn-block" disabled={saving} onClick={() => setRedeemTier(null)}>
+              Annuler
+            </button>
+          </div>
+        </div>
+      )}
 
       {profile.codes.length > 0 && (
         <div className="card" style={{ marginTop: 16 }}>
@@ -412,6 +310,12 @@ function AccountDashboard({ profile, onUpdated }) {
           {profile.referral.validatedCount > 0 && ` — ${profile.referral.validatedCount} parrainage${profile.referral.validatedCount > 1 ? 's' : ''} validé${profile.referral.validatedCount > 1 ? 's' : ''}`}
         </p>
         <button type="button" className="btn btn-outline" onClick={copyReferralLink}>Copier mon lien de parrainage</button>
+        {profile.referral.canApplyCode && (
+          <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--color-bg-alt)' }}>
+            <h3 style={{ margin: '0 0 8px' }}>J'ai un code de parrainage</h3>
+            <ReferralCodeForm onApplied={onUpdated} />
+          </div>
+        )}
       </div>
 
       <div className="card" style={{ marginTop: 16 }}>
@@ -419,28 +323,60 @@ function AccountDashboard({ profile, onUpdated }) {
         {profile.history.length === 0 ? (
           <p className="loading-text">Aucun rendez-vous pour le moment.</p>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: 'var(--color-bg-alt)' }}>
-                <th style={{ textAlign: 'left', padding: '8px 12px' }}>Date</th>
-                <th style={{ textAlign: 'left', padding: '8px 12px' }}>Prestation</th>
-                <th style={{ textAlign: 'left', padding: '8px 12px' }}>Statut</th>
-              </tr>
-            </thead>
-            <tbody>
-              {profile.history.map((h) => (
-                <tr key={h.id}>
-                  <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--color-bg-alt)' }}>{formatDateFr(h.reservation_date)}</td>
-                  <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--color-bg-alt)' }}>{h.service_name}</td>
-                  <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--color-bg-alt)' }}>
-                    <span className={`status-badge status-${h.status}`}>{STATUS_LABELS[h.status] || h.status}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <ul className="history-list">
+            {profile.history.map((h) => (
+              <li key={h.id}>
+                <div>
+                  <strong>{formatDateFr(h.reservation_date)}</strong>
+                  <span>{h.service_name} · {h.start_time}</span>
+                </div>
+                <span className={`status-badge status-${h.status}`}>{STATUS_LABELS[h.status] || h.status}</span>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
+      <div className="card" style={{ marginTop: 16 }}>
+        <h2 style={{ marginTop: 0 }}>Mes données</h2>
+        <p className="section-lead">
+          Vous pouvez télécharger l'ensemble de vos données ou supprimer votre compte. Sans connexion pendant 3 ans, votre
+          compte est supprimé automatiquement.
+        </p>
+        <div className="account-data-actions">
+          <button type="button" className="btn btn-outline" onClick={exportData}>Télécharger mes données</button>
+          <button type="button" className="btn btn-outline-danger" onClick={() => setShowDelete(true)}>Supprimer mon compte</button>
+        </div>
+      </div>
+
+      {showDelete && (
+        <div className="modal-overlay" onClick={() => !saving && setShowDelete(false)}>
+          <form className="modal-card" role="dialog" aria-modal="true" aria-labelledby="delete-title" onClick={(e) => e.stopPropagation()} onSubmit={deleteAccount}>
+            <h2 id="delete-title">Supprimer votre compte ?</h2>
+            <p>
+              Cette action est <strong>définitive</strong> : votre compte, vos <strong>points de fidélité</strong> et vos codes
+              non utilisés seront supprimés, et vos réservations anonymisées. Seules les factures déjà émises sont conservées
+              (obligation légale de 10 ans).
+            </p>
+            <div className="form-row">
+              <label htmlFor="delete-password">Confirmez avec votre mot de passe</label>
+              <input
+                type="password"
+                id="delete-password"
+                required
+                autoComplete="current-password"
+                value={deletePassword}
+                onChange={(e) => setDeletePassword(e.target.value)}
+              />
+            </div>
+            <button type="submit" className="btn btn-danger btn-block" disabled={saving || !deletePassword}>
+              {saving ? 'Suppression…' : 'Supprimer définitivement mon compte'}
+            </button>
+            <button type="button" className="btn btn-outline btn-block" disabled={saving} onClick={() => setShowDelete(false)}>
+              Annuler
+            </button>
+          </form>
+        </div>
+      )}
     </>
   );
 }
@@ -467,11 +403,11 @@ export default function MyAccount() {
   return (
     <section className="section">
       <div className="container" style={{ maxWidth: 640 }}>
-        <p className="eyebrow center">Mon compte</p>
+        {!profile && <p className="eyebrow center">Mon compte</p>}
         <h1 className="center">{profile ? 'Mon espace' : 'Connexion'}</h1>
 
         {!loaded && <p className="loading-text center">Chargement…</p>}
-        {loaded && !profile && <LoginSignupForms onLoggedIn={load} />}
+        {loaded && !profile && <AccountAuthForms onLoggedIn={load} />}
         {loaded && profile && <AccountDashboard profile={profile} onUpdated={load} />}
 
         {loaded && !profile && (

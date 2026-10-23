@@ -1,5 +1,6 @@
 import { useSiteConfig } from '../context/SiteConfigContext';
 import { useSeo } from '../hooks/useSeo';
+import LegalToc from '../components/LegalToc';
 
 export default function Confidentialite() {
   const { siteName, siteEmail } = useSiteConfig();
@@ -10,6 +11,7 @@ export default function Confidentialite() {
       <div className="container legal-content">
         <p className="eyebrow center">Vos données</p>
         <h1 className="center">Politique de confidentialité</h1>
+        <LegalToc />
 
         <p className="section-lead">
           {siteName} accorde de l'importance à la protection de vos données personnelles. Cette page explique
@@ -58,16 +60,51 @@ export default function Confidentialite() {
         </p>
 
         <h2>4. Durée de conservation</h2>
-        <p>
-          Les données liées à une réservation sont conservées le temps nécessaire à son traitement puis à des fins
-          de suivi de clientèle, sauf demande de suppression de votre part. Les données d'un compte sont conservées
-          tant que le compte existe.
-        </p>
+        <ul>
+          <li>
+            <strong>Compte client</strong> (identité, coordonnées, points de fidélité, parrainage) : conservé tant que vous
+            vous connectez. Sans aucune connexion pendant <strong>3 ans</strong>, vous êtes prévenu·e par email puis le compte
+            est supprimé automatiquement (environ 30 jours plus tard) ; une simple connexion suffit à le conserver.
+          </li>
+          <li>
+            <strong>Fiche client et réservations sans compte</strong> : conservées au maximum 3 ans après le dernier
+            rendez-vous, puis supprimées.
+          </li>
+          <li>
+            <strong>Messages envoyés via le formulaire de contact</strong> : 3 ans maximum.
+          </li>
+          <li>
+            <strong>Factures</strong> : conservées 10 ans, durée imposée par le Code de commerce (obligation légale
+            comptable). Elles ne sont utilisées qu'à ce titre.
+          </li>
+          <li>
+            <strong>Inscription non confirmée</strong> (lien de confirmation jamais utilisé) : effacée sous 7 jours.
+          </li>
+        </ul>
 
         <h2>5. Vos droits</h2>
         <p>
-          Conformément au RGPD, vous disposez d'un droit d'accès, de rectification, de suppression et d'opposition
-          concernant vos données. Pour exercer ces droits, contactez-nous à {siteEmail}.
+          Conformément au RGPD, vous disposez d'un droit d'accès, de rectification, de portabilité, de suppression et
+          d'opposition concernant vos données.
+        </p>
+        <ul>
+          <li>
+            <strong>Accès et portabilité</strong> : depuis votre espace « Mon compte », le bouton « Télécharger mes
+            données » vous fournit un fichier contenant vos informations, réservations, points et codes.
+          </li>
+          <li>
+            <strong>Rectification</strong> : vous pouvez modifier votre nom, téléphone, date de naissance et mot de passe
+            depuis « Mon compte ».
+          </li>
+          <li>
+            <strong>Suppression</strong> : le bouton « Supprimer mon compte » efface immédiatement votre compte, vos points
+            de fidélité et vos codes personnels, et anonymise vos réservations (seules les factures déjà émises sont
+            conservées, voir ci-dessus). Si vous n'avez pas de compte, écrivez-nous à {siteEmail}.
+          </li>
+        </ul>
+        <p>
+          Pour tout autre exercice de vos droits, contactez-nous à {siteEmail}. Vous pouvez également introduire une
+          réclamation auprès de la CNIL (cnil.fr).
         </p>
 
         <h2>6. Cookies</h2>
