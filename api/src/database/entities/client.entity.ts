@@ -63,6 +63,19 @@ export class Client {
   @Column({ type: 'int', nullable: true })
   birthday_reward_year: number | null;
 
+  // Set once the client clicks the link emailed at signup (or resets their
+  // password, which proves the same thing). An account can't log in before.
+  @Column({ type: 'timestamptz', nullable: true })
+  email_verified_at: Date | null;
+
+  // Start of the 3-year inactivity clock — see AccountLifecycleService.purgeInactive.
+  @Column({ type: 'timestamptz', nullable: true })
+  last_login_at: Date | null;
+
+  // Set when the "your account will be deleted" warning email went out.
+  @Column({ type: 'timestamptz', nullable: true })
+  purge_warned_at: Date | null;
+
   @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;
 

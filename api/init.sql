@@ -10,6 +10,7 @@
 -- one-command bootstrap path for a brand new database (Docker, or a local
 -- Postgres you're setting up by hand).
 
+DROP TABLE IF EXISTS client_tokens;
 DROP TABLE IF EXISTS loyalty_points;
 DROP TABLE IF EXISTS payments;
 DROP TABLE IF EXISTS page_views;
@@ -57,6 +58,9 @@ CREATE TABLE
         referred_by_client_id INTEGER REFERENCES clients (id) ON DELETE SET NULL,
         referral_rewarded_at TIMESTAMPTZ,
         birthday_reward_year INTEGER,
+        email_verified_at TIMESTAMPTZ,
+        last_login_at TIMESTAMPTZ,
+        purge_warned_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
@@ -74,6 +78,19 @@ CREATE TABLE
     );
 
 CREATE INDEX IF NOT EXISTS "IDX_loyalty_points_client_id" ON loyalty_points (client_id);
+
+CREATE TABLE
+    IF NOT EXISTS client_tokens (
+        id SERIAL PRIMARY KEY,
+        client_id INTEGER NOT NULL REFERENCES clients (id) ON DELETE CASCADE,
+        type TEXT NOT NULL,
+        token_hash TEXT NOT NULL UNIQUE,
+        expires_at TIMESTAMPTZ NOT NULL,
+        used_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+CREATE INDEX IF NOT EXISTS "IDX_client_tokens_client_id" ON client_tokens (client_id);
 
 CREATE TABLE
     IF NOT EXISTS push_subscriptions (
@@ -401,7 +418,8 @@ VALUES
     (1786600000000, 'AddAuthorizedAtAndOnSitePayment1786600000000'),
     (1786700000000, 'AddClientAccountsAndLoyalty1786700000000'),
     (1786800000000, 'AddPromotionOwnerAndUsage1786800000000'),
-    (1786900000000, 'AddPointsLoyaltyAndReferral1786900000000');
+    (1786900000000, 'AddPointsLoyaltyAndReferral1786900000000'),
+    (1787000000000, 'AddAccountLifecycle1787000000000');
 
 -- Admin account — username "carla", password "Carla0303!" (bcrypt, cost 12).
 -- Change this password after first login in a real deployment.

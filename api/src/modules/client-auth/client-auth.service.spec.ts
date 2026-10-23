@@ -1,21 +1,24 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getDataSourceToken, getRepositoryToken } from '@nestjs/typeorm';
 import { JwtService } from '@nestjs/jwt';
-import { ConflictException, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { ClientAuthService } from './client-auth.service';
 import { Client } from '../../database/entities/client.entity';
 import { RewardsService } from '../rewards/rewards.service';
+import { AccountLifecycleService } from './account-lifecycle.service';
 
 describe('ClientAuthService', () => {
   let service: ClientAuthService;
-  let clientRepo: { findOne: jest.Mock; create: jest.Mock; save: jest.Mock };
+  let clientRepo: { findOne: jest.Mock; create: jest.Mock; save: jest.Mock; update: jest.Mock };
   let dataSource: { query: jest.Mock };
   let jwtService: { sign: jest.Mock };
   let rewardsService: { getBalance: jest.Mock; redeem: jest.Mock };
+  let lifecycle: { sendVerificationEmail: jest.Mock };
 
   beforeEach(async () => {
-    clientRepo = { findOne: jest.fn(), create: jest.fn((v) => v), save: jest.fn((v) => Promise.resolve({ id: 1, ...v })) };
+    clientRepo = { findOne: jest.fn(), create: jest.fn((v) => v), save: jest.fn((v) => Promise.resolve({ id: 1, ...v })), update: jest.fn() };
+    lifecycle = { sendVerificationEmail: jest.fn() };
     dataSource = { query: jest.fn().mockResolvedValue([]) };
     jwtService = { sign: jest.fn().mockReturnValue('signed.jwt.token') };
     rewardsService = { getBalance: jest.fn().mockResolvedValue(0), redeem: jest.fn() };
@@ -27,6 +30,7 @@ describe('ClientAuthService', () => {
         { provide: getDataSourceToken(), useValue: dataSource },
         { provide: JwtService, useValue: jwtService },
         { provide: RewardsService, useValue: rewardsService },
+        { provide: AccountLifecycleService, useValue: lifecycle },
       ],
     }).compile();
 
@@ -37,13 +41,15 @@ describe('ClientAuthService', () => {
     it('creates a brand new client when no fiche exists for that email', async () => {
       clientRepo.findOne.mockResolvedValue(null);
 
-      const { token, client } = await service.signup({ name: 'Jeanne Dupont', email: 'jeanne@example.com', password: 'motdepasse123' });
+      const result = await service.signup({ name: 'Jeanne Dupont', email: 'jeanne@example.com', password: 'motdepasse123' });
 
       expect(clientRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({ name: 'Jeanne Dupont', email: 'jeanne@example.com', password_hash: expect.any(String) }),
       );
-      expect(token).toBe('signed.jwt.token');
-      expect(client.email).toBe('jeanne@example.com');
+      // No session is issued: the account waits for the emailed link.
+      expect(result).not.toHaveProperty('token');
+      expect(jwtService.sign).not.toHaveBeenCalled();
+      expect(lifecycle.sendVerificationEmail).toHaveBeenCalledWith(expect.objectContaining({ email: 'jeanne@example.com' }));
     });
 
     it('claims an existing admin-created fiche that has no password yet', async () => {
@@ -57,8 +63,17 @@ describe('ClientAuthService', () => {
       expect(clientRepo.create).not.toHaveBeenCalled();
     });
 
-    it('rejects signup when the fiche already has a password (already registered)', async () => {
-      clientRepo.findOne.mockResolvedValue({ id: 7, email: 'jeanne@example.com', password_hash: 'already-hashed' });
+    it('lets a still-unverified signup be registered over (typo / hijack never locks the owner out)', async () => {
+      clientRepo.findOne.mockResolvedValue({ id: 7, email: 'jeanne@example.com', password_hash: 'old', email_verified_at: null });
+
+      await service.signup({ name: 'Jeanne', email: 'jeanne@example.com', password: 'motdepasse123' });
+
+      expect(clientRepo.save).toHaveBeenCalledWith(expect.objectContaining({ id: 7, email_verified_at: null }));
+      expect(lifecycle.sendVerificationEmail).toHaveBeenCalled();
+    });
+
+    it('rejects signup when the fiche already has a verified account', async () => {
+      clientRepo.findOne.mockResolvedValue({ id: 7, email: 'jeanne@example.com', password_hash: 'already-hashed', email_verified_at: new Date() });
 
       await expect(service.signup({ name: 'Jeanne Dupont', email: 'jeanne@example.com', password: 'motdepasse123' })).rejects.toBeInstanceOf(
         ConflictException,
@@ -69,11 +84,21 @@ describe('ClientAuthService', () => {
   describe('login', () => {
     it('logs in with correct credentials', async () => {
       const hash = bcrypt.hashSync('motdepasse123', 12);
-      clientRepo.findOne.mockResolvedValue({ id: 1, email: 'jeanne@example.com', password_hash: hash });
+      clientRepo.findOne.mockResolvedValue({ id: 1, email: 'jeanne@example.com', password_hash: hash, email_verified_at: new Date() });
 
       const { token } = await service.login('jeanne@example.com', 'motdepasse123');
 
       expect(token).toBe('signed.jwt.token');
+      // A login restarts the inactivity clock and cancels any purge warning.
+      expect(clientRepo.update).toHaveBeenCalledWith({ id: 1 }, expect.objectContaining({ purge_warned_at: null }));
+    });
+
+    it('refuses to log in before the email is verified', async () => {
+      const hash = bcrypt.hashSync('motdepasse123', 12);
+      clientRepo.findOne.mockResolvedValue({ id: 1, email: 'jeanne@example.com', password_hash: hash, email_verified_at: null });
+
+      await expect(service.login('jeanne@example.com', 'motdepasse123')).rejects.toBeInstanceOf(ForbiddenException);
+      expect(jwtService.sign).not.toHaveBeenCalled();
     });
 
     it('rejects a wrong password', async () => {
@@ -179,6 +204,44 @@ describe('ClientAuthService', () => {
       await service.updateProfile(1, { name: 'New Name', birthdate: '1990-05-12' });
 
       expect(clientRepo.save).toHaveBeenCalledWith(expect.objectContaining({ name: 'New Name', birthdate: '1990-05-12', password_hash: 'unchanged' }));
+    });
+  });
+
+  describe('applyReferralCode', () => {
+    const asNewcomer = (extra: object = {}) =>
+      clientRepo.findOne.mockImplementation(async ({ where }: { where: { id?: number; referral_code?: string } }) =>
+        where.referral_code ? { id: 9, referral_code: 'ABC234' } : { id: 1, referred_by_client_id: null, ...extra },
+      );
+
+    it('links a newcomer to the sponsor', async () => {
+      asNewcomer();
+      dataSource.query.mockResolvedValue([{ n: 0 }]);
+
+      await service.applyReferralCode(1, ' abc234 ');
+
+      expect(clientRepo.save).toHaveBeenCalledWith(expect.objectContaining({ id: 1, referred_by_client_id: 9 }));
+    });
+
+    it('refuses once a sponsor is already recorded', async () => {
+      asNewcomer({ referred_by_client_id: 5 });
+      await expect(service.applyReferralCode(1, 'ABC234')).rejects.toThrow('déjà enregistré');
+    });
+
+    it('refuses a client who already had a completed visit', async () => {
+      asNewcomer();
+      dataSource.query.mockResolvedValue([{ n: 2 }]);
+      await expect(service.applyReferralCode(1, 'ABC234')).rejects.toThrow('nouveaux clients');
+    });
+
+    it('refuses an unknown code and your own code', async () => {
+      dataSource.query.mockResolvedValue([{ n: 0 }]);
+      clientRepo.findOne.mockImplementation(async ({ where }: { where: { id?: number } }) => (where.id ? { id: 1, referred_by_client_id: null } : null));
+      await expect(service.applyReferralCode(1, 'NOPE')).rejects.toThrow('invalide');
+
+      clientRepo.findOne.mockImplementation(async ({ where }: { where: { id?: number } }) =>
+        where.id ? { id: 1, referred_by_client_id: null } : { id: 1, referral_code: 'MINE22' },
+      );
+      await expect(service.applyReferralCode(1, 'MINE22')).rejects.toThrow('propre code');
     });
   });
 });

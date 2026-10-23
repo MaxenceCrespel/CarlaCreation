@@ -268,17 +268,17 @@ export class ReservationsService {
     addonMinutes = 0,
     address?: string,
     days = 30,
-  ): Promise<{ date: string; hasSlots: boolean }[]> {
+  ): Promise<{ date: string; hasSlots: boolean; slotCount: number }[]> {
     const services = await this.resolveServices(serviceIds, { activeOnly: true });
     const totalDuration = services.reduce((sum, s) => sum + s.duration_minutes, 0) + addonMinutes;
     const { candidateBufferMinutes, defaultBufferMinutes } = await this.resolveTravelBuffer(atClientHome, address);
 
-    const result: { date: string; hasSlots: boolean }[] = [];
+    const result: { date: string; hasSlots: boolean; slotCount: number }[] = [];
     const cursor = new Date();
     for (let i = 0; i < days; i += 1) {
       const dateStr = localDateString(cursor);
       const { slots } = await getAvailableSlots(this.dataSource, dateStr, totalDuration, atClientHome, candidateBufferMinutes, defaultBufferMinutes);
-      result.push({ date: dateStr, hasSlots: slots.length > 0 });
+      result.push({ date: dateStr, hasSlots: slots.length > 0, slotCount: slots.length });
       cursor.setDate(cursor.getDate() + 1);
     }
     return result;

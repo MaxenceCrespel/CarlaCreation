@@ -3,6 +3,7 @@ import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { Client, normalizeClientName } from '../../database/entities/client.entity';
 import { Reservation } from '../../database/entities/reservation.entity';
+import { eraseClientData } from './erase-client';
 import { CreateAndLinkClientDto, CreateClientDto, UpdateClientDto } from './dto/client.dto';
 
 interface ReservationHistoryRow {
@@ -190,8 +191,10 @@ export class ClientsService {
   }
 
   async remove(id: number): Promise<void> {
-    const result = await this.clientRepo.delete(id);
-    if (result.affected === 0) throw new NotFoundException('Fiche client introuvable.');
+    if (!(await this.clientRepo.findOne({ where: { id } }))) throw new NotFoundException('Fiche client introuvable.');
+    // Full erasure (RGPD) rather than just dropping the fiche: the person's
+    // identity is also stripped from their reservations.
+    await this.dataSource.transaction((manager) => eraseClientData(manager, id));
   }
 
   async link(reservationId: number, clientId: number): Promise<void> {

@@ -9,7 +9,7 @@ describe('ClientsService', () => {
   let service: ClientsService;
   let clientRepo: { find: jest.Mock; findOne: jest.Mock; create: jest.Mock; save: jest.Mock; delete: jest.Mock };
   let reservationRepo: { findOne: jest.Mock; update: jest.Mock };
-  let dataSource: { query: jest.Mock };
+  let dataSource: { query: jest.Mock; transaction: jest.Mock };
 
   beforeEach(async () => {
     clientRepo = {
@@ -20,7 +20,7 @@ describe('ClientsService', () => {
       delete: jest.fn(),
     };
     reservationRepo = { findOne: jest.fn(), update: jest.fn() };
-    dataSource = { query: jest.fn() };
+    dataSource = { query: jest.fn(), transaction: jest.fn((fn) => fn({ query: jest.fn().mockResolvedValue([{ email: '' }]) })) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -201,13 +201,15 @@ describe('ClientsService', () => {
     await expect(service.update(999, { notes: 'x' } as any)).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('remove throws NotFoundException when nothing was deleted', async () => {
-    clientRepo.delete.mockResolvedValue({ affected: 0 });
+  it('remove throws NotFoundException for an unknown fiche', async () => {
+    clientRepo.findOne.mockResolvedValue(null);
     await expect(service.remove(999)).rejects.toBeInstanceOf(NotFoundException);
+    expect(dataSource.transaction).not.toHaveBeenCalled();
   });
 
-  it('remove succeeds silently when a row was deleted', async () => {
-    clientRepo.delete.mockResolvedValue({ affected: 1 });
+  it('remove fully erases the fiche (reservations anonymized) in one transaction', async () => {
+    clientRepo.findOne.mockResolvedValue({ id: 1 });
     await expect(service.remove(1)).resolves.toBeUndefined();
+    expect(dataSource.transaction).toHaveBeenCalledTimes(1);
   });
 });

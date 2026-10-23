@@ -278,6 +278,54 @@ export class MailService {
     await this.send(input.clientEmail, subject, html);
   }
 
+  private accountEmailHtml(clientName: string, bodyHtml: string, button?: { href: string; label: string }): string {
+    return `
+      <div style="font-family: Segoe UI, Arial, sans-serif; color:#3A2E27; max-width:560px; margin:0 auto;">
+        <img src="${config.PUBLIC_ORIGIN}/logo-email.png" alt="${escapeHtml(siteConfig.siteName)}" width="140" style="display:block;margin:0 0 16px;" />
+        <p>Bonjour ${escapeHtml(clientName)},</p>
+        ${bodyHtml}
+        ${button ? `<p style="margin-top:24px;"><a href="${button.href}" style="display:inline-block;background:#9A5F4B;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;">${escapeHtml(button.label)}</a></p><p style="color:#6B5C51;font-size:0.85em;">Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur :<br>${button.href}</p>` : ''}
+        <p style="color:#6B5C51;font-size:0.85em;margin-top:32px;">${escapeHtml(siteConfig.siteName)}</p>
+      </div>
+    `;
+  }
+
+  // Sent at signup — the account only works once this link is clicked.
+  async sendEmailVerification(input: { clientName: string; clientEmail: string; link: string }): Promise<void> {
+    const html = this.accountEmailHtml(
+      input.clientName,
+      '<p>Merci pour votre inscription ! Confirmez votre adresse email pour activer votre compte (le lien est valable 24 heures).</p><p>Si vous n\'êtes pas à l\'origine de cette inscription, ignorez simplement ce message.</p>',
+      { href: input.link, label: 'Confirmer mon adresse email' },
+    );
+    await this.send(input.clientEmail, `Confirmez votre adresse email — ${siteConfig.siteName}`, html);
+  }
+
+  async sendPasswordReset(input: { clientName: string; clientEmail: string; link: string }): Promise<void> {
+    const html = this.accountEmailHtml(
+      input.clientName,
+      '<p>Vous avez demandé à réinitialiser votre mot de passe. Ce lien est valable 1 heure et ne peut servir qu\'une fois.</p><p>Si vous n\'êtes pas à l\'origine de cette demande, ignorez ce message : votre mot de passe reste inchangé.</p>',
+      { href: input.link, label: 'Choisir un nouveau mot de passe' },
+    );
+    await this.send(input.clientEmail, `Réinitialisation de votre mot de passe — ${siteConfig.siteName}`, html);
+  }
+
+  async sendAccountDeleted(input: { clientName: string; clientEmail: string }): Promise<void> {
+    const html = this.accountEmailHtml(
+      input.clientName,
+      '<p>Votre compte et vos points de fidélité ont bien été supprimés, et vos réservations anonymisées. Seules les factures émises sont conservées, conformément à nos obligations légales.</p><p>Merci de votre confiance, et à bientôt peut-être.</p>',
+    );
+    await this.send(input.clientEmail, `Votre compte a été supprimé — ${siteConfig.siteName}`, html);
+  }
+
+  async sendInactivityWarning(input: { clientName: string; clientEmail: string; loginLink: string; days: number }): Promise<void> {
+    const html = this.accountEmailHtml(
+      input.clientName,
+      `<p>Vous ne vous êtes pas connecté(e) depuis longtemps. Sans connexion de votre part, votre compte et vos points de fidélité seront supprimés dans environ <strong>${input.days} jours</strong>, conformément à notre politique de conservation des données.</p><p>Pour les conserver, il suffit de vous connecter.</p>`,
+      { href: input.loginLink, label: 'Me connecter' },
+    );
+    await this.send(input.clientEmail, `Votre compte va être supprimé — ${siteConfig.siteName}`, html);
+  }
+
   private renderBookingEmail(input: BookingEmailInput, introHtml: string, statusLabel?: string, revealAddress = false): string {
     const rows = input.guests
       .map(
@@ -331,6 +379,7 @@ export class MailService {
   private async send(to: string, subject: string, html: string): Promise<void> {
     if (!this.transporter) {
       this.logger.log(`[MAIL DISABLED] Would send to ${to}: "${subject}"`);
+      if (config.NODE_ENV !== 'production') this.logger.log(htmlToText(html));
       return;
     }
     try {

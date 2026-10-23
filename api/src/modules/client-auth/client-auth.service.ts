@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
@@ -6,6 +6,7 @@ import * as bcrypt from 'bcryptjs';
 import { Client, normalizeClientName } from '../../database/entities/client.entity';
 import { RewardsService } from '../rewards/rewards.service';
 import { REWARD_TIERS } from '../rewards/loyalty.constants';
+import { AccountLifecycleService } from './account-lifecycle.service';
 import { SignupDto, UpdateClientProfileDto } from './dto/client-auth.dto';
 
 // Same rationale as AuthService's DUMMY_HASH — keeps a login attempt's
@@ -28,6 +29,7 @@ export class ClientAuthService {
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly jwtService: JwtService,
     private readonly rewardsService: RewardsService,
+    private readonly lifecycle: AccountLifecycleService,
   ) {}
 
   // A fiche can already exist for this email — created earlier by the
@@ -35,11 +37,17 @@ export class ClientAuthService {
   // was never turned into a fiche at all (see ClientsService). Either way,
   // signing up *claims* it rather than creating a duplicate: same person,
   // now with a password. Only refuses if that fiche already has one.
-  async signup(dto: SignupDto): Promise<{ token: string; client: Client }> {
+  //
+  // Signing up never logs anyone in: the account only becomes usable once
+  // the emailed link is clicked (see AccountLifecycleService.verifyEmail).
+  // This is also what stops someone from claiming a fiche with an email
+  // that isn't theirs. A pending (unverified) account can be re-registered
+  // over, so a typo'd or hijacked signup never locks the real owner out.
+  async signup(dto: SignupDto): Promise<{ client: Client }> {
     const email = dto.email.trim().toLowerCase();
     let client = await this.clientRepo.findOne({ where: { email } });
 
-    if (client?.password_hash) {
+    if (client?.password_hash && client.email_verified_at) {
       throw new ConflictException('Un compte existe déjà avec cet email — connectez-vous.');
     }
 
@@ -61,6 +69,7 @@ export class ClientAuthService {
       client.name = dto.name.trim();
       client.normalized_name = normalizeClientName(dto.name);
       client.password_hash = passwordHash;
+      client.email_verified_at = null;
       if (dto.phone) client.phone = dto.phone.trim();
       if (dto.birthdate) client.birthdate = dto.birthdate;
       if (sponsorId && !client.referred_by_client_id) client.referred_by_client_id = sponsorId;
@@ -75,9 +84,10 @@ export class ClientAuthService {
         referred_by_client_id: sponsorId,
       });
     }
-    await this.clientRepo.save(client);
+    client = await this.clientRepo.save(client);
+    await this.lifecycle.sendVerificationEmail(client);
 
-    return { token: this.issueToken(client), client };
+    return { client };
   }
 
   async login(email: string, password: string): Promise<{ token: string; client: Client }> {
@@ -89,7 +99,14 @@ export class ClientAuthService {
     if (!client || !client.password_hash || !valid) {
       throw new UnauthorizedException('Identifiants invalides.');
     }
+    if (!client.email_verified_at) {
+      throw new ForbiddenException({
+        message: 'Confirmez votre adresse email : un lien vous a été envoyé à la création du compte.',
+        code: 'EMAIL_NOT_VERIFIED',
+      });
+    }
 
+    await this.recordLogin(client);
     return { token: this.issueToken(client), client };
   }
 
@@ -137,9 +154,40 @@ export class ClientAuthService {
         pointsToNextTier: nextTier ? nextTier.points - points : 0,
         nextTierPoints: nextTier?.points ?? null,
       },
-      referral: { code: client.referral_code, validatedCount: n },
+      referral: {
+        code: client.referral_code,
+        validatedCount: n,
+        canApplyCode: !client.referred_by_client_id && !(await this.hasCompletedVisit(clientId)),
+      },
       codes: codes.filter((c) => !c.used_at && (!c.expires_at || c.expires_at.getTime() > Date.now())),
     };
+  }
+
+  // A referral code can also be entered after signup (profile page, or while
+  // booking) — under the same rules as at signup: only for someone who isn't
+  // already sponsored and hasn't had a completed visit yet ("joining"), and
+  // never one's own code. The points still only move once the first visit
+  // is marked completed (RewardsService.onReservationsCompleted).
+  async applyReferralCode(clientId: number, rawCode: string): Promise<void> {
+    const client = await this.clientRepo.findOne({ where: { id: clientId } });
+    if (!client) throw new NotFoundException('Compte introuvable.');
+    if (client.referred_by_client_id) throw new BadRequestException('Un code de parrainage est déjà enregistré sur votre compte.');
+    if (await this.hasCompletedVisit(clientId)) {
+      throw new BadRequestException('Le parrainage est réservé aux nouveaux clients (avant un premier rendez-vous terminé).');
+    }
+    const sponsor = await this.clientRepo.findOne({ where: { referral_code: rawCode.trim().toUpperCase() } });
+    if (!sponsor) throw new BadRequestException('Code de parrainage invalide.');
+    if (sponsor.id === clientId) throw new BadRequestException('Vous ne pouvez pas utiliser votre propre code.');
+    client.referred_by_client_id = sponsor.id;
+    await this.clientRepo.save(client);
+  }
+
+  private async hasCompletedVisit(clientId: number): Promise<boolean> {
+    const [{ n }]: { n: number }[] = await this.dataSource.query(
+      `SELECT COUNT(*)::int AS n FROM reservations WHERE client_id = $1 AND status = 'completed'`,
+      [clientId],
+    );
+    return Number(n) > 0;
   }
 
   redeemReward(clientId: number, points: number) {
@@ -179,7 +227,13 @@ export class ClientAuthService {
     return { token: this.issueToken(client), client };
   }
 
-  private issueToken(client: Client): string {
+  // Resets the inactivity clock (and any pending "your account will be
+  // erased" warning).
+  async recordLogin(client: Client): Promise<void> {
+    await this.clientRepo.update({ id: client.id }, { last_login_at: new Date(), purge_warned_at: null });
+  }
+
+  issueToken(client: Client): string {
     return this.jwtService.sign({ sub: client.id, email: client.email, role: 'client' }, { expiresIn: '30d' });
   }
 }

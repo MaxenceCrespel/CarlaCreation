@@ -16,6 +16,7 @@ import { ReservationAddon } from './entities/reservation-addon.entity';
 import { ServiceCategory } from './entities/service-category.entity';
 import { TravelFeeTier } from './entities/travel-fee-tier.entity';
 import { PushSubscription } from './entities/push-subscription.entity';
+import { ClientToken } from './entities/client-token.entity';
 import { Product } from './entities/product.entity';
 import { Invoice } from './entities/invoice.entity';
 import { InvoiceItem } from './entities/invoice-item.entity';
@@ -32,7 +33,7 @@ import { Payment } from './entities/payment.entity';
 export const AppDataSource = new DataSource({
   type: 'postgres',
   url: config.DATABASE_URL,
-  entities: [Admin, Service, Reservation, Gallery, ContactMessage, Review, DailyHours, DailyHoursRange, AppSettings, ServiceAddon, ReservationAddon, ServiceCategory, TravelFeeTier, PushSubscription, Product, Invoice, InvoiceItem, Expense, Client, Promotion, PageView, Payment],
+  entities: [Admin, Service, Reservation, Gallery, ContactMessage, Review, DailyHours, DailyHoursRange, AppSettings, ServiceAddon, ReservationAddon, ServiceCategory, TravelFeeTier, PushSubscription, Product, Invoice, InvoiceItem, Expense, Client, Promotion, PageView, Payment, ClientToken],
   migrations: [__dirname + '/migrations/*.{ts,js}'],
   synchronize: false,
 });

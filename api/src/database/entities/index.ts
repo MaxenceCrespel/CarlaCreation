@@ -13,3 +13,4 @@ export { PageView } from './page-view.entity';
 export type { TrafficSource, DeviceType } from './page-view.entity';
 export { Payment } from './payment.entity';
 export type { PaymentStatus } from './payment.entity';
+export { ClientToken } from './client-token.entity';

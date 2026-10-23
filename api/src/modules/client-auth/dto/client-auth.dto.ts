@@ -30,6 +30,36 @@ export class SignupDto {
   referralCode?: string;
 }
 
+export class EmailDto {
+  @IsEmail()
+  @Length(1, 200)
+  email!: string;
+}
+
+export class TokenDto {
+  @IsString()
+  @Length(20, 200)
+  token!: string;
+}
+
+export class ResetPasswordDto extends TokenDto {
+  @IsString()
+  @Length(10, 200)
+  password!: string;
+}
+
+export class DeleteAccountDto {
+  @IsString()
+  @Length(1, 200)
+  password!: string;
+}
+
+export class ReferralCodeDto {
+  @IsString()
+  @Length(1, 20)
+  code!: string;
+}
+
 export class RedeemRewardDto {
   @IsInt()
   points!: number;
