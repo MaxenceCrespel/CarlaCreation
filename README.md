@@ -517,12 +517,8 @@ déclenche `SAST-Semgrep` et `SCA-Dependency-Scan` (`npm audit`). Une fois ces
 vérifications passées, `Docker-Build-and-Security` construit l'image et la
 scanne (Trivy, bloquant sur CRITICAL/HIGH), avant de lancer en parallèle
 `Load-Testing` (Siege), `DAST-OWASP-ZAP` et `E2E-Cypress` contre la stack
-`docker compose` complète. `Deploy-Staging` ne se déclenche que sur
-`main`/`master`, une fois tout le reste au vert : il se connecte en SSH au
-VPS de staging (secrets `STAGING_SSH_HOST`/`STAGING_SSH_USER`/
-`STAGING_SSH_KEY`) et relance la stack avec `docker-compose.staging.yml`.
-Voir [Déploiement staging (VPS)](#déploiement-staging-vps) ci-dessous. La
-prod (VPS séparé ou même VPS, job CI équivalent) est différée à plus tard.
+`docker compose` complète. La CI ne déploie rien : la prod se lance à la main
+(voir [Déploiement (VPS)](#déploiement-vps)).
 
 ## Sécurité — points clés
 
