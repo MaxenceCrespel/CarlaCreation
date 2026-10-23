@@ -60,6 +60,8 @@ docker exec "$NEW_PG" psql -U salon -d postgres -v ON_ERROR_STOP=1 -c "DROP DATA
 docker exec -i "$NEW_PG" pg_restore -U salon -d salon --no-owner --exit-on-error < "$DUMP"
 
 echo "==> Restauration des photos"
+# Construire d'abord : `create` tenterait sinon de TÉLÉCHARGER l'image (qui n'existe pas encore).
+new build web
 new create web >/dev/null
 NEW_VOL="$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/app/uploads"}}{{.Name}}{{end}}{{end}}' "$(new ps -aq web)")"
 docker run --rm -v "$NEW_VOL":/dst -v "$BACKUP_DIR":/src:ro,z alpine sh -c "rm -rf /dst/* && tar xzf /src/$(basename "$UPLOADS") -C /dst"
