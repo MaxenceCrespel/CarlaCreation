@@ -2,7 +2,7 @@ name: Pipeline CI/CD CarlaCreation
 
 on:
   push:
-    branches: [main, master, develop]
+    branches: [main, master]
   pull_request:
     branches: [main, master]
   schedule:
@@ -49,10 +49,5 @@ jobs:
     needs: Docker-Build-and-Security
     uses: ./.github/workflows/e2e-cypress.yml
 
-  Deploy-Staging:
-    needs: [Load-Testing, DAST-OWASP-ZAP, E2E-Cypress]
-    # La pré-release se déploie depuis develop ; main ne déploie rien tout seul
-    # (la prod se lance à la main, voir deploy-production.yml).
-    if: github.ref == 'refs/heads/develop'
-    uses: ./.github/workflows/deploy-staging.yml
-    secrets: inherit
+  # Aucun déploiement automatique : la prod se lance à la main (workflow
+  # "Deploy Production", onglet Actions de GitHub).

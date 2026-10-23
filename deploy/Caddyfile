@@ -5,36 +5,21 @@
 # nécessaires (voir docs/MISE-EN-PROD.md), puis recharger sans coupure :
 #   docker exec deploy-caddy-1 caddy reload --config /etc/caddy/Caddyfile
 #
-# Reverse proxy pour le VPS staging+prod (un seul VPS, un seul Caddy).
-# Démarré une fois via docker-compose.caddy.yml, indépendamment des
-# déploiements applicatifs (redéployer seulement si ce fichier change).
-#
-# {$DOMAIN} est lu depuis le .env racine du VPS (voir .env.example).
+# {$DOMAIN} = carlacreation.fr (lu depuis le .env racine du VPS).
 
-# L'environnement de pré-release continue (déployé à chaque push sur main,
-# voir Deploy-Staging) vit maintenant ici, PAS sur staging.{$DOMAIN} — voir
-# le bloc de redirection plus bas pour pourquoi.
-preprod.{$DOMAIN} {
-	reverse_proxy 127.0.0.1:3001
-}
-
-# Prod — la stack applicative correspondante (docker-compose.prod.yml)
-# écoute sur 127.0.0.1:3000. Le déploiement lui-même reste manuel (voir
-# .github/workflows/deploy-production.yml) ; ce bloc Caddy, lui, peut être
-# actif en permanence sans risque — Caddy ne fait que router du trafic vers
-# un port sur lequel rien n'écoute avant le premier déploiement prod.
+# Prod — stack docker-compose.prod.yml, dossier /opt/carla-prod, port 3000.
 {$DOMAIN} {
 	reverse_proxy 127.0.0.1:3000
 }
 
-# staging.{$DOMAIN} a servi de site "public" de fait avant que la prod
-# n'existe — redirection permanente pour que les clientes qui ont ce lien
-# en favori (ou Google, s'il a été indexé) retombent sur le vrai site.
-# Ce fichier entier (y compris le déplacement de preprod ci-dessus) n'est
-# déployé sur le VPS que le jour du lancement prod, en même temps que le
-# reste de cette branche — jusque-là, le Caddyfile réellement en place sur
-# le VPS reste l'ancienne version, staging.{$DOMAIN} continue de servir
-# l'environnement de pré-release normalement.
+www.{$DOMAIN} {
+	redir https://{$DOMAIN}{uri} permanent
+}
+
+# Ancienne adresse du site (staging, utilisé par des clientes) : redirection
+# permanente en conservant le chemin, pour que les anciens emails et favoris
+# continuent de fonctionner. Avant la bascule, ce bloc reste un
+# `reverse_proxy 127.0.0.1:3001` vers l'ancien staging.
 staging.{$DOMAIN} {
 	redir https://{$DOMAIN}{uri} permanent
 }

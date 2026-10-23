@@ -363,122 +363,24 @@ ou local. À planifier via cron :
 En Docker : `docker compose exec web npm run backup`, puis copiez l'archive
 hors du conteneur avec `docker compose cp`.
 
-## Déploiement staging (VPS)
+## Déploiement (VPS)
 
-Un environnement de **staging** public, déployé automatiquement par la CI
-(job `Deploy-Staging` dans `main.yml`, à chaque push sur `main`/`master`
-une fois les autres jobs au vert). La **prod** est volontairement différée
-à plus tard — voir en bas de section comment la dupliquer le moment venu.
+Un seul VPS, un seul conteneur **Caddy** en reverse proxy (HTTPS automatique)
+et **une seule stack applicative : la prod**, sur `carlacreation.fr`
+(`docker-compose.yml` + `docker-compose.prod.yml`, dossier `/opt/carla-prod`,
+projet Compose `carla-prod`, port `127.0.0.1:3000`). Il n'y a pas
+d'environnement de pré-release.
 
-**Architecture** : un seul VPS pas cher (~4€/mois, OVH VPS Value ou
-Hetzner CX22 par exemple), un conteneur **Caddy** en reverse proxy
-(HTTPS automatique via Let's Encrypt, `deploy/Caddyfile`) qui route
-`preprod.<domaine>` vers le port `127.0.0.1:3001`, sur lequel écoute la
-stack applicative (`docker-compose.yml` + l'override
-`docker-compose.staging.yml`). Le service `web` staging n'est jamais
-exposé directement — seul Caddy écoute sur 80/443.
+La prod **ne se déploie jamais automatiquement** : workflow **Deploy
+Production** (onglet Actions de GitHub → Run workflow, taper `deploy`, choisir
+la branche), qui fait `git pull`, `docker compose up -d --build` puis
+`npm run migration:run`. La CI (`main.yml`) ne fait que tester et scanner.
 
-> Avant que la prod n'existe, cet environnement vivait sur
-> `staging.<domaine>` — en l'absence d'un vrai site de prod, ce lien a pu
-> être partagé/favorisé par de vraies clientes. Il vit maintenant sur
-> `preprod.<domaine>`, et `staging.<domaine>` redirige en permanence vers
-> la prod (voir plus bas) pour ne perdre personne.
-
-### Checklist de mise en place (une fois, manuelle)
-
-1. Acheter un nom de domaine, puis créer les enregistrements DNS **A**
-   suivants, tous vers l'IP du VPS : `preprod.<domaine>` (environnement
-   de pré-release continu), `<domaine>` racine (prod, à faire pointer
-   dès maintenant même si le premier déploiement prod attend encore le
-   SIRET — Caddy ne sert simplement rien tant que rien n'a été déployé
-   derrière), et `staging.<domaine>` s'il n'existe pas déjà (sert
-   uniquement à la redirection permanente vers la prod).
-2. Commander un VPS (Ubuntu 22.04/24.04).
-3. Sur le VPS : installer Docker + le plugin Compose, créer un utilisateur
-   dédié au déploiement, générer une paire de clés SSH réservée à GitHub
-   Actions (clé publique dans `~deploy/.ssh/authorized_keys`), cloner ce
-   repo dans `/opt/carla-creation`.
-4. Dans `/opt/carla-creation`, créer le `.env` **racine** (`cp .env.example
-   .env`, à ne jamais commiter) avec un `JWT_SECRET` généré
-   (`openssl rand -hex 64`) et `DOMAIN=<votre domaine>`.
-5. Démarrer Caddy une fois pour toutes (depuis la racine du repo, avec
-   `--env-file` explicite — Compose résout `.env` par rapport au dossier du
-   fichier passé à `-f`, pas au répertoire courant, donc lancer ça depuis
-   `deploy/` laisserait `DOMAIN` vide) :
-   ```bash
-   cd /opt/carla-creation
-   docker compose --env-file .env -f deploy/docker-compose.caddy.yml up -d
-   ```
-6. Dans les secrets GitHub Actions du repo (Settings → Secrets and
-   variables → Actions), ajouter `STAGING_SSH_HOST`, `STAGING_SSH_USER`,
-   `STAGING_SSH_KEY` (clé privée générée à l'étape 3).
-7. Pousser sur `main`/`master` : la CI construit, teste, puis déclenche
-   `Deploy-Staging`, qui se connecte en SSH et lance :
-   ```bash
-   cd /opt/carla-creation
-   git pull
-   docker compose -f docker-compose.yml -f docker-compose.staging.yml up -d --build
-   docker compose exec -T web npm run migration:run
-   ```
-8. **Important** : une fois le site accessible publiquement sur
-   `https://preprod.<domaine>`, connectez-vous en admin
-   (`carla` / `Carla0303!`, le compte pré-créé par `init.sql`) et changez
-   immédiatement le mot de passe — ce compte par défaut n'est prévu que
-   pour un premier lancement local.
-
-### Prod
-
-Même mécanisme que staging, dupliqué : `docker-compose.prod.yml` (port
-`127.0.0.1:3000`), le bloc `{$DOMAIN} { reverse_proxy 127.0.0.1:3000 }`
-dans `deploy/Caddyfile`, et `.github/workflows/deploy-production.yml`.
-Peut tourner sur le même VPS que le staging (deux stacks Compose
-distinctes, un seul Caddy) ou sur un second VPS séparé.
-
-Différence volontaire avec staging : **la prod ne se déploie jamais
-automatiquement**. `deploy-production.yml` n'est pas appelé depuis
-`main.yml` — c'est un workflow à part, déclenché à la main depuis l'onglet
-Actions de GitHub ("Run workflow"), avec un champ à taper
-(`deploy`) en confirmation. Rien ne pousse de l'argent réel en prod sans
-une action humaine déliberée.
-
-### Checklist "jour J" — quand Carla a son SIRET
-
-Tout le code (paiement Stripe, pages légales) est prêt et testé en
-amont ; ce qui reste est de la configuration, pas du développement :
-
-1. **Stripe** : passer le compte Stripe en mode live (SIRET + IBAN
-   demandés par Stripe à cette étape), récupérer les clés `sk_live_...`
-   et créer un endpoint webhook live dans le dashboard Stripe pointant
-   vers `https://<domaine>/api/stripe/webhook` (le secret `whsec_...`
-   correspondant est différent de celui de test).
-2. Sur le VPS, dans `api/.env` (celui que le conteneur `web` charge),
-   remplacer les clés `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` de test
-   par les clés live, et configurer un vrai `SMTP_*` si pas déjà fait
-   (sans ça, les emails de confirmation ne partent jamais réellement).
-3. Compléter les pages légales (voir section dédiée) avec le SIRET une
-   fois reçu — `api/src/site-config.ts`, champ `siret`.
-4. Dans les secrets GitHub Actions, ajouter `PRODUCTION_SSH_HOST`,
-   `PRODUCTION_SSH_USER`, `PRODUCTION_SSH_KEY`, et dans le `.env` racine
-   du VPS, `PROD_JWT_SECRET` (généré séparément du `JWT_SECRET` de
-   staging — voir `.env.example`).
-5. Vérifier que l'enregistrement DNS **A** `<domaine>` (racine) existe
-   bien et pointe vers l'IP du VPS (voir la checklist de mise en place
-   ci-dessus — à faire en avance, pas besoin d'attendre ce jour précis).
-6. Fusionner cette branche (`feature/launch-prep`, et `feature/stripe-payments`
-   une fois les deux ensemble) sur `main`. Sur le VPS, relancer Caddy pour
-   qu'il prenne en compte le nouveau `deploy/Caddyfile` (bascule de
-   l'environnement de pré-release vers `preprod.<domaine>` et activation
-   de la redirection permanente `staging.<domaine>` → prod) — Caddy est
-   une stack à part, pas redéployée par `Deploy Production` :
-   ```bash
-   cd /opt/carla-creation
-   git pull
-   docker compose --env-file .env -f deploy/docker-compose.caddy.yml up -d
-   ```
-7. Déclencher manuellement le workflow **Deploy Production** depuis
-   l'onglet Actions de GitHub.
-8. Se connecter en admin sur le site de prod et changer immédiatement le
-   mot de passe par défaut.
+La procédure détaillée — bascule depuis l'ancien staging
+(`staging.carlacreation.fr`), migration de la base et des photos, Caddy,
+Stripe live, retour arrière — est dans **`docs/MISE-EN-PROD.md`**. Le
+Caddyfile du VPS est édité à la main (il héberge aussi une autre application) :
+`deploy/Caddyfile` n'en est que la référence.
 
 ## Pages légales
 

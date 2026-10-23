@@ -25,8 +25,8 @@ df -h /
 
 ## Phase 1 — DNS
 
-Chez le registrar, enregistrements **A** vers l'IP du VPS : `carlacreation.fr`
-et `preprod.carlacreation.fr` (`staging.` existe déjà).
+Chez le registrar, enregistrements **A** vers l'IP du VPS : `carlacreation.fr`, `www`
+(`staging.` et `www.` existent déjà). Pas d'environnement de pré-release.
 
 ## Phase 2 — Préparer la prod (aucun impact sur les clientes)
 
@@ -95,7 +95,7 @@ Ne rien annoncer aux clientes pendant cette phase.
 4. Caddy définitif : dans `/opt/carla-creation/deploy/Caddyfile`, remplacer le
    contenu du bloc `staging.carlacreation.fr` par
    `redir https://carlacreation.fr{uri} permanent`, ajouter le bloc
-   `preprod.carlacreation.fr { reverse_proxy 127.0.0.1:3001 }` (pour plus tard),
+   `www.carlacreation.fr { redir https://carlacreation.fr{uri} permanent }`,
    puis `validate` + `reload` comme en phase 2. Effet : `staging.carlacreation.fr/<chemin>` → `https://carlacreation.fr/<chemin>`
    (redirection permanente, chemin conservé : les liens « mon rendez-vous » des
    anciens emails continuent de marcher).
@@ -113,14 +113,12 @@ sur la prod entre-temps seraient à reporter à la main).
 
 ## Phase 5 — Après la bascule
 
-1. Pull request `release/prod-ready` → `main` (la CI tourne) ; créer la branche
-   `develop`.
-2. Pré-release : `/opt/carla-preprod` (clone, branche `develop`, son propre
-   `api/.env` avec clés Stripe de test et une base vide). Elle se déploie
-   depuis `develop` (workflow `Deploy Staging`) sur `preprod.carlacreation.fr`.
-   Mettre à jour dans GitHub les secrets `STAGING_SSH_*` si besoin.
-3. Prod : plus de déploiement automatique ; workflow **Deploy Production**
+1. Pull request `release/prod-ready` → `main` (la CI tourne ; elle ne déploie
+   rien). Pas d'environnement de pré-release : on teste en local et avec la
+   répétition de la phase 3 avant chaque grosse évolution.
+2. Prod : déploiement manuel uniquement — workflow **Deploy Production**
    (Actions → Run workflow, taper `deploy`, branche `main`).
-4. Garder l'ancien dossier `/opt/carla-creation` et ses volumes 2 à 4 semaines
-   comme filet de sécurité, puis les supprimer (`docker compose down -v`) après
-   avoir vérifié les sauvegardes de `~/backups`.
+3. Arrêter l'ancien staging (`docker compose stop` dans `/opt/carla-creation`)
+   après 2 à 4 semaines, une fois les sauvegardes de `~/backups` vérifiées, puis
+   supprimer ses volumes. **Garder le dossier `/opt/carla-creation`** tant que
+   Caddy y est branché.

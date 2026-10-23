@@ -11,7 +11,7 @@
 # (même VPS, même .env racine) : une session admin volée en staging ne doit
 # jamais pouvoir se faire passer pour une session de prod, ou inversement.
 # Projet Compose dédié : volumes (base + photos) et conteneurs distincts de
-# ceux du staging/preprod, même si les deux tournent sur le même VPS. Sans
+# ceux de l'ancien staging, qui tourne sur le même VPS jusqu'à la bascule. Sans
 # ce nom, deux dossiers au même nom partageraient leurs volumes.
 name: carla-prod
 
