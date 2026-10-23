@@ -1,0 +1,18 @@
+# Variante TRANSITOIRE du Caddyfile, pour la phase de test de la prod
+# (voir docs/MISE-EN-PROD.md, phase A). À activer avec CADDYFILE=./Caddyfile.phase-a
+# dans le .env racine du VPS ; à retirer le jour de la bascule pour revenir au
+# Caddyfile définitif.
+#
+# - carlacreation.fr = la NOUVELLE prod (stack carla-prod, port 3000), testée
+#   sur une copie des données ;
+# - staging.carlacreation.fr = le staging ACTUEL, encore utilisé par les
+#   clientes, inchangé. Si son port n'est pas 3001 sur le VPS, corriger ici
+#   (voir `docker ps` à l'étape 1 du runbook).
+
+{$DOMAIN} {
+	reverse_proxy 127.0.0.1:3000
+}
+
+staging.{$DOMAIN} {
+	reverse_proxy 127.0.0.1:3001
+}

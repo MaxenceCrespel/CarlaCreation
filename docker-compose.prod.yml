@@ -10,6 +10,11 @@
 # PROD_JWT_SECRET est volontairement distinct du JWT_SECRET de staging
 # (même VPS, même .env racine) : une session admin volée en staging ne doit
 # jamais pouvoir se faire passer pour une session de prod, ou inversement.
+# Projet Compose dédié : volumes (base + photos) et conteneurs distincts de
+# ceux du staging/preprod, même si les deux tournent sur le même VPS. Sans
+# ce nom, deux dossiers au même nom partageraient leurs volumes.
+name: carla-prod
+
 services:
   web:
     ports: !override

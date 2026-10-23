@@ -2,7 +2,7 @@ name: Pipeline CI/CD CarlaCreation
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, develop]
   pull_request:
     branches: [main, master]
   schedule:
@@ -51,6 +51,8 @@ jobs:
 
   Deploy-Staging:
     needs: [Load-Testing, DAST-OWASP-ZAP, E2E-Cypress]
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    # La pré-release se déploie depuis develop ; main ne déploie rien tout seul
+    # (la prod se lance à la main, voir deploy-production.yml).
+    if: github.ref == 'refs/heads/develop'
     uses: ./.github/workflows/deploy-staging.yml
     secrets: inherit

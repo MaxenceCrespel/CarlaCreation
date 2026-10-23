@@ -15,6 +15,10 @@
 # il a servi de site "public" de fait avant que la prod n'existe, donc on
 # ne peut pas le laisser pointer vers du contenu de test après le
 # lancement sans perdre les clientes qui l'ont en favori.
+# Projet Compose dédié (voir docker-compose.prod.yml) : la pré-release a sa
+# propre base, indépendante de la prod. Dossier du VPS : /opt/carla-preprod.
+name: carla-preprod
+
 services:
   web:
     # !override remplace complètement la liste `ports` du service de base au

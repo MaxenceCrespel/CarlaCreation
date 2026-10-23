@@ -18,7 +18,9 @@ services:
     environment:
       DOMAIN: ${DOMAIN}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # CADDYFILE (dans le .env racine) permet de choisir la variante pendant la
+      # phase de test de la prod — voir deploy/Caddyfile.phase-a et docs/MISE-EN-PROD.md.
+      - ${CADDYFILE:-./Caddyfile}:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
 

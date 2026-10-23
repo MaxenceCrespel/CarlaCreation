@@ -12,11 +12,17 @@ on:
       confirm:
         description: 'Tapez "deploy" pour confirmer (déploie en production, argent réel)'
         required: true
+      ref:
+        description: 'Branche ou tag à déployer en production'
+        required: true
+        default: main
 
 jobs:
   Deploy-Production:
     runs-on: ubuntu-latest
     if: github.event.inputs.confirm == 'deploy'
+    env:
+      DEPLOY_REF: ${{ github.event.inputs.ref }}
     steps:
       - name: Déploiement Continu via SSH sur le VPS (production)
         uses: appleboy/ssh-action@v1
@@ -24,9 +30,12 @@ jobs:
           host: ${{ secrets.PRODUCTION_SSH_HOST }}
           username: ${{ secrets.PRODUCTION_SSH_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          envs: DEPLOY_REF
           script: |
             set -e
-            cd /opt/carla-creation
-            git pull
+            cd /opt/carla-prod
+            git fetch origin "$DEPLOY_REF"
+            git checkout "$DEPLOY_REF"
+            git pull origin "$DEPLOY_REF"
             docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
             docker compose exec -T web npm run migration:run
