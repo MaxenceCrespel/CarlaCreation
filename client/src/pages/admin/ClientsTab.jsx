@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useConfirm } from '../../context/ConfirmContext';
 import { apiFetch } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 
@@ -77,6 +78,7 @@ function AddClientForm({ onCreated, onCancel, prefill }) {
 }
 
 function ClientDetail({ client, onClose, onUpdated, onDeleted }) {
+  const confirm = useConfirm();
   const showToast = useToast();
   const [detail, setDetail] = useState(null);
   const [error, setError] = useState(null);
@@ -115,7 +117,7 @@ function ClientDetail({ client, onClose, onUpdated, onDeleted }) {
   }
 
   async function remove() {
-    if (!window.confirm(`Supprimer définitivement la fiche de ${client.name} ? Cette action est définitive : ses points, codes et données personnelles sont effacés, ses rendez-vous restent mais sont anonymisés (les factures émises sont conservées).`)) return;
+    if (!await confirm(`Supprimer définitivement la fiche de ${client.name} ? Cette action est définitive : ses points, codes et données personnelles sont effacés, ses rendez-vous restent mais sont anonymisés (les factures émises sont conservées).`)) return;
     try {
       await apiFetch(`/admin/clients/${client.id}`, { method: 'DELETE' });
       onDeleted(client.id);

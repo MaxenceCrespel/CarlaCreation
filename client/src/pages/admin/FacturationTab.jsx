@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useConfirm } from '../../context/ConfirmContext';
 import { apiFetch } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { formatPrice } from '../../utils/format';
@@ -273,6 +274,7 @@ function InvoiceRow({ invoice, onStatusChange, onRemove }) {
 }
 
 export default function FacturationTab() {
+  const confirm = useConfirm();
   const showToast = useToast();
   const [invoices, setInvoices] = useState(null);
   const [error, setError] = useState(null);
@@ -293,7 +295,7 @@ export default function FacturationTab() {
   }
 
   async function removeInvoice(id) {
-    if (!window.confirm('Supprimer définitivement cette facture ?')) return;
+    if (!await confirm('Supprimer définitivement cette facture ?')) return;
     try {
       await apiFetch(`/admin/invoices/${id}`, { method: 'DELETE' });
       setInvoices((rows) => rows.filter((inv) => inv.id !== id));

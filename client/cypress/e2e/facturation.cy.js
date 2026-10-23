@@ -21,6 +21,7 @@ describe('Admin — Facturation', () => {
 
     cy.contains('tr', clientName).within(() => {
       cy.contains('button', 'Supprimer').click();
+      cy.confirmDialog();
     });
     cy.contains('tr', clientName).should('not.exist');
   });

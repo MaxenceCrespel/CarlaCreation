@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useConfirm } from '../../context/ConfirmContext';
 import { apiFetch } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 
@@ -21,6 +22,7 @@ function Stars({ value }) {
 }
 
 export default function AvisTab() {
+  const confirm = useConfirm();
   const showToast = useToast();
   const [reviews, setReviews] = useState(null);
   const [error, setError] = useState(null);
@@ -74,7 +76,7 @@ export default function AvisTab() {
   }
 
   async function remove(id) {
-    if (!window.confirm('Supprimer définitivement cet avis ?')) return;
+    if (!await confirm('Supprimer définitivement cet avis ?')) return;
     try {
       await apiFetch(`/admin/reviews/${id}`, { method: 'DELETE' });
       setReviews((rows) => rows.filter((r) => r.id !== id));

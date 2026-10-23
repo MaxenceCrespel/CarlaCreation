@@ -5,13 +5,16 @@ import './index.css';
 import App from './App.jsx';
 import { SiteConfigProvider } from './context/SiteConfigContext';
 import { ToastProvider } from './context/ToastContext';
+import { ConfirmProvider } from './context/ConfirmContext';
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
       <SiteConfigProvider>
         <ToastProvider>
-          <App />
+          <ConfirmProvider>
+            <App />
+          </ConfirmProvider>
         </ToastProvider>
       </SiteConfigProvider>
     </BrowserRouter>

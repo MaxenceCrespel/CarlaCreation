@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useConfirm } from '../../context/ConfirmContext';
 import { apiFetch } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { disablePushNotifications, enablePushNotifications, getExistingSubscription, pushSupported } from '../../utils/push';
@@ -9,6 +10,7 @@ import { disablePushNotifications, enablePushNotifications, getExistingSubscript
 // (see api's CalendarFeedController), so regenerating it invalidates
 // whatever's currently subscribed until re-added with the new link.
 function CalendarSyncCard() {
+  const confirm = useConfirm();
   const showToast = useToast();
   const [url, setUrl] = useState(undefined); // undefined = loading, null = not generated yet
   const [working, setWorking] = useState(false);
@@ -22,7 +24,7 @@ function CalendarSyncCard() {
   useEffect(load, []);
 
   async function generate() {
-    if (url && !window.confirm("Régénérer le lien ? L'ancien arrêtera de se mettre à jour dans Apple Calendrier (ou autre) tant qu'il n'est pas remplacé par le nouveau.")) {
+    if (url && !await confirm("Régénérer le lien ? L'ancien arrêtera de se mettre à jour dans Apple Calendrier (ou autre) tant qu'il n'est pas remplacé par le nouveau.")) {
       return;
     }
     setWorking(true);

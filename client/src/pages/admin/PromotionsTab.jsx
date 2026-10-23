@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useConfirm } from '../../context/ConfirmContext';
 import { apiFetch } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { formatPrice } from '../../utils/format';
@@ -164,6 +165,7 @@ function PromotionRow({ promotion, onSave, onRemove }) {
 }
 
 export default function PromotionsTab() {
+  const confirm = useConfirm();
   const showToast = useToast();
   const [promotions, setPromotions] = useState(null);
   const [error, setError] = useState(null);
@@ -184,7 +186,7 @@ export default function PromotionsTab() {
   }
 
   async function removePromotion(id) {
-    if (!window.confirm('Supprimer définitivement cette promotion ?')) return;
+    if (!await confirm('Supprimer définitivement cette promotion ?')) return;
     try {
       await apiFetch(`/admin/promotions/${id}`, { method: 'DELETE' });
       setPromotions((rows) => rows.filter((p) => p.id !== id));

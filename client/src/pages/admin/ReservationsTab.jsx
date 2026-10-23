@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from 'react';
+import { useConfirm } from '../../context/ConfirmContext';
 import { apiFetch } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import ReservationsCalendar from './ReservationsCalendar';
@@ -1031,6 +1032,7 @@ function wazeUrl(address) {
 }
 
 export default function ReservationsTab() {
+  const confirm = useConfirm();
   const showToast = useToast();
   const [reservations, setReservations] = useState(null);
   const [error, setError] = useState(null);
@@ -1070,7 +1072,15 @@ export default function ReservationsTab() {
   }
 
   async function refuse(id) {
-    if (!window.confirm('Refuser cette réservation ?')) return;
+    if (
+      !(await confirm({
+        title: 'Refuser cette réservation ?',
+        message: "La cliente en sera informée par email. Si elle a payé en ligne, l'autorisation sur sa carte est annulée (aucun débit).",
+        confirmLabel: 'Refuser',
+      }))
+    ) {
+      return;
+    }
     await updateStatus(id, 'refused');
   }
 
@@ -1101,7 +1111,7 @@ export default function ReservationsTab() {
   }
 
   async function unlinkClient(id) {
-    if (!window.confirm('Délier cette fiche client de ce rendez-vous ?')) return;
+    if (!await confirm('Délier cette fiche client de ce rendez-vous ?')) return;
     try {
       await apiFetch('/admin/clients/unlink', { method: 'POST', body: { reservationId: id } });
       setReservations((rows) => rows.map((r) => (r.id === id ? { ...r, client_id: null } : r)));
@@ -1112,7 +1122,15 @@ export default function ReservationsTab() {
   }
 
   async function refuseGroup(groupId) {
-    if (!window.confirm('Refuser toutes les personnes de ce rendez-vous groupé ?')) return;
+    if (
+      !(await confirm({
+        title: 'Refuser tout ce rendez-vous ?',
+        message: 'Toutes les personnes du rendez-vous groupé sont refusées et la cliente en est informée par email.',
+        confirmLabel: 'Tout refuser',
+      }))
+    ) {
+      return;
+    }
     try {
       await apiFetch(`/reservations/group/${groupId}/status`, { method: 'PATCH', body: { status: 'refused' } });
       setReservations((rows) => rows.map((r) => (r.group_id === groupId ? { ...r, status: 'refused' } : r)));

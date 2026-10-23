@@ -5,14 +5,53 @@ import { useToast } from '../context/ToastContext';
 import { useSeo } from '../hooks/useSeo';
 import { formatPrice } from '../utils/format';
 
-const PAYMENT_STATUS_LABELS = {
-  pending: 'En attente de règlement',
-  authorized: 'Réservé sur votre carte, débité à la confirmation du rendez-vous',
-  paid: 'Réglé',
-  refunded: 'Remboursé',
-  partially_refunded: 'Partiellement remboursé',
-  canceled: 'Annulé',
+
+const STATUS_ICONS = { pending: '⏳', confirmed: '✓', completed: '✓', cancelled: '✕', refused: '✕' };
+
+// Headline + one sentence per status, shown in the coloured banner at the top.
+const STATUS_HEADINGS = {
+  pending: { title: 'Demande envoyée', text: 'Carla va confirmer votre rendez-vous très prochainement.' },
+  confirmed: { title: 'Rendez-vous confirmé', text: 'Tout est bon, à très bientôt !' },
+  completed: { title: 'Rendez-vous terminé', text: 'Merci pour votre visite.' },
+  cancelled: { title: 'Rendez-vous annulé', text: 'Le créneau a été libéré.' },
+  refused: {
+    title: 'Demande refusée',
+    text: "Carla n'a pas pu accepter ce créneau. Vous pouvez en choisir un autre ou la contacter.",
+  },
 };
+
+// What the client needs to know about their online payment, given the state
+// of both the payment and the appointment.
+function describePayment(reservation) {
+  const p = reservation.payment;
+  if (!p) return null;
+  const amount = formatPrice(p.amountCents);
+  const ended = ['cancelled', 'refused'].includes(reservation.status);
+  switch (p.status) {
+    case 'pending':
+      return { tone: 'warn', text: `Règlement de ${amount} en attente.` };
+    case 'authorized':
+      return {
+        tone: 'ok',
+        text: `${amount} réservés sur votre carte : ils ne seront débités qu'à la confirmation de votre rendez-vous.`,
+      };
+    case 'paid':
+      return ended
+        ? { tone: 'warn', text: `Annulation hors délai de remboursement : le paiement de ${amount} est conservé.` }
+        : { tone: 'ok', text: `Paiement de ${amount} réglé en ligne.` };
+    case 'refunded':
+      return {
+        tone: 'ok',
+        text: `${amount} remboursés sur votre carte. Comptez 5 à 10 jours ouvrés pour les voir sur votre relevé.`,
+      };
+    case 'partially_refunded':
+      return { tone: 'ok', text: 'Votre paiement a été partiellement remboursé.' };
+    case 'canceled':
+      return { tone: 'ok', text: `Aucun débit : les ${amount} réservés sur votre carte ont été libérés.` };
+    default:
+      return null;
+  }
+}
 
 const STATUS_LABELS = {
   pending: 'En attente de confirmation',
@@ -61,6 +100,7 @@ export default function ManageReservation() {
   const [cancelReasonDetails, setCancelReasonDetails] = useState('');
 
   useSeo({ title: 'Mon rendez-vous', path: `/mon-rendez-vous/${groupId}` });
+  const paymentNotice = reservation ? describePayment(reservation) : null;
 
   function load() {
     setError(null);
@@ -85,7 +125,6 @@ export default function ManageReservation() {
     }
     const details = cancelReasonDetails.trim();
     const reason = details ? `${cancelReasonSelect} — ${details}` : cancelReasonSelect;
-    if (!window.confirm('Confirmez-vous l\'annulation de ce rendez-vous ?')) return;
     setCancelling(true);
     try {
       await apiFetch(`/reservations/lookup/${groupId}/cancel`, { method: 'POST', body: { reason } });
@@ -124,24 +163,20 @@ export default function ManageReservation() {
         {!error && !reservation && <p className="loading-text center">Chargement…</p>}
 
         {!error && reservation && (
-          <div className="card">
-            {paiementParam === 'reussi' && (
-              <p className="form-feedback success" style={{ marginBottom: 16 }}>
-                Paiement reçu, merci ! Votre demande est bien enregistrée.
-              </p>
-            )}
-            {paiementParam === 'annule' && (
-              <p className="form-feedback error" style={{ marginBottom: 16 }}>
-                Le paiement n'a pas été finalisé — votre demande reste enregistrée, mais le règlement en ligne n'a pas
-                encore été effectué. Contactez-nous si vous souhaitez réessayer.
-              </p>
-            )}
-            <p>
-              <strong>Statut :</strong>{' '}
-              <span className={`status-badge status-${reservation.status}`}>
-                {STATUS_LABELS[reservation.status] || reservation.status}
+          <div className="card manage-card">
+            <div className={`manage-status is-${reservation.status}`}>
+              <span className="manage-status-icon" aria-hidden="true">
+                {STATUS_ICONS[reservation.status] || '•'}
               </span>
-            </p>
+              <div>
+                <h2>{STATUS_HEADINGS[reservation.status]?.title || STATUS_LABELS[reservation.status]}</h2>
+                <p>{STATUS_HEADINGS[reservation.status]?.text}</p>
+                <span className={`status-badge status-${reservation.status}`}>
+                  {STATUS_LABELS[reservation.status] || reservation.status}
+                </span>
+              </div>
+            </div>
+
             {['pending', 'confirmed', 'completed'].includes(reservation.status) && (
               <ol className="track-steps" aria-label="Avancement du rendez-vous">
                 {[['pending', 'Réservé'], ['confirmed', 'Confirmé'], ['completed', 'Terminé']].map(([key, label], i) => {
@@ -155,41 +190,47 @@ export default function ManageReservation() {
                 })}
               </ol>
             )}
-            {reservation.payment && (
-              <p>
-                <strong>Paiement en ligne ({formatPrice(reservation.payment.amountCents)}) :</strong>{' '}
-                {PAYMENT_STATUS_LABELS[reservation.payment.status] || reservation.payment.status}
-              </p>
-            )}
-            {reservation.paidOnSite != null && (
-              <p>
-                <strong>Paiement :</strong> {reservation.paidOnSite ? 'réglé sur place' : 'à régler sur place'}
-              </p>
-            )}
-            <p><strong>Date :</strong> {formatDateFr(reservation.date)}</p>
-            <p>
-              <strong>Lieu :</strong>{' '}
-              {reservation.atClientHome ? `À votre domicile${reservation.clientAddress ? ` — ${reservation.clientAddress}` : ''}` : 'Sur place'}
-            </p>
 
-            <table style={{ width: '100%', borderCollapse: 'collapse', margin: '16px 0' }}>
-              <thead>
-                <tr style={{ background: 'var(--color-bg-alt)' }}>
-                  <th style={{ textAlign: 'left', padding: '8px 12px' }}>Personne</th>
-                  <th style={{ textAlign: 'left', padding: '8px 12px' }}>Prestation</th>
-                  <th style={{ textAlign: 'left', padding: '8px 12px' }}>Horaire</th>
-                </tr>
-              </thead>
-              <tbody>
-                {reservation.guests.map((g, i) => (
-                  <tr key={i}>
-                    <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--color-bg-alt)' }}>{g.name}</td>
-                    <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--color-bg-alt)' }}>{g.serviceName}</td>
-                    <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--color-bg-alt)' }}>{g.startTime} – {g.endTime}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            {paiementParam === 'annule' && ['pending', 'confirmed'].includes(reservation.status) && (
+              <p className="manage-notice is-warn">
+                Le paiement n'a pas été finalisé — votre demande reste enregistrée, mais le règlement en ligne n'a pas
+                encore été effectué. Contactez-nous si vous souhaitez réessayer.
+              </p>
+            )}
+            {paymentNotice && <p className={`manage-notice is-${paymentNotice.tone}`}>{paymentNotice.text}</p>}
+
+            <dl className="manage-summary">
+              <div>
+                <dt>Date</dt>
+                <dd>{formatDateFr(reservation.date)}</dd>
+              </div>
+              <div>
+                <dt>Lieu</dt>
+                <dd>
+                  {reservation.atClientHome
+                    ? `À votre domicile${reservation.clientAddress ? ` — ${reservation.clientAddress}` : ''}`
+                    : 'Au studio'}
+                </dd>
+              </div>
+              {reservation.paidOnSite != null && (
+                <div>
+                  <dt>Règlement</dt>
+                  <dd>{reservation.paidOnSite ? 'Réglé sur place' : 'À régler sur place'}</dd>
+                </div>
+              )}
+            </dl>
+
+            <ul className="manage-guests">
+              {reservation.guests.map((g, i) => (
+                <li key={i}>
+                  <div>
+                    <strong>{g.name}</strong>
+                    <span>{g.serviceName}</span>
+                  </div>
+                  <span className="manage-guest-time">{g.startTime} – {g.endTime}</span>
+                </li>
+              ))}
+            </ul>
 
             {(reservation.status === 'pending' || reservation.status === 'confirmed') && !showCancelForm && (
               <button type="button" className="btn btn-outline-danger" onClick={() => setShowCancelForm(true)}>
@@ -247,9 +288,14 @@ export default function ManageReservation() {
                 </form>
               </div>
             )}
+            {reservation.status === 'refused' && (
+              <div className="not-found-actions">
+                <Link to="/booking" className="btn btn-primary">Choisir un autre créneau</Link>
+                <Link to="/contact" className="btn btn-outline">Contacter Carla</Link>
+              </div>
+            )}
             {reservation.status === 'cancelled' && (
               <>
-                <p className="form-feedback success" role="status">Votre annulation est enregistrée, le créneau est libéré.</p>
                 <Link to="/booking" className="btn btn-primary">Reprendre rendez-vous</Link>
               </>
             )}

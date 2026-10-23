@@ -21,6 +21,7 @@ describe('Admin — Galerie', () => {
       const match = $inputs.toArray().find((el) => el.value === altText);
       cy.wrap(match).closest('.admin-gallery-card').within(() => {
         cy.contains('button', 'Supprimer').click();
+        cy.confirmDialog();
       });
     });
     cy.get('body').should(($body) => {

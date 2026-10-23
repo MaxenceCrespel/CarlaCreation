@@ -22,6 +22,7 @@ describe('Admin — Dépenses', () => {
       const match = $inputs.toArray().find((el) => el.value === description);
       cy.wrap(match).closest('tr').within(() => {
         cy.contains('button', 'Supprimer').click();
+        cy.confirmDialog();
       });
     });
     cy.get('body').should(($body) => {

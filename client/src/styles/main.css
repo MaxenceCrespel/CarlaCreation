@@ -2291,3 +2291,33 @@ input[aria-invalid="true"] { border: 2px solid #A23B32; }
 
 .referral-apply label { display: block; font-weight: 600; margin-bottom: 6px; }
 .referral-remembered { padding: 10px 12px; border-radius: 12px; background: var(--color-bg); font-size: 0.875rem; }
+
+.confirm-dialog { max-width: 420px; }
+.confirm-dialog h2 { margin: 0 0 8px; font-size: 1.35rem; }
+.confirm-dialog p { margin: 0 0 16px; color: var(--color-text-soft); }
+.confirm-dialog .btn + .btn { margin-top: 8px; }
+
+/* Page de suivi d'un rendez-vous */
+.manage-card { padding: 0; overflow: hidden; }
+.manage-card > :not(.manage-status):not(.modal-overlay) { margin-left: 24px; margin-right: 24px; }
+.manage-card > :last-child { margin-bottom: 24px; }
+.manage-status { display: flex; gap: 14px; align-items: flex-start; padding: 22px 24px; margin-bottom: 20px; background: var(--color-bg-alt); }
+.manage-status h2 { margin: 0 0 4px; font-size: 1.35rem; }
+.manage-status p { margin: 0 0 10px; color: var(--color-text-soft); }
+.manage-status-icon { width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: #fff; font-weight: 700; font-size: 1.1rem; }
+.manage-status.is-confirmed, .manage-status.is-completed { background: #e7f2ea; }
+.manage-status.is-confirmed .manage-status-icon, .manage-status.is-completed .manage-status-icon { color: #2f7a4a; }
+.manage-status.is-cancelled, .manage-status.is-refused { background: #f6e3e0; }
+.manage-status.is-cancelled .manage-status-icon, .manage-status.is-refused .manage-status-icon { color: #b3413a; }
+.manage-notice { padding: 12px 14px; border-radius: 12px; font-size: 0.95rem; line-height: 1.45; margin-top: 16px; margin-bottom: 0; }
+.manage-notice.is-ok { background: #e7f2ea; color: #24563f; }
+.manage-notice.is-warn { background: #fbf0dc; color: #7a5200; }
+.manage-summary { margin: 20px 24px 0; display: grid; gap: 10px; }
+.manage-summary > div { display: flex; justify-content: space-between; gap: 16px; padding-bottom: 10px; border-bottom: 1px solid var(--color-bg-alt); }
+.manage-summary dt { color: var(--color-text-soft); }
+.manage-summary dd { margin: 0; font-weight: 600; text-align: right; }
+.manage-guests { list-style: none; margin: 16px 24px 20px; padding: 0; display: grid; gap: 8px; }
+.manage-guests li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; background: var(--color-bg); }
+.manage-guests li div { display: flex; flex-direction: column; }
+.manage-guests li div span { color: var(--color-text-soft); font-size: 0.9rem; }
+.manage-guest-time { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }

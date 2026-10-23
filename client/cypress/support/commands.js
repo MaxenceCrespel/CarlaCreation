@@ -35,3 +35,9 @@ Cypress.Commands.add('adminLogin', () => {
   cy.visit('/admin');
   cy.contains('h1', 'Administration').should('be.visible');
 });
+
+// Accepts the site's own confirmation dialog (replaces window.confirm). The
+// `withinSubject: null` lets it work even when called inside a .within().
+Cypress.Commands.add('confirmDialog', () => {
+  cy.get('.confirm-dialog', { withinSubject: null }).find('button').first().click();
+});

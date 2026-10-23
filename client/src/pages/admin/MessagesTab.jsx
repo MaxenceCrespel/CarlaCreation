@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useConfirm } from '../../context/ConfirmContext';
 import { apiFetch } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 
@@ -9,6 +10,7 @@ const FILTERS = [
 ];
 
 export default function MessagesTab() {
+  const confirm = useConfirm();
   const showToast = useToast();
   const [messages, setMessages] = useState(null);
   const [error, setError] = useState(null);
@@ -33,7 +35,7 @@ export default function MessagesTab() {
   }
 
   async function remove(id) {
-    if (!window.confirm('Supprimer définitivement ce message ?')) return;
+    if (!await confirm('Supprimer définitivement ce message ?')) return;
     try {
       await apiFetch(`/admin/contact-messages/${id}`, { method: 'DELETE' });
       setMessages((rows) => rows.filter((m) => m.id !== id));
