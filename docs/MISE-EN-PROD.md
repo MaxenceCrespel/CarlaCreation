@@ -20,11 +20,8 @@ docker volume ls
 df -h /
 ```
 
-- Si le staging publie **127.0.0.1:3000** (et non 3001), corriger le port dans
-  `deploy/Caddyfile.phase-a` (bloc `staging.`) et prévoir un autre port pour la
-  prod : le conflit empêcherait la prod de démarrer.
-- Noter le nom du projet Compose de Caddy (normalement `deploy`) : il sert à
-  conserver les certificats HTTPS.
+- Vérifié le 23/10 : staging sur `127.0.0.1:3001`, Caddy = projet `deploy`
+  (conteneur `deploy-caddy-1`), VPS partagé avec `usronchin.fr` (port 8080).
 
 ## Phase 1 — DNS
 
@@ -44,7 +41,6 @@ cp .env.example .env
 DOMAIN=carlacreation.fr
 JWT_SECRET=<openssl rand -hex 64>
 PROD_JWT_SECRET=<un AUTRE openssl rand -hex 64>
-CADDYFILE=./Caddyfile.phase-a
 ```
 
 `api/.env` : copier celui de `/opt/carla-creation/api/.env`, puis, **pour la
@@ -53,12 +49,22 @@ commentaire) : la copie des données contient les vraies adresses des clientes
 et ses tâches planifiées (rappels J-1, anniversaires) leur enverraient des
 doublons. Garder les clés Stripe de **test**.
 
-Caddy (pour ajouter `carlacreation.fr` sans toucher au staging) :
+Caddy — **ne pas remplacer le Caddyfile du VPS** : il contient aussi
+`usronchin.fr` (autre application). On ajoute le bloc à la main, puis on
+recharge sans coupure :
 ```bash
-cd /opt/carla-prod
-docker compose --env-file .env -f deploy/docker-compose.caddy.yml up -d
+cd /opt/carla-creation/deploy        # c'est de là que Caddy lit son fichier
+cp Caddyfile ~/Caddyfile.avant-prod  # sauvegarde
+nano Caddyfile                       # ajouter, sans toucher au reste :
+#   carlacreation.fr {
+#   	reverse_proxy 127.0.0.1:3000
+#   }
+docker exec deploy-caddy-1 caddy validate --config /etc/caddy/Caddyfile
+docker exec deploy-caddy-1 caddy reload   --config /etc/caddy/Caddyfile
 ```
-Vérifier que `staging.carlacreation.fr` répond toujours.
+Vérifier que `staging.carlacreation.fr` et `usronchin.fr` répondent toujours.
+(Ce dossier doit rester en place tant que Caddy y est branché ; ne plus y faire
+de `git pull`.)
 
 ## Phase 3 — Répétition sur une copie des vraies données
 
@@ -86,9 +92,11 @@ Ne rien annoncer aux clientes pendant cette phase.
 2. `api/.env` de la prod : remettre les `SMTP_*`, passer aux clés Stripe **live**
    (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) ; `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d web`.
 3. Stripe (mode live) : webhook `https://carlacreation.fr/api/stripe/webhook`.
-4. Caddy définitif : retirer la ligne `CADDYFILE=` du `.env`, puis
-   `docker compose --env-file .env -f deploy/docker-compose.caddy.yml up -d`.
-   Effet : `staging.carlacreation.fr/<chemin>` → `https://carlacreation.fr/<chemin>`
+4. Caddy définitif : dans `/opt/carla-creation/deploy/Caddyfile`, remplacer le
+   contenu du bloc `staging.carlacreation.fr` par
+   `redir https://carlacreation.fr{uri} permanent`, ajouter le bloc
+   `preprod.carlacreation.fr { reverse_proxy 127.0.0.1:3001 }` (pour plus tard),
+   puis `validate` + `reload` comme en phase 2. Effet : `staging.carlacreation.fr/<chemin>` → `https://carlacreation.fr/<chemin>`
    (redirection permanente, chemin conservé : les liens « mon rendez-vous » des
    anciens emails continuent de marcher).
 5. Tests de fumée : une redirection depuis un ancien lien, connexion admin, une
@@ -99,8 +107,8 @@ Ne rien annoncer aux clientes pendant cette phase.
    reconnecter (sessions propres à chaque adresse).
 
 **Retour arrière** (tant que l'ancien dossier est intact) : `docker start` du
-conteneur `web` de `/opt/carla-creation`, puis remettre `CADDYFILE=./Caddyfile.phase-a`
-(le staging continue alors de servir l'ancienne base ; les réservations prises
+conteneur `web` de `/opt/carla-creation`, puis remettre le bloc `staging.carlacreation.fr`
+d'origine (`reverse_proxy 127.0.0.1:3001`) et recharger Caddy (le staging continue alors de servir l'ancienne base ; les réservations prises
 sur la prod entre-temps seraient à reporter à la main).
 
 ## Phase 5 — Après la bascule

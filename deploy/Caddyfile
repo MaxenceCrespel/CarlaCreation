@@ -1,3 +1,10 @@
+# ATTENTION : sur le VPS, ce fichier est ÉDITÉ À LA MAIN (il contient aussi le
+# bloc d'une autre application hébergée sur la même machine, usronchin.fr).
+# Ce fichier du dépôt n'est donc qu'une RÉFÉRENCE des blocs de Carla Création :
+# ne jamais le copier tel quel sur le VPS, y reporter seulement les blocs
+# nécessaires (voir docs/MISE-EN-PROD.md), puis recharger sans coupure :
+#   docker exec deploy-caddy-1 caddy reload --config /etc/caddy/Caddyfile
+#
 # Reverse proxy pour le VPS staging+prod (un seul VPS, un seul Caddy).
 # Démarré une fois via docker-compose.caddy.yml, indépendamment des
 # déploiements applicatifs (redéployer seulement si ce fichier change).
