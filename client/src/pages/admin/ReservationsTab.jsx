@@ -23,6 +23,7 @@ const STATUS_LABELS = {
 
 const PAYMENT_STATUS_LABELS = {
   pending: 'En attente',
+  authorized: 'Autorisé (à encaisser)',
   paid: 'Réglé',
   refunded: 'Remboursé',
   partially_refunded: 'Partiellement remboursé',
@@ -30,6 +31,7 @@ const PAYMENT_STATUS_LABELS = {
 };
 const PAYMENT_STATUS_BADGE_CLASS = {
   pending: 'status-pending',
+  authorized: 'status-pending',
   paid: 'status-confirmed',
   refunded: 'status-completed',
   partially_refunded: 'status-pending',
