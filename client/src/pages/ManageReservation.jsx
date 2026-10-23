@@ -7,6 +7,7 @@ import { formatPrice } from '../utils/format';
 
 const PAYMENT_STATUS_LABELS = {
   pending: 'En attente de règlement',
+  authorized: 'Réservé sur votre carte, débité à la confirmation du rendez-vous',
   paid: 'Réglé',
   refunded: 'Remboursé',
   partially_refunded: 'Partiellement remboursé',
