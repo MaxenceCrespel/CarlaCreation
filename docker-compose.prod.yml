@@ -17,6 +17,9 @@ name: carla-prod
 
 services:
   web:
+    # Image à part : docker-compose.yml la nomme `carla-creation-website`, tag
+    # que l'ancien staging (même VPS) utilise aussi — ne pas le déplacer.
+    image: carla-prod-website
     ports: !override
       - '127.0.0.1:3000:3000'
     environment:
