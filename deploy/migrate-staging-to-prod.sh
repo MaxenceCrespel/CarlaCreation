@@ -40,9 +40,10 @@ fi
 echo "==> Sauvegarde de la base du staging -> $DUMP"
 docker exec "$OLD_PG" pg_dump -U salon -Fc salon > "$DUMP"
 
+# :z = étiquette SELinux partagée, sinon (Fedora) le conteneur ne peut pas écrire dans $BACKUP_DIR.
 echo "==> Sauvegarde des photos -> $UPLOADS"
 OLD_VOL="$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/app/uploads"}}{{.Name}}{{end}}{{end}}' "$OLD_WEB")"
-docker run --rm -v "$OLD_VOL":/src:ro -v "$BACKUP_DIR":/dst alpine tar czf "/dst/$(basename "$UPLOADS")" -C /src .
+docker run --rm -v "$OLD_VOL":/src:ro -v "$BACKUP_DIR":/dst:z alpine tar czf "/dst/$(basename "$UPLOADS")" -C /src .
 
 echo "==> Préparation de la stack de prod (base vide, schéma créé par init.sql)"
 new up -d postgres
@@ -57,7 +58,7 @@ docker exec -i "$NEW_PG" pg_restore -U salon -d salon --no-owner --exit-on-error
 echo "==> Restauration des photos"
 new create web >/dev/null
 NEW_VOL="$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/app/uploads"}}{{.Name}}{{end}}{{end}}' "$(new ps -aq web)")"
-docker run --rm -v "$NEW_VOL":/dst -v "$BACKUP_DIR":/src:ro alpine sh -c "rm -rf /dst/* && tar xzf /src/$(basename "$UPLOADS") -C /dst"
+docker run --rm -v "$NEW_VOL":/dst -v "$BACKUP_DIR":/src:ro,z alpine sh -c "rm -rf /dst/* && tar xzf /src/$(basename "$UPLOADS") -C /dst"
 
 echo "==> Démarrage de la prod + migrations en attente"
 new up -d --build web
