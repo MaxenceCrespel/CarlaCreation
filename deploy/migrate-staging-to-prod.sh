@@ -49,7 +49,11 @@ echo "==> Préparation de la stack de prod (base vide, schéma créé par init.s
 new up -d postgres
 new stop web >/dev/null 2>&1 || true
 NEW_PG="$(new ps -q postgres)"
-until docker exec "$NEW_PG" pg_isready -U salon >/dev/null 2>&1; do sleep 1; done
+# Attendre la FIN de l'initialisation : pendant init.sql, Postgres tourne dans
+# un serveur temporaire (socket seulement) que pg_isready déclare déjà "prêt" ;
+# le vrai serveur, lui, écoute en TCP une fois init.sql terminé.
+until docker exec "$NEW_PG" pg_isready -h 127.0.0.1 -U salon >/dev/null 2>&1; do sleep 1; done
+until docker exec "$NEW_PG" psql -U salon -d salon -tAc "SELECT 1 FROM migrations LIMIT 1" >/dev/null 2>&1; do sleep 1; done
 
 echo "==> Restauration de la base dans la prod"
 docker exec "$NEW_PG" psql -U salon -d postgres -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS salon WITH (FORCE);" -c "CREATE DATABASE salon;"
