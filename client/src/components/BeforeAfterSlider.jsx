@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { photoSrc, photoSrcSet } from '../utils/image';
 
 // Plays a brief, one-time "wiggle" demo shortly after the slider appears —
 // nudges the handle left/right so first-time visitors immediately get that
@@ -66,12 +67,12 @@ export default function BeforeAfterSlider({ beforeUrl, afterUrl, altText }) {
 
   return (
     <div ref={containerRef} className="before-after-slider">
-      <img src={`/${afterUrl}`} alt={`Après — ${altText}`} className="before-after-img before-after-img-after" draggable={false} />
+      <img src={photoSrc(afterUrl, 800)} srcSet={photoSrcSet(afterUrl)} sizes="(max-width: 640px) 92vw, 45vw" decoding="async" alt={`Après — ${altText}`} className="before-after-img before-after-img-after" draggable={false} />
       <div
         className={`before-after-clip${isDemoing ? ' is-demoing' : ''}`}
         style={{ clipPath: `inset(0 ${100 - position}% 0 0)` }}
       >
-        <img src={`/${beforeUrl}`} alt={`Avant — ${altText}`} className="before-after-img before-after-img-before" draggable={false} />
+        <img src={photoSrc(beforeUrl, 800)} srcSet={photoSrcSet(beforeUrl)} sizes="(max-width: 640px) 92vw, 45vw" decoding="async" alt={`Avant — ${altText}`} className="before-after-img before-after-img-before" draggable={false} />
       </div>
       <div
         className={`before-after-handle${isDemoing ? ' is-demoing' : ''}`}

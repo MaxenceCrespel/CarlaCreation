@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { photoSrc } from '../../utils/image';
 import { useConfirm } from '../../context/ConfirmContext';
 import { apiFetch, apiUpload } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
@@ -240,11 +241,11 @@ function GalleryCard({ item, categories, isFirst, isLast, onSave, onDelete, onMo
     <div className="admin-gallery-card">
       {item.before_url ? (
         <div className="admin-gallery-card-pair">
-          <img src={`/${item.before_url}`} alt={`Avant — ${item.alt_text}`} loading="lazy" />
-          <img src={`/${item.url}`} alt={`Après — ${item.alt_text}`} loading="lazy" />
+          <img src={photoSrc(item.before_url, 480)} alt={`Avant — ${item.alt_text}`} loading="lazy" />
+          <img src={photoSrc(item.url, 480)} alt={`Après — ${item.alt_text}`} loading="lazy" />
         </div>
       ) : (
-        <img src={`/${item.url}`} alt={item.alt_text} loading="lazy" />
+        <img src={photoSrc(item.url, 480)} alt={item.alt_text} loading="lazy" />
       )}
       <div className="admin-gallery-card-body">
         <input type="text" className="alt-input" value={alt} maxLength={150} aria-label="Légende" onChange={(e) => setAlt(e.target.value)} />

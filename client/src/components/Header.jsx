@@ -11,7 +11,7 @@ export default function Header() {
     <header className="site-header">
       <div className="container header-inner">
         <Link className="brand" to="/" onClick={() => setIsOpen(false)}>
-          <img className="brand-logo" src={logo} alt="" />
+          <img className="brand-logo" src={logo} alt="" width="56" height="56" />
           <span className="brand-text">{siteName}</span>
         </Link>
 

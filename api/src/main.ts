@@ -4,6 +4,7 @@ import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
+import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { config } from './config';
@@ -41,6 +42,8 @@ async function bootstrap() {
       crossOriginResourcePolicy: { policy: 'same-site' },
     }),
   );
+  // gzip/deflate for the JSON, HTML, CSS and JS responses (images are already compressed).
+  app.use(compression());
   app.use(helmet.hsts({ maxAge: 63072000, includeSubDomains: true, preload: true }));
 
   app.enableCors({
@@ -64,8 +67,9 @@ async function bootstrap() {
   // Uploaded photos (the React build itself is served by ServeStaticModule,
   // configured in AppModule — it also handles the SPA fallback correctly).
   const uploadsDir = path.join(__dirname, '..', 'uploads');
-  const staticMaxAge = config.isProd ? '1d' : 0;
-  app.useStaticAssets(uploadsDir, { prefix: '/uploads', maxAge: staticMaxAge });
+  // Upload file names are unique (timestamp + random), a given URL never changes.
+  const staticMaxAge = config.isProd ? '1y' : 0;
+  app.useStaticAssets(uploadsDir, { prefix: '/uploads', maxAge: staticMaxAge, immutable: config.isProd });
 
   await app.listen(config.PORT);
 
