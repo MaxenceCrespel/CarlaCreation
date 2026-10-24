@@ -49,8 +49,13 @@ jobs:
     needs: Docker-Build-and-Security
     uses: ./.github/workflows/e2e-cypress.yml
 
-  Deploy-Staging:
+  # Déploiement automatique en production (carlacreation.fr) à chaque push sur
+  # main, une fois tout le reste au vert. Jamais sur une pull request ni sur la
+  # planification nocturne.
+  Deploy-Production:
     needs: [Load-Testing, DAST-OWASP-ZAP, E2E-Cypress]
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
-    uses: ./.github/workflows/deploy-staging.yml
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    uses: ./.github/workflows/deploy-production.yml
+    with:
+      ref: main
     secrets: inherit

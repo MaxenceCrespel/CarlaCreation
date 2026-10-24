@@ -8,9 +8,12 @@ const FALLBACK = {
   sitePhoneHref: '',
   siteEmail: '',
   sitePublicArea: '',
+  legalForm: '',
+  siret: '',
   siteUrl: '',
   travelFeeFallbackCents: 200,
   travelFreeRadiusKm: 10,
+  stripeEnabled: false,
   navLinks: [
     { href: '/', label: 'Accueil', key: 'home' },
     { href: '/services', label: 'Prestations', key: 'services' },

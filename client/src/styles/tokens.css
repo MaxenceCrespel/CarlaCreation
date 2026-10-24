@@ -1,0 +1,71 @@
+/* Jetons de design (refonte UX/UI). Les anciens noms (--color-accent-dark,
+   --color-muted, --color-text-soft, --font-heading…) restent disponibles
+   en alias dans main.css le temps de la migration. */
+@font-face {
+  font-family: 'Fraunces';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url('/fonts/Fraunces-latin.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url('/fonts/Inter-latin.woff2') format('woff2');
+}
+
+:root {
+  /* Couleurs */
+  --color-bg: #F8F4EF;
+  --color-bg-alt: #E9DED2;
+  --color-surface: #FFFFFF;
+  --color-text: #3A2E27;
+  --color-text-muted: #594940;
+  --color-text-subtle: #756148; /* jamais sur --color-bg-alt */
+  --color-accent: #B8735A;      /* décor, texte ≥ 24 px */
+  --color-accent-strong: #9A5F4B; /* fonds de bouton */
+  --color-accent-hover: #8A4F3C;
+  --color-accent-ink: #8A4F3C;  /* liens */
+  --color-on-accent: #FFFFFF;
+  --color-border: #E6D9CB;
+  --color-border-strong: #9C8676; /* champs */
+  --color-focus: #3A2E27;
+  --color-success: #2F6B4F; --color-success-bg: #E3EEE6;
+  --color-danger: #A23B32;  --color-danger-bg: #F6E1DE;
+  --color-warning: #8A5A0B; --color-warning-bg: #F5EAD3;
+  --color-info: #2E5E8C;    --color-info-bg: #E1E9F2;
+  /* Typographie */
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --text-sm: 0.875rem; --text-md: 1rem;
+  --text-lg: 1.125rem; --text-h3: 1.25rem;
+  --text-h2: 1.5rem;   --text-h1: 2rem;
+  --text-display: clamp(2.5rem, 6vw, 4rem);
+  /* Espaces, rayons, ombres */
+  --space-1: 4px;  --space-2: 8px;
+  --space-3: 12px; --space-4: 16px;
+  --space-5: 24px; --space-6: 32px;
+  --space-7: 48px; --space-8: 64px;
+  --radius-sm: 10px; --radius-md: 16px;
+  --radius-lg: 24px; --radius-pill: 999px;
+  --shadow-1: 0 0 0 1px var(--color-border);
+  --shadow-2: 0 8px 24px rgb(58 46 39 / .10);
+  --shadow-3: 0 24px 64px rgb(58 46 39 / .22);
+  --tap: 44px; --btn-h: 52px;
+  --dur: 160ms;
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

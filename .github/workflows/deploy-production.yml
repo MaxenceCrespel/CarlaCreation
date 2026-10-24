@@ -1,0 +1,86 @@
+name: Deploy Production
+
+# Déploie sur carlacreation.fr (VPS, dossier /opt/carla-prod).
+#
+# - Automatique : appelé par main.yml à chaque push sur main, une fois les
+#   tests, scans et E2E au vert.
+# - Manuel : onglet Actions → "Run workflow" (redéployer à la main, ou
+#   déployer une autre branche/un tag ; le champ `confirm` évite un clic
+#   distrait).
+#
+# Avant chaque déploiement : sauvegarde de la base. Après : contrôle de santé
+# du site ; s'il échoue, le code précédent est redéployé automatiquement (les
+# migrations déjà appliquées ne sont PAS annulées — voir la sauvegarde).
+on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: false
+        default: main
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Tapez "deploy" pour confirmer (déploie en production, argent réel)'
+        required: true
+      ref:
+        description: 'Branche ou tag à déployer en production'
+        required: true
+        default: main
+
+# Un seul déploiement à la fois, jamais interrompu en cours de route.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  Deploy-Production:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.confirm == 'deploy'
+    env:
+      DEPLOY_REF: ${{ inputs.ref || 'main' }}
+    steps:
+      - name: Déploiement Continu via SSH sur le VPS (production)
+        uses: appleboy/ssh-action@v1
+        with:
+          # Mêmes accès SSH que l'ancien staging (même VPS, même utilisateur) tant
+          # que les secrets PRODUCTION_SSH_* ne sont pas définis.
+          host: ${{ secrets.PRODUCTION_SSH_HOST || secrets.STAGING_SSH_HOST }}
+          username: ${{ secrets.PRODUCTION_SSH_USER || secrets.STAGING_SSH_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY || secrets.STAGING_SSH_KEY }}
+          envs: DEPLOY_REF
+          script_stop: true
+          script: |
+            set -e
+            cd /opt/carla-prod
+            COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
+
+            # 1. Sauvegarde de la base avant toute modification (14 dernières conservées).
+            mkdir -p "$HOME/backups"
+            docker exec carla-prod-postgres-1 pg_dump -U salon -Fc salon > "$HOME/backups/prod-avant-deploiement-$(date +%Y%m%d-%H%M%S).dump"
+            ls -1t "$HOME"/backups/prod-avant-deploiement-*.dump | tail -n +15 | xargs -r rm --
+
+            # 2. Mise à jour du code.
+            PREVIOUS="$(git rev-parse HEAD)"
+            git fetch origin "$DEPLOY_REF"
+            git checkout "$DEPLOY_REF"
+            git pull origin "$DEPLOY_REF"
+
+            healthy() {
+              for i in $(seq 1 30); do
+                if curl -fsS https://carlacreation.fr/healthz >/dev/null 2>&1; then return 0; fi
+                sleep 3
+              done
+              return 1
+            }
+
+            # 3. Construction, démarrage, migrations, contrôle de santé.
+            if $COMPOSE up -d --build && $COMPOSE exec -T web npm run migration:run && healthy; then
+              echo "Déploiement réussi : $(git rev-parse --short HEAD)"
+            else
+              echo "ÉCHEC du déploiement — retour à $PREVIOUS" >&2
+              git checkout "$PREVIOUS"
+              $COMPOSE up -d --build
+              healthy || echo "Le site ne répond toujours pas après le retour arrière." >&2
+              exit 1
+            fi

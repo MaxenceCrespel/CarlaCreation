@@ -51,19 +51,24 @@ RUN npm install -g npm@latest
 # package.json against the public registry and 404s), so fetch each fixed
 # tarball and swap the vendored copy directly.
 #   - brace-expansion: CVE-2026-14257 (fixed 5.0.8), then CVE-2026-69152
-#     found in that very 5.0.8 fix (fixed 5.0.9) — re-check this pin
+#     found in that very 5.0.8 fix (fixed 5.0.9), then CVE-2026-102276 /
+#     CVE-2026-102278 (fixed 5.0.11) — re-check this pin
 #     whenever Trivy flags it again, this package has had two CVEs in a row.
 #   - ip-address: CVE-2026-69192, Address4 leading-zero octets decoded as
 #     decimal while resolvers treat them as octal (fixed 10.3.1).
 #   - tar: CVE-2026-73566, DoS via a crafted long-path tar archive
 #     (fixed 7.5.21) — used internally by npm itself (npm pack/cacache).
+#   - undici: CVE-2026-109869, DoS via unhandled stream error (fixed 6.29.1).
 RUN NPM_DIR="$(npm root -g)/npm" \
   && cd /tmp \
-  && npm pack brace-expansion@5.0.9 ip-address@10.3.1 tar@7.5.21 \
-  && tar -xzf brace-expansion-5.0.9.tgz && rm -rf "$NPM_DIR/node_modules/brace-expansion" && mv package "$NPM_DIR/node_modules/brace-expansion" \
-  && tar -xzf ip-address-10.3.1.tgz && rm -rf "$NPM_DIR/node_modules/ip-address" && mv package "$NPM_DIR/node_modules/ip-address" \
-  && tar -xzf tar-7.5.21.tgz && rm -rf "$NPM_DIR/node_modules/tar" && mv package "$NPM_DIR/node_modules/tar" \
-  && rm -f brace-expansion-5.0.9.tgz ip-address-10.3.1.tgz tar-7.5.21.tgz
+  && for spec in brace-expansion@5.0.11 ip-address@10.3.1 tar@7.5.21 undici@6.29.1; do \
+       name="${spec%@*}"; file="${name}-${spec##*@}.tgz"; \
+       npm pack "$spec" >/dev/null \
+       && tar -xzf "$file" \
+       && rm -rf "$NPM_DIR/node_modules/$name" \
+       && mv package "$NPM_DIR/node_modules/$name" \
+       && rm -f "$file"; \
+     done
 
 COPY --from=api-build /build/api/node_modules ./node_modules
 COPY --from=api-build /build/api/dist ./dist

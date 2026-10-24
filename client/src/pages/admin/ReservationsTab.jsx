@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from 'react';
+import { useConfirm } from '../../context/ConfirmContext';
 import { apiFetch } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import ReservationsCalendar from './ReservationsCalendar';
@@ -10,7 +11,7 @@ import { formatPrice } from '../../utils/format';
 function reservationTotalCents(r) {
   const addonsSum = (r.addons ?? []).reduce((sum, a) => sum + a.extra_price_cents, 0);
   const fullPrice = r.price_cents + addonsSum;
-  return Math.round(fullPrice * (1 - (r.discount_percent ?? 0) / 100));
+  return Math.max(0, Math.round(fullPrice * (1 - (r.discount_percent ?? 0) / 100)) - (r.discount_cents ?? 0));
 }
 
 const STATUS_LABELS = {
@@ -20,6 +21,45 @@ const STATUS_LABELS = {
   cancelled: 'Annulée',
   refused: 'Refusée',
 };
+
+const PAYMENT_STATUS_LABELS = {
+  pending: 'En attente',
+  authorized: 'Autorisé (à encaisser)',
+  paid: 'Réglé',
+  refunded: 'Remboursé',
+  partially_refunded: 'Partiellement remboursé',
+  canceled: 'Annulé',
+};
+const PAYMENT_STATUS_BADGE_CLASS = {
+  pending: 'status-pending',
+  authorized: 'status-pending',
+  paid: 'status-confirmed',
+  refunded: 'status-completed',
+  partially_refunded: 'status-pending',
+  canceled: 'status-cancelled',
+};
+
+// Shown for a reservation with no online payment on file — "payer sur
+// place" was chosen (or Stripe isn't configured at all). Purely a
+// bookkeeping toggle: Carla flips it herself once she's actually been
+// paid (cash, or the SumUp app's own Tap to Pay on her phone — neither
+// integrated with this system, see project notes). Callers only render
+// this when r.payment_status is falsy (no online payment to show instead).
+function OnSitePaymentToggle({ r, onToggle }) {
+  return (
+    <div className="row-addons">
+      Paiement :{' '}
+      <span className={`status-badge ${r.paid_on_site ? 'status-confirmed' : 'status-pending'}`}>
+        {r.paid_on_site ? 'Réglé sur place' : 'À régler sur place'}
+      </span>
+      <div className="inline-row-buttons">
+        <button type="button" onClick={() => onToggle(r.group_id, !r.paid_on_site)}>
+          {r.paid_on_site ? 'Marquer comme non réglé' : 'Marquer comme réglé'}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 const EMPTY_GUEST = () => ({ key: Date.now() + Math.random(), name: '', serviceId: '', addonIds: [] });
 
@@ -277,7 +317,7 @@ function AddReservationForm({ onCreated, onCancel }) {
       </div>
 
       <div className="form-row">
-        <label htmlFor="manual-name">Nom (personne 1)</label>
+        <label htmlFor="manual-name">Prénom et nom (personne 1)</label>
         <ClientNameAutocomplete id="manual-name" value={form.clientName} onChange={update('clientName')} onPick={pickSuggestedClient} />
       </div>
 
@@ -556,7 +596,7 @@ function EditReservationModal({ reservation, onClose, onSaved }) {
         </div>
 
         <div className="form-row">
-          <label htmlFor="edit-name">Nom</label>
+          <label htmlFor="edit-name">Prénom et nom</label>
           <input type="text" id="edit-name" required minLength={2} maxLength={100} value={form.clientName} onChange={update('clientName')} />
         </div>
 
@@ -747,7 +787,7 @@ function ClientMatchModal({ reservation, onClose, onLinked }) {
             <label>Nouvelle fiche client</label>
             <div className="form-row two-col">
               <div>
-                <label htmlFor="client-create-name">Nom</label>
+                <label htmlFor="client-create-name">Prénom et nom</label>
                 <input
                   type="text"
                   id="client-create-name"
@@ -815,7 +855,7 @@ function ClientMatchModal({ reservation, onClose, onLinked }) {
 // (contact, lieu, note, statut modifiable, actions). Delegates every
 // mutation back to the parent's existing handlers so there's no duplicated
 // business logic, only a different presentation of the same row.
-function ReservationDetailModal({ reservation: r, onClose, onUpdateStatus, onEdit, onRefuse, onDelete, onLinkClient, onUnlinkClient }) {
+function ReservationDetailModal({ reservation: r, onClose, onUpdateStatus, onEdit, onRefuse, onDelete, onLinkClient, onUnlinkClient, onSetPaidOnSite }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card" role="dialog" aria-modal="true" aria-label="Détail de la réservation" onClick={(e) => e.stopPropagation()}>
@@ -833,9 +873,9 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdateStatus, onEdi
               {r.addons && r.addons.length > 0 && (
                 <div className="row-addons">+ {r.addons.map((a) => `${a.name} (${formatPrice(a.extra_price_cents)})`).join(', ')}</div>
               )}
-              {r.discount_percent > 0 ? (
+              {r.discount_percent > 0 || r.discount_cents > 0 ? (
                 <div className="row-addons">
-                  -{r.discount_percent}% {r.promotion_label ? `(${r.promotion_label})` : '(code promo)'} → total {formatPrice(reservationTotalCents(r))}
+                  {r.discount_cents > 0 ? `-${formatPrice(r.discount_cents)}` : `-${r.discount_percent}%`} {r.promotion_label ? `(${r.promotion_label})` : '(code promo)'} → total {formatPrice(reservationTotalCents(r))}
                 </div>
               ) : (
                 <div className="row-addons">Total : {formatPrice(reservationTotalCents(r))}</div>
@@ -906,6 +946,24 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdateStatus, onEdi
               <dd>{r.cancellation_reason}</dd>
             </div>
           )}
+          {r.payment_status ? (
+            <div>
+              <dt>Paiement en ligne</dt>
+              <dd>
+                <span className={`status-badge ${PAYMENT_STATUS_BADGE_CLASS[r.payment_status] || 'status-pending'}`}>
+                  {PAYMENT_STATUS_LABELS[r.payment_status] || r.payment_status}
+                </span>{' '}
+                {formatPrice(r.payment_amount_cents)}
+              </dd>
+            </div>
+          ) : (
+            <div>
+              <dt>Paiement</dt>
+              <dd>
+                <OnSitePaymentToggle r={r} onToggle={onSetPaidOnSite} />
+              </dd>
+            </div>
+          )}
         </dl>
 
         <div className="modal-actions" style={{ flexWrap: 'wrap' }}>
@@ -974,6 +1032,7 @@ function wazeUrl(address) {
 }
 
 export default function ReservationsTab() {
+  const confirm = useConfirm();
   const showToast = useToast();
   const [reservations, setReservations] = useState(null);
   const [error, setError] = useState(null);
@@ -1013,7 +1072,15 @@ export default function ReservationsTab() {
   }
 
   async function refuse(id) {
-    if (!window.confirm('Refuser cette réservation ?')) return;
+    if (
+      !(await confirm({
+        title: 'Refuser cette réservation ?',
+        message: "La cliente en sera informée par email. Si elle a payé en ligne, l'autorisation sur sa carte est annulée (aucun débit).",
+        confirmLabel: 'Refuser',
+      }))
+    ) {
+      return;
+    }
     await updateStatus(id, 'refused');
   }
 
@@ -1044,7 +1111,7 @@ export default function ReservationsTab() {
   }
 
   async function unlinkClient(id) {
-    if (!window.confirm('Délier cette fiche client de ce rendez-vous ?')) return;
+    if (!await confirm('Délier cette fiche client de ce rendez-vous ?')) return;
     try {
       await apiFetch('/admin/clients/unlink', { method: 'POST', body: { reservationId: id } });
       setReservations((rows) => rows.map((r) => (r.id === id ? { ...r, client_id: null } : r)));
@@ -1055,11 +1122,30 @@ export default function ReservationsTab() {
   }
 
   async function refuseGroup(groupId) {
-    if (!window.confirm('Refuser toutes les personnes de ce rendez-vous groupé ?')) return;
+    if (
+      !(await confirm({
+        title: 'Refuser tout ce rendez-vous ?',
+        message: 'Toutes les personnes du rendez-vous groupé sont refusées et la cliente en est informée par email.',
+        confirmLabel: 'Tout refuser',
+      }))
+    ) {
+      return;
+    }
     try {
       await apiFetch(`/reservations/group/${groupId}/status`, { method: 'PATCH', body: { status: 'refused' } });
       setReservations((rows) => rows.map((r) => (r.group_id === groupId ? { ...r, status: 'refused' } : r)));
       showToast('Groupe refusé.', 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
+  async function setPaidOnSite(groupId, paid) {
+    try {
+      await apiFetch(`/reservations/group/${groupId}/paid-on-site`, { method: 'PATCH', body: { paid } });
+      setReservations((rows) => rows.map((r) => (r.group_id === groupId ? { ...r, paid_on_site: paid } : r)));
+      setDetailTarget((t) => (t && t.group_id === groupId ? { ...t, paid_on_site: paid } : t));
+      showToast(paid ? 'Marqué comme réglé.' : 'Marqué comme non réglé.', 'success');
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -1090,7 +1176,14 @@ export default function ReservationsTab() {
     : viewMode === 'calendar'
       ? []
       : dateFiltered;
-  const days = viewMode === 'calendar' ? [{ date: null, rows }] : groupByDay(rows);
+  // Finished statuses (terminées, annulées, refusées) are a history: most
+  // recent day first. Upcoming ones stay in chronological order. Within a day
+  // the times keep ascending order.
+  const newestFirst = ['completed', 'cancelled', 'refused'].includes(filter);
+  const orderedRows = newestFirst
+    ? [...rows].sort((a, b) => b.reservation_date.localeCompare(a.reservation_date) || a.start_time.localeCompare(b.start_time))
+    : rows;
+  const days = viewMode === 'calendar' ? [{ date: null, rows }] : groupByDay(orderedRows);
 
   return (
     <>
@@ -1245,9 +1338,9 @@ export default function ReservationsTab() {
                           {r.addons && r.addons.length > 0 && (
                             <div className="row-addons">+ {r.addons.map((a) => `${a.name} (${formatPrice(a.extra_price_cents)})`).join(', ')}</div>
                           )}
-                          {r.discount_percent > 0 ? (
+                          {r.discount_percent > 0 || r.discount_cents > 0 ? (
                             <div className="row-addons">
-                              -{r.discount_percent}% {r.promotion_label ? `(${r.promotion_label})` : '(code promo)'} → {formatPrice(reservationTotalCents(r))}
+                              {r.discount_cents > 0 ? `-${formatPrice(r.discount_cents)}` : `-${r.discount_percent}%`} {r.promotion_label ? `(${r.promotion_label})` : '(code promo)'} → {formatPrice(reservationTotalCents(r))}
                             </div>
                           ) : (
                             <div className="row-addons">Total : {formatPrice(reservationTotalCents(r))}</div>
@@ -1299,6 +1392,17 @@ export default function ReservationsTab() {
                             </select>
                             {r.status === 'cancelled' && r.cancellation_reason && (
                               <div className="row-addons">Motif : {r.cancellation_reason}</div>
+                            )}
+                            {r.payment_status ? (
+                              <div className="row-addons">
+                                Paiement en ligne :{' '}
+                                <span className={`status-badge ${PAYMENT_STATUS_BADGE_CLASS[r.payment_status] || 'status-pending'}`}>
+                                  {PAYMENT_STATUS_LABELS[r.payment_status] || r.payment_status}
+                                </span>{' '}
+                                {formatPrice(r.payment_amount_cents)}
+                              </div>
+                            ) : (
+                              <OnSitePaymentToggle r={r} onToggle={setPaidOnSite} />
                             )}
                           </div>
                         </td>
@@ -1400,6 +1504,7 @@ export default function ReservationsTab() {
             unlinkClient(id);
             setDetailTarget(null);
           }}
+          onSetPaidOnSite={setPaidOnSite}
         />
       )}
     </>

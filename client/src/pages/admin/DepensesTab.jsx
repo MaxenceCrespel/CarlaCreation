@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useConfirm } from '../../context/ConfirmContext';
 import { apiFetch } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { formatPrice } from '../../utils/format';
@@ -124,6 +125,7 @@ function ExpenseRow({ expense, onSave, onRemove }) {
 }
 
 export default function DepensesTab() {
+  const confirm = useConfirm();
   const showToast = useToast();
   const [expenses, setExpenses] = useState(null);
   const [error, setError] = useState(null);
@@ -144,7 +146,7 @@ export default function DepensesTab() {
   }
 
   async function removeExpense(id) {
-    if (!window.confirm('Supprimer définitivement cette dépense ?')) return;
+    if (!await confirm('Supprimer définitivement cette dépense ?')) return;
     try {
       await apiFetch(`/admin/expenses/${id}`, { method: 'DELETE' });
       setExpenses((rows) => rows.filter((e) => e.id !== id));

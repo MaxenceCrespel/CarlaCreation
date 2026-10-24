@@ -112,13 +112,12 @@ export default function AdminApp() {
                 <path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" />
               </svg>
             </button>
-            <button type="button" className="admin-logout-btn" onClick={handleLogout} aria-label="Se déconnecter">
+            <button type="button" className="admin-logout-btn" onClick={handleLogout} aria-label="Se déconnecter" title="Se déconnecter">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
                 <polyline points="16 17 21 12 16 7" />
                 <line x1="21" y1="12" x2="9" y2="12" />
               </svg>
-              <span className="admin-logout-label">Se déconnecter</span>
             </button>
           </div>
         </div>
@@ -152,6 +151,21 @@ export default function AdminApp() {
           <ActiveComponent username={session.username} onCredentialsUpdated={(newUsername) => setSession({ username: newUsername })} />
         </main>
       </div>
+
+      <nav className="admin-tabbar" aria-label="Accès rapide">
+        {[['reservations', 'Réservations'], ['clients', 'Clients'], ['dashboard', 'Tableau de bord']].map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            aria-current={activeTab === key ? 'page' : undefined}
+            className={activeTab === key ? 'is-active' : ''}
+            onClick={() => setActiveTab(key)}
+          >
+            {label}
+          </button>
+        ))}
+        <button type="button" onClick={() => setNavOpen(true)}>Plus</button>
+      </nav>
 
       {showAccountModal && (
         <div className="modal-overlay" onClick={() => setShowAccountModal(false)}>

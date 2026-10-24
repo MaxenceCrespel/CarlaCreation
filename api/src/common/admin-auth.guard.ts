@@ -20,7 +20,10 @@ export class AdminAuthGuard implements CanActivate {
     }
 
     try {
-      const payload = this.jwtService.verify<{ sub: number; username: string }>(token);
+      const payload = this.jwtService.verify<{ sub: number; username: string; role?: string }>(token);
+      // Same JWT secret as client sessions: without this check a client's
+      // own token, replayed as the admin_session cookie, would pass.
+      if (payload.role !== 'admin') throw new Error('not an admin token');
       req.admin = { sub: payload.sub, username: payload.username };
       return true;
     } catch (err) {

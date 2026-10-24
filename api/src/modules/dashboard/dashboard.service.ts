@@ -17,6 +17,7 @@ interface ReservationRow {
   status: 'pending' | 'confirmed' | 'completed';
   at_client_home: boolean;
   discount_percent: number;
+  discount_cents: number;
 }
 
 @Injectable()
@@ -44,7 +45,7 @@ export class DashboardService {
     const now = new Date();
 
     const reservations: ReservationRow[] = await this.dataSource.query(
-      `SELECT r.id, r.service_id, s.name AS service_name, s.price_cents, r.start_time, r.end_time, r.reservation_date, r.status, r.at_client_home, r.discount_percent
+      `SELECT r.id, r.service_id, s.name AS service_name, s.price_cents, r.start_time, r.end_time, r.reservation_date, r.status, r.at_client_home, r.discount_percent, r.discount_cents
        FROM reservations r
        JOIN services s ON s.id = r.service_id
        WHERE r.reservation_date BETWEEN $1 AND $2 AND r.status NOT IN ('cancelled', 'refused')`,
@@ -77,7 +78,7 @@ export class DashboardService {
 
     for (const r of reservations) {
       const fullPrice = r.price_cents + (addonSums.get(r.id) ?? 0);
-      const total = Math.round(fullPrice * (1 - r.discount_percent / 100));
+      const total = Math.max(0, Math.round(fullPrice * (1 - r.discount_percent / 100)) - r.discount_cents);
       statusCounts[r.status] = (statusCounts[r.status] ?? 0) + 1;
 
       if (r.status === 'pending') {

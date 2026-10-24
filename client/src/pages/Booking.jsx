@@ -6,6 +6,10 @@ import { useToast } from '../context/ToastContext';
 import { useSeo } from '../hooks/useSeo';
 import { formatDuration, formatPrice } from '../utils/format';
 import { getSavedContact, saveContact } from '../utils/contactStorage';
+import AccountAuthForms from '../components/AccountAuthForms';
+import ReferralCodeForm from '../components/ReferralCodeForm';
+import { getStoredReferral } from '../utils/referralStorage';
+import { BOOKING_DONE_KEY } from '../components/InstallAppBanner';
 
 const DAY_NAMES = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 const HOURS_PREVIEW_DAYS = 14;
@@ -77,6 +81,27 @@ function AddonCheckboxes({ service, selectedIds, onToggle }) {
 // booker and each additional guest so picking a service always looks the
 // same. Two levels only, e.g. "Coiffure" then "Hommes", like a
 // category/subcategory nav on an e-commerce site rather than one long list.
+// Email / phone sanity checks shown right under the field. Deliberately
+// loose — the server stays the authority, this only catches typos early.
+function contactFieldError(id, rawValue) {
+  const value = rawValue.trim();
+  if (id === 'clientEmail') {
+    if (!value) return 'Indiquez votre email.';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value)) return "Vérifiez l'adresse (ex. : prenom@gmail.com).";
+  }
+  if (id === 'clientPhone') {
+    if (!value) return 'Indiquez votre téléphone.';
+    if (value.replace(/\D/g, '').length < 10) return 'Le numéro doit comporter au moins 10 chiffres.';
+  }
+  return null;
+}
+
+// A guest's own rate ("tarif étudiant") and an order-wide code stack: the code
+// applies to what is left after the rate. Same rounding as the server.
+const combinePercents = (rate, code) => Math.round(100 * (1 - (1 - rate / 100) * (1 - code / 100)));
+
+const joinName = (first, last) => [first, last].map((p) => (p || '').trim()).filter(Boolean).join(' ');
+
 function ServicePicker({ services, categories, category, onCategoryChange, subcategory, onSubcategoryChange, selectedServiceId, onSelectService }) {
   const topLevelCategories = useMemo(() => categories.filter((c) => !c.parent_id).sort((a, b) => a.sort_order - b.sort_order), [categories]);
   const subcategories = useMemo(
@@ -171,8 +196,11 @@ function BookingSummary({ recapGuests, totalDuration, totalPrice }) {
           </li>
         ))}
       </ul>
-      <div className="booking-summary-total">
-        {formatDuration(totalDuration)} · {formatPrice(totalPrice)}
+      <div className="booking-summary-total" aria-live="polite">
+        <span className="booking-summary-meta">
+          {recapGuests.length > 1 ? `${recapGuests.length} personnes · ` : ''}{formatDuration(totalDuration)}
+        </span>
+        <span className="booking-summary-price">{formatPrice(totalPrice)}</span>
       </div>
     </div>
   );
@@ -181,7 +209,7 @@ function BookingSummary({ recapGuests, totalDuration, totalPrice }) {
 let guestKeySeq = 0;
 
 export default function Booking() {
-  const { sitePhone, sitePhoneHref, travelFeeFallbackCents, travelFreeRadiusKm } = useSiteConfig();
+  const { sitePhone, sitePhoneHref, travelFeeFallbackCents, travelFreeRadiusKm, stripeEnabled } = useSiteConfig();
   useSeo({
     title: 'Réserver un rendez-vous à Lille',
     description:
@@ -191,6 +219,33 @@ export default function Booking() {
   const showToast = useToast();
 
   const [step, setStep] = useState(1);
+
+  // Account is optional: guests can always book. Logging in here (rather
+  // than on a landing page) keeps the booking flow first — a logged-in
+  // client's booking is linked to their account server-side by the cookie.
+  const [account, setAccount] = useState(null); // null = guest, otherwise { name, email, phone }
+  const [showAccountModal, setShowAccountModal] = useState(false);
+
+  function loadAccount({ prefill } = {}) {
+    return apiFetch('/client-auth/me')
+      .then((me) => {
+        setAccount({ name: me.name, email: me.email, phone: me.phone, canApplyReferral: Boolean(me.referral?.canApplyCode) });
+        if (prefill) {
+          setForm((f) => ({ ...f, firstName: me.firstName || f.firstName, lastName: me.lastName || f.lastName, clientName: me.name || f.clientName, clientEmail: me.email || f.clientEmail, clientPhone: me.phone || f.clientPhone }));
+        }
+      })
+      .catch(() => setAccount(null));
+  }
+
+  useEffect(() => {
+    loadAccount({ prefill: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function accountLogout() {
+    await apiFetch('/client-auth/logout', { method: 'POST' });
+    setAccount(null);
+  }
 
   const [services, setServices] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -232,6 +287,8 @@ export default function Booking() {
   // retype their details every time; only saved locally in the browser.
   const [form, setForm] = useState(() => ({
     clientName: '',
+    firstName: '',
+    lastName: '',
     clientEmail: '',
     clientPhone: '',
     clientAddress: '',
@@ -249,6 +306,13 @@ export default function Booking() {
   const [submitting, setSubmitting] = useState(false);
   const [showRecap, setShowRecap] = useState(false);
   const [showAddonNudge, setShowAddonNudge] = useState(false);
+  // Only meaningful when Stripe is configured (stripeEnabled) — ignored
+  // otherwise, the booking just stays a plain request with no payment step.
+  // 'full' = payer en ligne maintenant; 'on_site' = payer sur place (Carla
+  // encaisse plus tard, hors de ce système — voir paidOnSite côté admin).
+  const [paymentOption, setPaymentOption] = useState('full');
+  const [redirecting, setRedirecting] = useState(false);
+  const [blurErrors, setBlurErrors] = useState({});
 
   // "Tarif spécial" (dropdown, e.g. tarif étudiant) and "code promo" (typed
   // + validated) are mutually exclusive — picking one clears the other, see
@@ -260,8 +324,13 @@ export default function Booking() {
   const [promoCodeState, setPromoCodeState] = useState('idle'); // idle | loading | valid | invalid
   const [appliedPromoCode, setAppliedPromoCode] = useState(null); // { code, label, discount_percent } once validated
 
+  // 0 = the main person, i + 1 = guests[i] — only that person's service
+  // form is shown, the others collapse into tabs.
+  const [activePerson, setActivePerson] = useState(0);
   const formTopRef = useRef(null);
   const addonsSectionRef = useRef(null);
+  const addGuestBtnRef = useRef(null);
+  const stepActionsRef = useRef(null);
   // For steps whose invalid field isn't a single bordered input (the
   // prestation grid, a specific guest's whole block) — scrolled to and
   // outlined the same way as a real field, see focusInvalidField().
@@ -296,15 +365,15 @@ export default function Booking() {
   async function applyPromoCode() {
     const code = promoCodeInput.trim();
     if (!code) return;
-    setSelectedPromotionId('');
     setPromoCodeState('loading');
     try {
       const promo = await apiFetch(`/promotions/by-code/${encodeURIComponent(code)}`);
-      setAppliedPromoCode({ code, label: promo.label, discount_percent: promo.discount_percent });
+      setAppliedPromoCode({ code, label: promo.label, discount_percent: promo.discount_percent, discount_cents: promo.discount_cents ?? 0 });
       setPromoCodeState('valid');
     } catch {
       setAppliedPromoCode(null);
       setPromoCodeState('invalid');
+      showToast('Code promo invalide ou expiré.', 'error');
     }
   }
 
@@ -372,8 +441,9 @@ export default function Booking() {
         return {
           name: form.clientName,
           priceCents: priceFor(selectedService, selectedAddonIds),
-          discountPercent: promo ? promo.discount_percent : codePercent,
-          discountLabel: promo ? promo.label : appliedPromoCode?.label,
+          discountPercent: combinePercents(promo ? promo.discount_percent : 0, codePercent),
+          discountLabel: [promo?.label, appliedPromoCode?.label].filter(Boolean).join(' + '),
+          usesCode: Boolean(appliedPromoCode),
         };
       })(),
       ...guests.map((g) => {
@@ -382,12 +452,24 @@ export default function Booking() {
         return {
           name: g.name,
           priceCents: priceFor(svc, g.addonIds),
-          discountPercent: promo ? promo.discount_percent : codePercent,
-          discountLabel: promo ? promo.label : appliedPromoCode?.label,
+          discountPercent: combinePercents(promo ? promo.discount_percent : 0, codePercent),
+          discountLabel: [promo?.label, appliedPromoCode?.label].filter(Boolean).join(' + '),
+          usesCode: Boolean(appliedPromoCode),
         };
       }),
     ];
-    return rows.map((r) => ({ ...r, discountCents: Math.round(r.priceCents * (r.discountPercent / 100)) }));
+    // A fixed-euro code (loyalty reward) comes off every guest in order, after
+    // their percentage, never below zero — same allocation as the backend.
+    let remainingFixed = appliedPromoCode?.discount_cents ?? 0;
+    return rows.map((r) => {
+      const percentCents = Math.round(r.priceCents * (r.discountPercent / 100));
+      let fixedCents = 0;
+      if (r.usesCode && remainingFixed > 0) {
+        fixedCents = Math.min(remainingFixed, r.priceCents - percentCents);
+        remainingFixed -= fixedCents;
+      }
+      return { ...r, discountCents: percentCents + fixedCents };
+    });
   }, [form.clientName, selectedService, selectedAddonIds, selectedPromotionId, guests, services, promotions, appliedPromoCode]);
   const discountCents = useMemo(() => pricedGuests.reduce((sum, g) => sum + g.discountCents, 0), [pricedGuests]);
   const finalPrice = totalPrice - discountCents;
@@ -480,24 +562,29 @@ export default function Booking() {
     setSlots([]);
     setSlotsState('idle');
     setSelectedSlot('');
-    // Bring the supplements into view so they're never missed just because
-    // the service grid pushed them below the fold — this is what the
-    // whole multi-step redesign was for in the first place.
+    // Move on down to "Ajouter une personne" / "Suivant" (supplements, when
+    // there are any, render just above and stay in view) — never back up to
+    // the service grid the client just picked from.
     requestAnimationFrame(() => {
-      addonsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      (addGuestBtnRef.current || stepActionsRef.current)?.scrollIntoView({ behavior: 'smooth', block: 'end' });
     });
   }
 
   function addGuest() {
     if (guests.length >= MAX_ADDITIONAL_GUESTS) return;
     guestKeySeq += 1;
-    setGuests((g) => [...g, { key: guestKeySeq, name: '', category: firstTopLevelCategoryId(categories), subcategory: null, serviceId: null, addonIds: [], promotionId: '' }]);
+    setGuests((g) => [...g, { key: guestKeySeq, name: '', firstName: '', lastName: '', category: firstTopLevelCategoryId(categories), subcategory: null, serviceId: null, addonIds: [], promotionId: '' }]);
     setSlots([]);
     setSlotsState('idle');
     setSelectedSlot('');
+    setActivePerson(guests.length + 1);
+    requestAnimationFrame(() => {
+      document.getElementById('person-tabs')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   }
 
   function removeGuest(key) {
+    setActivePerson(0);
     setGuests((g) => g.filter((guest) => guest.key !== key));
     setSlots([]);
     setSlotsState('idle');
@@ -566,7 +653,7 @@ export default function Booking() {
     apiFetch(`/reservations/day-availability?serviceIds=${serviceIds.join(',')}&atClientHome=${atClientHome}&addonMinutes=${totalAddonMinutes}&days=${DAY_PICKER_DAYS}${addressParam}`)
       .then((result) => {
         if (cancelled) return;
-        setDayAvailability(Object.fromEntries(result.map((d) => [d.date, d.hasSlots])));
+        setDayAvailability(Object.fromEntries(result.map((d) => [d.date, d.slotCount ?? (d.hasSlots ? 1 : 0)])));
       })
       .catch(() => {
         if (!cancelled) setDayAvailability({});
@@ -601,7 +688,10 @@ export default function Booking() {
         setSelectedSlot(result.slots[0] || '');
       })
       .catch(() => {
-        if (!cancelled) setSlotsState('error');
+        if (!cancelled) {
+          setSlotsState('error');
+          showToast('Erreur de chargement des créneaux.', 'error');
+        }
       });
     return () => {
       cancelled = true;
@@ -644,19 +734,40 @@ export default function Booking() {
     return (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
   }
 
+  // First and last name are separate inputs (compound names are common);
+  // `clientName` stays the joined string everything else reads.
+  function updateName(part, value) {
+    setForm((f) => {
+      const next = { ...f, [part]: value };
+      return { ...next, clientName: joinName(next.firstName, next.lastName) };
+    });
+  }
+
+  // Unlike updateGuest, typing a name must not reset the guest's addons/slots.
+  function updateGuestName(key, part, value) {
+    setGuests((g) =>
+      g.map((guest) => {
+        if (guest.key !== key) return guest;
+        const next = { ...guest, [part]: value };
+        return { ...next, name: joinName(next.firstName, next.lastName) };
+      }),
+    );
+  }
+
   // Each step validates only what it's responsible for — returns
   // { message, fieldId } (fieldId names the input to jump to and outline in
   // red, see focusInvalidField — null when there's no single input for it),
   // or null when the step is complete and it's safe to move on.
   function validateStep(n) {
     if (n === 1) {
-      if (!form.clientName.trim()) return { message: 'Indiquez votre nom.', fieldId: 'clientName' };
+      if (!form.firstName.trim()) return { message: 'Indiquez votre prénom.', fieldId: 'clientFirstName' };
+      if (!form.lastName.trim()) return { message: 'Indiquez votre nom.', fieldId: 'clientLastName' };
       if (!selectedServiceId) return { message: 'Choisissez une prestation.', fieldId: 'service-picker' };
-      const badGuest = guests.find((g) => !g.name.trim() || !g.serviceId);
+      const badGuest = guests.find((g) => !g.firstName.trim() || !g.lastName.trim() || !g.serviceId);
       if (badGuest) {
-        return badGuest.name.trim()
-          ? { message: 'Choisissez une prestation pour chaque personne ajoutée, ou retirez-la.', fieldId: `guest-block-${badGuest.key}` }
-          : { message: 'Indiquez le nom de chaque personne ajoutée, ou retirez-la.', fieldId: `guest-name-${badGuest.key}` };
+        if (!badGuest.firstName.trim()) return { message: 'Indiquez le prénom de chaque personne ajoutée, ou retirez-la.', fieldId: `guest-name-${badGuest.key}` };
+        if (!badGuest.lastName.trim()) return { message: 'Indiquez le nom de chaque personne ajoutée, ou retirez-la.', fieldId: `guest-lastname-${badGuest.key}` };
+        return { message: 'Choisissez une prestation pour chaque personne ajoutée, ou retirez-la.', fieldId: `guest-block-${badGuest.key}` };
       }
       return null;
     }
@@ -679,7 +790,27 @@ export default function Booking() {
       if (!date || !selectedSlot) return { message: 'Choisissez une date et un créneau.', fieldId: 'slot' };
       return null;
     }
+    if (n === 4) {
+      const emailError = contactFieldError('clientEmail', form.clientEmail);
+      if (emailError) return { message: emailError, fieldId: 'clientEmail' };
+      const phoneError = contactFieldError('clientPhone', form.clientPhone);
+      if (phoneError) return { message: phoneError, fieldId: 'clientPhone' };
+    }
     return null;
+  }
+
+  // Inline error under a field: a blur-time one (email / phone, shown as soon
+  // as the client leaves the field) or the step validation's, when that is
+  // the field it points at.
+  function inlineError(id) {
+    if (blurErrors[id]) return blurErrors[id];
+    return invalidField === id && feedback?.type === 'error' ? feedback.text : null;
+  }
+
+  function blurValidate(id, value) {
+    const message = contactFieldError(id, value);
+    setBlurErrors((e) => ({ ...e, [id]: message }));
+    if (message && value.trim()) showToast(message, 'error');
   }
 
   // Scrolls to and outlines in red the field a validation error points at
@@ -692,6 +823,13 @@ export default function Booking() {
   // rendered.
   useEffect(() => {
     if (!invalidField) return;
+    const guestKey = /^guest-(?:block|name|lastname)-(\d+)$/.exec(invalidField)?.[1];
+    const guestIndex = guestKey ? guests.findIndex((g) => String(g.key) === guestKey) : -1;
+    const owner = guestIndex >= 0 ? guestIndex + 1 : 0;
+    if (step === 1 && owner !== activePerson) {
+      setActivePerson(owner);
+      return;
+    }
     if (invalidField === 'service-picker') {
       servicePickerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
@@ -704,12 +842,13 @@ export default function Booking() {
     el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     el?.focus({ preventScroll: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [invalidField, step]);
+  }, [invalidField, step, activePerson]);
 
   function goNext() {
     const error = validateStep(step);
     if (error) {
       setFeedback({ type: 'error', text: error.message });
+      showToast(error.message, 'error');
       setInvalidField(error.fieldId);
       return;
     }
@@ -764,10 +903,11 @@ export default function Booking() {
     setFeedback(null);
     setManageGroupId(null);
 
-    for (let n = 1; n <= 3; n += 1) {
+    for (let n = 1; n <= 4; n += 1) {
       const error = validateStep(n);
       if (error) {
         setFeedback({ type: 'error', text: error.message });
+        showToast(error.message, 'error');
         setStep(n);
         setInvalidField(error.fieldId);
         return;
@@ -797,13 +937,35 @@ export default function Booking() {
             addonIds: g.addonIds,
             promotionId: g.promotionId ? Number(g.promotionId) : undefined,
           })),
-          ...form,
+          // firstName / lastName are form-only (joined into clientName already).
+          ...Object.fromEntries(Object.entries(form).filter(([key]) => key !== 'firstName' && key !== 'lastName')),
+          clientName: joinName(form.firstName, form.lastName),
           atClientHome,
           clientAddress: atClientHome ? form.clientAddress.trim() : undefined,
           promotionId: selectedPromotionId ? Number(selectedPromotionId) : undefined,
           promoCode: promoCodeState === 'valid' ? appliedPromoCode?.code : undefined,
+          paymentOption: stripeEnabled && paymentOption === 'full' ? 'full' : undefined,
         },
       });
+
+      // Lets the home-screen install banner appear after a first booking.
+      try {
+        localStorage.setItem(BOOKING_DONE_KEY, String(Date.now()));
+      } catch {
+        // storage unavailable — non-critical
+      }
+
+      // Client chose to pay online: hand off to Stripe's own checkout page
+      // rather than showing the usual local success message — the booking
+      // already exists (pending), payment just secures it.
+      // Stripe redirects back to /mon-rendez-vous/:groupId once done either
+      // way (paid or abandoned), see ReservationsService.create.
+      if (reservation.checkoutUrl) {
+        setRedirecting(true);
+        window.location.href = reservation.checkoutUrl;
+        return;
+      }
+
       const totalPeople = guests.length + 1;
       setFeedback({
         type: 'success',
@@ -814,7 +976,7 @@ export default function Booking() {
       });
       setManageGroupId(reservation.groupId);
       showToast('Réservation envoyée avec succès !', 'success');
-      saveContact({ clientName: form.clientName, clientEmail: form.clientEmail, clientPhone: form.clientPhone });
+      saveContact({ clientName: form.clientName, firstName: form.firstName, lastName: form.lastName, clientEmail: form.clientEmail, clientPhone: form.clientPhone });
       setForm((f) => ({ ...f, notes: '', website: '' }));
       setSelectedAddonIds([]);
       setGuests([]);
@@ -867,6 +1029,10 @@ export default function Booking() {
           </div>
 
           <form className="card booking-form" noValidate onSubmit={handleSubmit} ref={formTopRef}>
+            <p className="booking-step-status">
+              <span>Étape {step} sur {STEPS.length} · <strong>{STEPS[step - 1].label}</strong></span>
+              {STEPS[step] && <span>Ensuite : {STEPS[step].label.toLowerCase()}</span>}
+            </p>
             <div className="booking-steps" role="tablist" aria-label="Étapes de réservation">
               {STEPS.map((s) => (
                 <button
@@ -884,26 +1050,66 @@ export default function Booking() {
               ))}
             </div>
 
-            {step > 1 && <BookingSummary recapGuests={recapGuests} totalDuration={totalDuration} totalPrice={finalPrice} />}
 
             {step === 1 && (
               <>
-                <div className="form-row">
-                  <label htmlFor="clientName">Nom complet {guests.length > 0 ? '(personne 1)' : ''}</label>
-                  <input
-                    type="text"
-                    id="clientName"
-                    className={invalidField === 'clientName' ? 'field-invalid' : ''}
-                    autoComplete="name"
-                    required
-                    minLength={2}
-                    maxLength={100}
-                    value={form.clientName}
-                    onChange={(e) => {
-                      updateField('clientName')(e);
-                      if (invalidField === 'clientName') setInvalidField(null);
-                    }}
-                  />
+                {guests.length > 0 && (
+                  <div className="person-tabs" id="person-tabs" role="tablist" aria-label="Personnes du rendez-vous">
+                    {[form.firstName, ...guests.map((g) => g.firstName)].map((name, i) => {
+                      const done = i === 0 ? !!selectedServiceId : !!guests[i - 1].serviceId;
+                      return (
+                        <button
+                          key={i === 0 ? 'main' : guests[i - 1].key}
+                          type="button"
+                          role="tab"
+                          aria-selected={activePerson === i}
+                          className={`person-tab ${activePerson === i ? 'is-active' : ''} ${done ? 'is-done' : ''}`}
+                          onClick={() => setActivePerson(i)}
+                        >
+                          <span className="person-tab-mark" aria-hidden="true">{done ? '✓' : i + 1}</span>
+                          <span className="person-tab-name">{name.trim() || `Personne ${i + 1}`}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <div hidden={activePerson !== 0}>
+                <div className="form-row two-col">
+                  <div>
+                    <label htmlFor="clientFirstName">Prénom {guests.length > 0 ? '(personne 1)' : ''}</label>
+                    <input
+                      type="text"
+                      id="clientFirstName"
+                      className={invalidField === 'clientFirstName' ? 'field-invalid' : ''}
+                      autoComplete="given-name"
+                      required
+                      maxLength={100}
+                      value={form.firstName}
+                      aria-invalid={invalidField === 'clientFirstName' ? 'true' : undefined}
+                      onChange={(e) => {
+                        updateName('firstName', e.target.value);
+                        if (invalidField === 'clientFirstName') setInvalidField(null);
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="clientLastName">Nom</label>
+                    <input
+                      type="text"
+                      id="clientLastName"
+                      className={invalidField === 'clientLastName' ? 'field-invalid' : ''}
+                      autoComplete="family-name"
+                      required
+                      maxLength={100}
+                      value={form.lastName}
+                      aria-invalid={invalidField === 'clientLastName' ? 'true' : undefined}
+                      onChange={(e) => {
+                        updateName('lastName', e.target.value);
+                        if (invalidField === 'clientLastName') setInvalidField(null);
+                      }}
+                    />
+                  </div>
                 </div>
 
                 <div className={`form-row ${invalidField === 'service-picker' ? 'field-invalid' : ''}`} ref={servicePickerRef}>
@@ -926,7 +1132,7 @@ export default function Booking() {
                 {promotions.length > 0 && (
                   <div className="form-row">
                     <label htmlFor="promotion-select">Tarif spécial de cette personne (optionnel)</label>
-                    <select id="promotion-select" value={selectedPromotionId} onChange={(e) => selectPromotion(e.target.value)}>
+                    <select id="promotion-select" value={selectedPromotionId} onChange={(e) => setSelectedPromotionId(e.target.value)}>
                       <option value="">Tarif standard</option>
                       {promotions.map((p) => (
                         <option key={p.id} value={p.id}>
@@ -936,9 +1142,11 @@ export default function Booking() {
                     </select>
                   </div>
                 )}
+                </div>
 
                 {guests.map((guest, i) => (
                   <div
+                    hidden={activePerson !== i + 1}
                     className={`guest-block ${invalidField === `guest-block-${guest.key}` ? 'field-invalid' : ''}`}
                     key={guest.key}
                     ref={(el) => {
@@ -951,20 +1159,40 @@ export default function Booking() {
                         Retirer
                       </button>
                     </div>
-                    <input
-                      type="text"
-                      id={`guest-name-${guest.key}`}
-                      className={invalidField === `guest-name-${guest.key}` ? 'field-invalid' : ''}
-                      required
-                      minLength={2}
-                      maxLength={100}
-                      placeholder="Nom complet"
-                      value={guest.name}
-                      onChange={(e) => {
-                        updateGuest(guest.key, { name: e.target.value });
-                        if (invalidField === `guest-name-${guest.key}`) setInvalidField(null);
-                      }}
-                    />
+                    <div className="form-row two-col">
+                      <div>
+                        <input
+                          type="text"
+                          id={`guest-name-${guest.key}`}
+                          className={invalidField === `guest-name-${guest.key}` ? 'field-invalid' : ''}
+                          required
+                          maxLength={100}
+                          placeholder="Prénom"
+                          aria-label={`Prénom de la personne ${i + 2}`}
+                          value={guest.firstName}
+                          onChange={(e) => {
+                            updateGuestName(guest.key, 'firstName', e.target.value);
+                            if (invalidField === `guest-name-${guest.key}`) setInvalidField(null);
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <input
+                          type="text"
+                          id={`guest-lastname-${guest.key}`}
+                          className={invalidField === `guest-lastname-${guest.key}` ? 'field-invalid' : ''}
+                          required
+                          maxLength={100}
+                          placeholder="Nom"
+                          aria-label={`Nom de la personne ${i + 2}`}
+                          value={guest.lastName}
+                          onChange={(e) => {
+                            updateGuestName(guest.key, 'lastName', e.target.value);
+                            if (invalidField === `guest-lastname-${guest.key}`) setInvalidField(null);
+                          }}
+                        />
+                      </div>
+                    </div>
                     <ServicePicker
                       services={services}
                       categories={categories}
@@ -976,6 +1204,9 @@ export default function Booking() {
                       onSelectService={(id) => {
                         if (invalidField === `guest-block-${guest.key}`) setInvalidField(null);
                         updateGuest(guest.key, { serviceId: id });
+                        requestAnimationFrame(() => {
+                          (addGuestBtnRef.current || stepActionsRef.current)?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                        });
                       }}
                     />
                     <AddonCheckboxes
@@ -1004,7 +1235,7 @@ export default function Booking() {
                 ))}
 
                 {guests.length < MAX_ADDITIONAL_GUESTS && (
-                  <button type="button" className="btn btn-outline add-guest-btn" onClick={addGuest} disabled={!selectedServiceId}>
+                  <button type="button" className="btn btn-outline add-guest-btn" ref={addGuestBtnRef} onClick={addGuest} disabled={!selectedServiceId || guests.some((g) => !g.serviceId)}>
                     + Ajouter une personne (ex : votre enfant)
                   </button>
                 )}
@@ -1029,7 +1260,8 @@ export default function Booking() {
                     className={`location-option ${!atClientHome ? 'is-selected' : ''}`}
                     onClick={() => pickLocation(false)}
                   >
-                    Je viens sur place
+                    <span className="location-option-title">Au studio</span>
+                    <span className="location-option-sub">Adresse exacte envoyée avec la confirmation</span>
                   </button>
                   <button
                     type="button"
@@ -1038,14 +1270,15 @@ export default function Booking() {
                     className={`location-option ${atClientHome ? 'is-selected' : ''}`}
                     onClick={() => pickLocation(true)}
                   >
-                    À domicile (elle se déplace)
+                    <span className="location-option-title">À domicile</span>
+                    <span className="location-option-sub">Carla se déplace avec tout le matériel</span>
                   </button>
                 </div>
 
                 {atClientHome && Number.isFinite(travelFreeRadiusKm) && (
-                  <p className="form-hint">
-                    Déplacement gratuit dans un rayon de {travelFreeRadiusKm} km. Au-delà, des frais de déplacement
-                    peuvent s'appliquer.
+                  <p className="travel-info">
+                    <strong>Déplacement offert jusqu'à {travelFreeRadiusKm} km.</strong> Au-delà, des frais de
+                    déplacement peuvent s'appliquer.
                   </p>
                 )}
 
@@ -1062,6 +1295,8 @@ export default function Booking() {
                       maxLength={300}
                       placeholder="Numéro, rue, code postal, ville"
                       value={form.clientAddress}
+                      aria-invalid={inlineError('clientAddress') ? 'true' : undefined}
+                      aria-describedby={inlineError('clientAddress') ? 'clientAddress-error' : undefined}
                       onChange={(e) => {
                         updateField('clientAddress')(e);
                         if (invalidField === 'clientAddress') setInvalidField(null);
@@ -1069,7 +1304,7 @@ export default function Booking() {
                     />
                     {travelEstimate === 'loading' && <p className="loading-text travel-estimate-hint">Calcul du trajet…</p>}
                     {travelEstimate && typeof travelEstimate === 'object' && (
-                      <p className="travel-estimate-hint">
+                      <p className="travel-estimate-hint travel-estimate-card" role="status">
                         ≈ {travelEstimate.distanceKm} km · {travelEstimate.durationMinutes} min de route
                         {travelEstimate.feeCents > 0
                           ? ` · +${formatPrice(travelEstimate.feeCents)} de frais de déplacement`
@@ -1109,7 +1344,8 @@ export default function Booking() {
                     <div className="day-picker-scroll" role="listbox" aria-label="Choisir une date">
                       {hours.slice(0, DAY_PICKER_DAYS).map((h) => {
                         const isOpen = h.isSet && !h.isClosed && h.ranges.length > 0;
-                        const isFull = isOpen && dayAvailability[h.date] === false;
+                        const slotCount = dayAvailability[h.date];
+                        const isFull = isOpen && slotCount === 0;
                         const isSelected = date === h.date;
                         return (
                           <button
@@ -1123,7 +1359,7 @@ export default function Booking() {
                           >
                             <span className="day-chip-dow">{DAY_NAMES[h.dayOfWeek].slice(0, 3)}</span>
                             <span className="day-chip-num">{formatShortDate(h.date)}</span>
-                            <span className="day-chip-status">{!isOpen ? 'Fermé' : isFull ? 'Complet' : 'Disponible'}</span>
+                            <span className="day-chip-status">{!isOpen ? 'Fermé' : isFull ? 'Complet' : slotCount > 0 ? `${slotCount} créneau${slotCount > 1 ? 'x' : ''}` : 'Disponible'}</span>
                           </button>
                         );
                       })}
@@ -1143,32 +1379,45 @@ export default function Booking() {
                 </div>
 
                 <div className="form-row">
-                  <label htmlFor="slot">Créneau disponible</label>
-                  <select
+                  <label id="slot-label">Créneau disponible</label>
+                  <div
                     id="slot"
-                    className={invalidField === 'slot' ? 'field-invalid' : ''}
-                    required
-                    disabled={slotsState !== 'ready'}
-                    value={selectedSlot}
-                    onChange={(e) => {
-                      setSelectedSlot(e.target.value);
-                      if (invalidField === 'slot') setInvalidField(null);
-                    }}
+                    className={`slot-groups ${invalidField === 'slot' ? 'field-invalid' : ''}`}
+                    role="radiogroup"
+                    aria-labelledby="slot-label"
+                    aria-busy={slotsState === 'loading'}
                   >
-                    {slotsState === 'idle' && <option value="">Choisissez d'abord une date</option>}
-                    {slotsState === 'loading' && <option value="">Chargement des créneaux…</option>}
+                    {slotsState === 'idle' && <p className="form-hint">Choisissez d'abord une date.</p>}
+                    {slotsState === 'loading' && <p className="loading-text">Chargement des créneaux…</p>}
                     {slotsState === 'empty' && (
-                      <option value="">{slotsTooFar ? 'Trajet trop long pour ce jour' : 'Aucun créneau disponible ce jour-là'}</option>
+                      <p className="form-hint">{slotsTooFar ? 'Trajet trop long pour ce jour.' : 'Aucun créneau disponible ce jour-là.'}</p>
                     )}
-                    {slotsState === 'error' && <option value="">Erreur de chargement</option>}
-                    {slotsState === 'ready' && (
-                      <>
-                        {slots.map((s) => (
-                          <option key={s} value={s}>{s}{s === slots[0] ? ' (suggéré)' : ''}</option>
+                                        {slotsState === 'ready' &&
+                      [['Matin', slots.filter((t) => t < '12:00')], ['Après-midi', slots.filter((t) => t >= '12:00')]]
+                        .filter(([, list]) => list.length > 0)
+                        .map(([label, list]) => (
+                          <div key={label} className="slot-group">
+                            <span className="slot-group-label">{label}</span>
+                            <div className="slot-chips">
+                              {list.map((t) => (
+                                <button
+                                  key={t}
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={selectedSlot === t}
+                                  className={`slot-chip ${selectedSlot === t ? 'is-selected' : ''}`}
+                                  onClick={() => {
+                                    setSelectedSlot(t);
+                                    if (invalidField === 'slot') setInvalidField(null);
+                                  }}
+                                >
+                                  {t}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
                         ))}
-                      </>
-                    )}
-                  </select>
+                  </div>
                   {slotsState === 'empty' && slotsTooFar && (
                     <p className="form-feedback error">
                       Avec le trajet aller-retour jusqu'à votre adresse et la durée de la prestation, ce rendez-vous
@@ -1182,14 +1431,58 @@ export default function Booking() {
 
             {step === 4 && (
               <>
+                {account ? (
+                  <div className="account-banner is-connected">
+                    <span>
+                      <strong>{account.name}</strong> — compte connecté : vos points de fidélité seront crédités.
+                    </span>
+                    <button type="button" className="link-btn" onClick={accountLogout}>Changer de compte</button>
+                  </div>
+                ) : (
+                  <div className="account-banner">
+                    <span>Déjà un compte, ou envie d'en créer un pour cumuler des points ? C'est facultatif.</span>
+                    <button type="button" className="link-btn" onClick={() => setShowAccountModal(true)}>Se connecter / créer un compte</button>
+                  </div>
+                )}
                 <div className="form-row two-col">
                   <div>
                     <label htmlFor="clientEmail">Email</label>
-                    <input type="email" id="clientEmail" autoComplete="email" required value={form.clientEmail} onChange={updateField('clientEmail')} />
+                    <input
+                      type="email"
+                      id="clientEmail"
+                      className={inlineError('clientEmail') ? 'field-invalid' : ''}
+                      autoComplete="email"
+                      required
+                      value={form.clientEmail}
+                      aria-invalid={inlineError('clientEmail') ? 'true' : undefined}
+                      aria-describedby={inlineError('clientEmail') ? 'clientEmail-error' : undefined}
+                      onChange={(e) => {
+                        updateField('clientEmail')(e);
+                        setBlurErrors((b) => ({ ...b, clientEmail: null }));
+                        if (invalidField === 'clientEmail') setInvalidField(null);
+                      }}
+                      onBlur={(e) => blurValidate('clientEmail', e.target.value)}
+                    />
                   </div>
                   <div>
                     <label htmlFor="clientPhone">Téléphone</label>
-                    <input type="tel" id="clientPhone" autoComplete="tel" required placeholder="06 12 34 56 78" value={form.clientPhone} onChange={updateField('clientPhone')} />
+                    <input
+                      type="tel"
+                      id="clientPhone"
+                      className={inlineError('clientPhone') ? 'field-invalid' : ''}
+                      autoComplete="tel"
+                      required
+                      placeholder="06 12 34 56 78"
+                      value={form.clientPhone}
+                      aria-invalid={inlineError('clientPhone') ? 'true' : undefined}
+                      aria-describedby={inlineError('clientPhone') ? 'clientPhone-error' : undefined}
+                      onChange={(e) => {
+                        updateField('clientPhone')(e);
+                        setBlurErrors((b) => ({ ...b, clientPhone: null }));
+                        if (invalidField === 'clientPhone') setInvalidField(null);
+                      }}
+                      onBlur={(e) => blurValidate('clientPhone', e.target.value)}
+                    />
                   </div>
                 </div>
 
@@ -1197,6 +1490,18 @@ export default function Booking() {
                   <label htmlFor="notes">Message (optionnel)</label>
                   <textarea id="notes" rows={3} maxLength={500} placeholder="Précisions sur votre demande…" value={form.notes} onChange={updateField('notes')} />
                 </div>
+
+                {account?.canApplyReferral && (
+                  <div className="form-row">
+                    <ReferralCodeForm compact onApplied={() => loadAccount()} />
+                  </div>
+                )}
+                {!account && getStoredReferral() && (
+                  <p className="form-hint referral-remembered">
+                    Code de parrainage <strong>{getStoredReferral()}</strong> mémorisé : il sera proposé quand vous créerez votre compte
+                    (+10 points après votre premier rendez-vous terminé).
+                  </p>
+                )}
 
                 <div className="form-row">
                   <label htmlFor="promo-code">Code promo (optionnel)</label>
@@ -1206,7 +1511,6 @@ export default function Booking() {
                       id="promo-code"
                       placeholder="Ex : BIENVENUE10"
                       value={promoCodeInput}
-                      disabled={Boolean(selectedPromotionId)}
                       onChange={(e) => {
                         setPromoCodeInput(e.target.value);
                         setPromoCodeState('idle');
@@ -1216,16 +1520,16 @@ export default function Booking() {
                     <button
                       type="button"
                       className="btn btn-outline btn-sm"
-                      disabled={!promoCodeInput.trim() || promoCodeState === 'loading' || Boolean(selectedPromotionId)}
+                      disabled={!promoCodeInput.trim() || promoCodeState === 'loading'}
                       onClick={applyPromoCode}
                     >
                       {promoCodeState === 'loading' ? 'Vérification…' : 'Appliquer'}
                     </button>
                   </div>
+                  <p className="form-hint">Un seul code promo par réservation (cumulable avec un tarif spécial).</p>
                   {promoCodeState === 'valid' && (
-                    <p className="form-feedback success">Code appliqué : {appliedPromoCode.label} (-{appliedPromoCode.discount_percent}%)</p>
+                    <p className="form-feedback success">Code appliqué : {appliedPromoCode.label} ({appliedPromoCode.discount_cents ? `-${formatPrice(appliedPromoCode.discount_cents)}` : `-${appliedPromoCode.discount_percent}%`})</p>
                   )}
-                  {promoCodeState === 'invalid' && <p className="form-feedback error">Code promo invalide ou expiré.</p>}
                 </div>
 
                 {discountCents > 0 && (
@@ -1241,7 +1545,7 @@ export default function Booking() {
               </>
             )}
 
-            {feedback && (
+            {feedback && feedback.type !== 'error' && (
               <div className={`form-feedback ${feedback.type}`} role="status" aria-live="polite">
                 {feedback.text}
                 {manageGroupId && (
@@ -1253,7 +1557,7 @@ export default function Booking() {
               </div>
             )}
 
-            <div className="booking-step-actions">
+            <div className="booking-step-actions" ref={stepActionsRef}>
               {step > 1 && (
                 <button type="button" className="btn btn-outline" onClick={goBack}>
                   ← Précédent
@@ -1270,9 +1574,26 @@ export default function Booking() {
                 </button>
               )}
             </div>
+            <BookingSummary recapGuests={recapGuests} totalDuration={totalDuration} totalPrice={finalPrice} />
           </form>
         </div>
       </section>
+
+      {showAccountModal && (
+        <div className="modal-overlay" onClick={() => setShowAccountModal(false)}>
+          <div className="modal-card" role="dialog" aria-modal="true" aria-label="Connexion ou création de compte" onClick={(e) => e.stopPropagation()}>
+            <AccountAuthForms
+              onLoggedIn={() => {
+                setShowAccountModal(false);
+                loadAccount({ prefill: true });
+              }}
+            />
+            <div className="modal-actions" style={{ marginTop: 16 }}>
+              <button type="button" className="btn btn-outline" onClick={() => setShowAccountModal(false)}>Continuer sans compte</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showAddonNudge && (
         <div className="modal-overlay" onClick={reviewAddons}>
@@ -1354,6 +1675,33 @@ export default function Booking() {
                   )}
                 </dd>
               </div>
+              {stripeEnabled && (
+                <div>
+                  <dt>Paiement</dt>
+                  <dd>
+                    <label className="recap-payment-option">
+                      <input
+                        type="radio"
+                        name="paymentOption"
+                        value="full"
+                        checked={paymentOption === 'full'}
+                        onChange={() => setPaymentOption('full')}
+                      />
+                      Payer en ligne maintenant ({formatPrice(finalPrice)})
+                    </label>
+                    <label className="recap-payment-option">
+                      <input
+                        type="radio"
+                        name="paymentOption"
+                        value="on_site"
+                        checked={paymentOption === 'on_site'}
+                        onChange={() => setPaymentOption('on_site')}
+                      />
+                      Payer sur place
+                    </label>
+                  </dd>
+                </div>
+              )}
               <div>
                 <dt>Contact</dt>
                 <dd>{form.clientEmail}<br />{form.clientPhone}</dd>
@@ -1375,6 +1723,20 @@ export default function Booking() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+      {redirecting && (
+        <div className="redirect-screen" role="status" aria-live="polite">
+          <div className="redirect-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="5" y="11" width="14" height="9" rx="2" />
+              <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+            </svg>
+          </div>
+          <h2>Redirection vers le paiement sécurisé…</h2>
+          <p>Vous reviendrez automatiquement sur la page de suivi de votre rendez-vous. Ne fermez pas cette page.</p>
+          <div className="redirect-bar" aria-hidden="true"><span /></div>
+          <p className="redirect-note">Paiement opéré par Stripe — Carla Création ne voit jamais votre carte.</p>
         </div>
       )}
     </>

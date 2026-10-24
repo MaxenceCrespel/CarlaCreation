@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useConfirm } from '../../context/ConfirmContext';
 import { apiFetch } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { formatPrice } from '../../utils/format';
@@ -156,6 +157,7 @@ function ProductRow({ product, onAdjust, onSave, onRemove }) {
 }
 
 export default function StockTab() {
+  const confirm = useConfirm();
   const showToast = useToast();
   const [products, setProducts] = useState(null);
   const [error, setError] = useState(null);
@@ -181,7 +183,7 @@ export default function StockTab() {
   }
 
   async function removeProduct(id) {
-    if (!window.confirm('Supprimer définitivement ce produit ?')) return;
+    if (!await confirm('Supprimer définitivement ce produit ?')) return;
     try {
       await apiFetch(`/admin/products/${id}`, { method: 'DELETE' });
       setProducts((rows) => rows.filter((p) => p.id !== id));

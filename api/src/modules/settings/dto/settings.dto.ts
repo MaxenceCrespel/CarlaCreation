@@ -60,3 +60,10 @@ export class UpdateTravelFeeTiersDto {
   @Type(() => TravelFeeTierDto)
   tiers!: TravelFeeTierDto[];
 }
+
+export class UpdateBirthdayDiscountDto {
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  percent!: number;
+}

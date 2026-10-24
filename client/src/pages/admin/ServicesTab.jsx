@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useConfirm } from '../../context/ConfirmContext';
 import { apiFetch } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import CollapsibleCard from './CollapsibleCard';
@@ -128,6 +129,7 @@ function CategoryRow({ category, siblings, index, onRename, onLocalEdit, onMove,
 // Renaming saves on blur; reordering swaps sort_order with the sibling at
 // the same level (subcategories only reorder among their own siblings).
 function CategoriesManager({ categories, setCategories }) {
+  const confirm = useConfirm();
   const showToast = useToast();
   const [newName, setNewName] = useState('');
   const [adding, setAdding] = useState(false);
@@ -186,7 +188,7 @@ function CategoriesManager({ categories, setCategories }) {
   }
 
   async function remove(id) {
-    if (!window.confirm('Supprimer cette catégorie ?')) return;
+    if (!await confirm('Supprimer cette catégorie ?')) return;
     try {
       await apiFetch(`/admin/service-categories/${id}`, { method: 'DELETE' });
       setCategories((cats) => cats.filter((c) => c.id !== id));
@@ -250,6 +252,7 @@ function CategoriesManager({ categories, setCategories }) {
 }
 
 export default function ServicesTab() {
+  const confirm = useConfirm();
   const showToast = useToast();
   const [services, setServices] = useState(null);
   const [categories, setCategories] = useState([]);
@@ -320,7 +323,7 @@ export default function ServicesTab() {
   }
 
   async function removeService(id) {
-    if (!window.confirm('Supprimer définitivement cette prestation ?')) return;
+    if (!await confirm('Supprimer définitivement cette prestation ?')) return;
     try {
       await apiFetch(`/admin/services/${id}`, { method: 'DELETE' });
       setServices((rows) => rows.filter((s) => s.id !== id));

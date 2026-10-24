@@ -29,6 +29,7 @@ describe('Admin — Clients', () => {
       cy.contains('button', 'Voir la fiche').click();
     });
     cy.contains('button', 'Supprimer la fiche').click();
+    cy.confirmDialog();
     cy.contains('tr', name).should('not.exist');
   });
 });

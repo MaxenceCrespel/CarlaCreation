@@ -12,6 +12,7 @@ import { DailyHoursRange } from './entities/daily-hours-range.entity';
 import { AppSettings } from './entities/app-settings.entity';
 import { TravelFeeTier } from './entities/travel-fee-tier.entity';
 import { PushSubscription } from './entities/push-subscription.entity';
+import { ClientToken } from './entities/client-token.entity';
 import { Product } from './entities/product.entity';
 import { ServiceAddon } from './entities/service-addon.entity';
 import { ReservationAddon } from './entities/reservation-addon.entity';
@@ -22,6 +23,7 @@ import { Expense } from './entities/expense.entity';
 import { Client } from './entities/client.entity';
 import { Promotion } from './entities/promotion.entity';
 import { PageView } from './entities/page-view.entity';
+import { Payment } from './entities/payment.entity';
 
 // `synchronize: false` permanently — even in dev. Migrations
 // (database/migrations/*.ts, run via `npm run migration:run`) are the only
@@ -33,11 +35,11 @@ import { PageView } from './entities/page-view.entity';
     TypeOrmModule.forRoot({
       type: 'postgres',
       url: config.DATABASE_URL,
-      entities: [Admin, Service, Reservation, Gallery, ContactMessage, Review, DailyHours, DailyHoursRange, AppSettings, ServiceAddon, ReservationAddon, ServiceCategory, TravelFeeTier, PushSubscription, Product, Invoice, InvoiceItem, Expense, Client, Promotion, PageView],
+      entities: [Admin, Service, Reservation, Gallery, ContactMessage, Review, DailyHours, DailyHoursRange, AppSettings, ServiceAddon, ReservationAddon, ServiceCategory, TravelFeeTier, PushSubscription, Product, Invoice, InvoiceItem, Expense, Client, Promotion, PageView, Payment, ClientToken],
       synchronize: false,
       migrationsRun: false,
     }),
-    TypeOrmModule.forFeature([Admin, Service, Reservation, Gallery, ContactMessage, Review, DailyHours, DailyHoursRange, AppSettings, ServiceAddon, ReservationAddon, ServiceCategory, TravelFeeTier, PushSubscription, Product, Invoice, InvoiceItem, Expense, Client, Promotion, PageView]),
+    TypeOrmModule.forFeature([Admin, Service, Reservation, Gallery, ContactMessage, Review, DailyHours, DailyHoursRange, AppSettings, ServiceAddon, ReservationAddon, ServiceCategory, TravelFeeTier, PushSubscription, Product, Invoice, InvoiceItem, Expense, Client, Promotion, PageView, Payment, ClientToken]),
   ],
   exports: [TypeOrmModule],
 })

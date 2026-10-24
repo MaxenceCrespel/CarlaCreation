@@ -27,6 +27,7 @@ describe('Contact messages', () => {
     cy.contains('.admin-review-card', senderName).within(() => {
       cy.contains('.status-badge', 'Lu').should('be.visible');
       cy.contains('button', 'Supprimer').click();
+      cy.confirmDialog();
     });
 
     cy.contains('.admin-review-card', senderName).should('not.exist');

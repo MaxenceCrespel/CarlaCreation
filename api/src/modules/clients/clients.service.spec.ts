@@ -9,7 +9,7 @@ describe('ClientsService', () => {
   let service: ClientsService;
   let clientRepo: { find: jest.Mock; findOne: jest.Mock; create: jest.Mock; save: jest.Mock; delete: jest.Mock };
   let reservationRepo: { findOne: jest.Mock; update: jest.Mock };
-  let dataSource: { query: jest.Mock };
+  let dataSource: { query: jest.Mock; transaction: jest.Mock };
 
   beforeEach(async () => {
     clientRepo = {
@@ -20,7 +20,7 @@ describe('ClientsService', () => {
       delete: jest.fn(),
     };
     reservationRepo = { findOne: jest.fn(), update: jest.fn() };
-    dataSource = { query: jest.fn() };
+    dataSource = { query: jest.fn(), transaction: jest.fn((fn) => fn({ query: jest.fn().mockResolvedValue([{ email: '' }]) })) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -40,7 +40,19 @@ describe('ClientsService', () => {
 
     const result = await service.findAll();
 
-    expect(result).toEqual([{ id: 1, name: 'Alice', normalized_name: 'alice', phone: '0600000000', reservationCount: 3, hasFiche: true }]);
+    expect(result).toEqual([
+      { id: 1, name: 'Alice', normalized_name: 'alice', phone: '0600000000', reservationCount: 3, hasFiche: true, hasAccount: false },
+    ]);
+  });
+
+  it('findAll never leaks password_hash, even for a client with an account', async () => {
+    clientRepo.find.mockResolvedValue([{ id: 1, name: 'Alice', normalized_name: 'alice', phone: '0600000000', password_hash: 'bcrypt-hash' }]);
+    dataSource.query.mockResolvedValue([]);
+
+    const result = await service.findAll();
+
+    expect(result[0]).not.toHaveProperty('password_hash');
+    expect(result[0]).toMatchObject({ hasAccount: true });
   });
 
   it('findAll matches a fiche by phone, not just name', async () => {
@@ -189,13 +201,15 @@ describe('ClientsService', () => {
     await expect(service.update(999, { notes: 'x' } as any)).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('remove throws NotFoundException when nothing was deleted', async () => {
-    clientRepo.delete.mockResolvedValue({ affected: 0 });
+  it('remove throws NotFoundException for an unknown fiche', async () => {
+    clientRepo.findOne.mockResolvedValue(null);
     await expect(service.remove(999)).rejects.toBeInstanceOf(NotFoundException);
+    expect(dataSource.transaction).not.toHaveBeenCalled();
   });
 
-  it('remove succeeds silently when a row was deleted', async () => {
-    clientRepo.delete.mockResolvedValue({ affected: 1 });
+  it('remove fully erases the fiche (reservations anonymized) in one transaction', async () => {
+    clientRepo.findOne.mockResolvedValue({ id: 1 });
     await expect(service.remove(1)).resolves.toBeUndefined();
+    expect(dataSource.transaction).toHaveBeenCalledTimes(1);
   });
 });

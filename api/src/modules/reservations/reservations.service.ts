@@ -1,6 +1,7 @@
 import * as crypto from 'crypto';
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { combinePercents } from './discount.util';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import { Reservation } from '../../database/entities/reservation.entity';
@@ -16,7 +17,11 @@ import { SettingsService } from '../settings/settings.service';
 import { DistanceService } from '../distance/distance.service';
 import { PushService } from '../push/push.service';
 import { PromotionsService } from '../promotions/promotions.service';
+import { PaymentsService } from '../stripe/payments.service';
+import { StripeService } from '../stripe/stripe.service';
+import { RewardsService } from '../rewards/rewards.service';
 import { siteConfig } from '../../site-config';
+import { config } from '../../config';
 
 interface Guest {
   name: string;
@@ -57,9 +62,16 @@ interface ReservationWithServiceRow {
   client_id: number | null;
   promotion_id: number | null;
   discount_percent: number;
+  discount_cents: number;
   promotion_label: string | null;
   cancellation_reason: string | null;
+  paid_on_site: boolean;
   addons: { name: string; extra_price_cents: number; extra_duration_minutes: number }[];
+  // null when there's no online payment at all for this group (Stripe
+  // wasn't configured at booking time, the client chose "payer sur
+  // place", or never reached checkout).
+  payment_status: string | null;
+  payment_amount_cents: number | null;
 }
 
 interface ReminderCandidateRow {
@@ -89,45 +101,54 @@ export class ReservationsService {
     private readonly distanceService: DistanceService,
     private readonly pushService: PushService,
     private readonly promotionsService: PromotionsService,
+    private readonly stripeService: StripeService,
+    private readonly paymentsService: PaymentsService,
+    private readonly rewardsService: RewardsService,
   ) {}
 
   // Resolves each guest's OWN discount, not a single value for the whole
   // booking — a rate-based "tarif spécial" (e.g. tarif étudiant) is
   // personal to whoever qualifies for it, and must never leak onto every
   // other prestation in the same order. `fallback`, when given, is a
-  // booking-wide promo code applied to any guest who didn't pick their own
-  // rate — a guest's own rate always wins over it for that one person, the
-  // two never stack.
+  // booking-wide promo code: it applies to EVERY guest and stacks on top of
+  // a guest's own rate (rate first, then the code on what is left — see
+  // combinePercents), e.g. a student using a loyalty reward code.
   private resolveGuestDiscounts(
     guests: Guest[],
     eligiblePromotions: { id: number; discount_percent: number }[],
     fallback: { id: number; discountPercent: number } | null,
     invalidMessage: string,
-  ): { promotionId: number | null; discountPercent: number }[] {
+  ): { promotionId: number | null; discountPercent: number; codeApplied: boolean }[] {
     return guests.map((g) => {
+      let rate: { id: number; discount_percent: number } | null = null;
       if (g.promotionId) {
-        const promo = eligiblePromotions.find((p) => p.id === g.promotionId);
-        if (!promo) throw new BadRequestException(invalidMessage);
-        return { promotionId: promo.id, discountPercent: promo.discount_percent };
+        rate = eligiblePromotions.find((p) => p.id === g.promotionId) ?? null;
+        if (!rate) throw new BadRequestException(invalidMessage);
       }
-      if (fallback) return { promotionId: fallback.id, discountPercent: fallback.discountPercent };
-      return { promotionId: null, discountPercent: 0 };
+      return {
+        // The row keeps one promotion reference: the guest's own rate when
+        // there is one (it names the tarif), otherwise the code.
+        promotionId: rate ? rate.id : fallback ? fallback.id : null,
+        discountPercent: combinePercents(rate?.discount_percent ?? 0, fallback?.discountPercent ?? 0),
+        codeApplied: fallback !== null,
+      };
     });
   }
 
   // The dropdown-selectable "tarif spécial" catalogue + the order-wide
   // promo code (if any) — combined per-guest by resolveGuestDiscounts.
-  private async resolvePublicGuestDiscounts(guests: Guest[], promoCode: string | undefined) {
+  private async resolvePublicGuestDiscounts(guests: Guest[], promoCode: string | undefined, clientId: number | null) {
     const [selectable, codePromotion] = await Promise.all([
       this.promotionsService.findSelectable(),
-      promoCode ? this.promotionsService.findByCode(promoCode) : Promise.resolve(null),
+      promoCode ? this.promotionsService.findByCode(promoCode, clientId) : Promise.resolve(null),
     ]);
-    return this.resolveGuestDiscounts(
+    const discounts = this.resolveGuestDiscounts(
       guests,
       selectable,
       codePromotion ? { id: codePromotion.id, discountPercent: codePromotion.discount_percent } : null,
       'Tarif spécial invalide.',
     );
+    return { discounts, codePromotion };
   }
 
   // Admin picker: any active promotion (rate or code) can be applied
@@ -253,17 +274,17 @@ export class ReservationsService {
     addonMinutes = 0,
     address?: string,
     days = 30,
-  ): Promise<{ date: string; hasSlots: boolean }[]> {
+  ): Promise<{ date: string; hasSlots: boolean; slotCount: number }[]> {
     const services = await this.resolveServices(serviceIds, { activeOnly: true });
     const totalDuration = services.reduce((sum, s) => sum + s.duration_minutes, 0) + addonMinutes;
     const { candidateBufferMinutes, defaultBufferMinutes } = await this.resolveTravelBuffer(atClientHome, address);
 
-    const result: { date: string; hasSlots: boolean }[] = [];
+    const result: { date: string; hasSlots: boolean; slotCount: number }[] = [];
     const cursor = new Date();
     for (let i = 0; i < days; i += 1) {
       const dateStr = localDateString(cursor);
       const { slots } = await getAvailableSlots(this.dataSource, dateStr, totalDuration, atClientHome, candidateBufferMinutes, defaultBufferMinutes);
-      result.push({ date: dateStr, hasSlots: slots.length > 0 });
+      result.push({ date: dateStr, hasSlots: slots.length > 0, slotCount: slots.length });
       cursor.setDate(cursor.getDate() + 1);
     }
     return result;
@@ -274,7 +295,7 @@ export class ReservationsService {
   // are booked back-to-back as one linked group, sharing group_id, contact
   // info and date. The whole combined-duration block must be a genuinely
   // free, pre-computed slot — re-validated here to avoid race/tampering.
-  async create(dto: CreateReservationDto) {
+  async create(dto: CreateReservationDto, loggedInClientId: number | null = null) {
     const guests: Guest[] = [
       { name: dto.clientName, serviceId: dto.serviceId, addonIds: dto.addonIds ?? [], promotionId: dto.promotionId },
       ...(dto.additionalGuests ?? []).map((g: AdditionalGuestDto) => ({ name: g.name, serviceId: g.serviceId, addonIds: g.addonIds ?? [], promotionId: g.promotionId })),
@@ -300,21 +321,84 @@ export class ReservationsService {
       throw new ConflictException("Ce créneau n'est plus disponible. Merci d'en choisir un autre.");
     }
 
-    const guestDiscounts = await this.resolvePublicGuestDiscounts(guests, dto.promoCode);
+    const { discounts, codePromotion } = await this.resolvePublicGuestDiscounts(guests, dto.promoCode, loggedInClientId);
 
-    const result = await this.insertGroup(guests, services, addonsPerGuest, guestDiscounts, {
-      date: dto.date,
-      startTime: dto.startTime,
-      clientEmail: dto.clientEmail,
-      clientPhone: dto.clientPhone,
-      notes: dto.notes || '',
-      status: 'pending',
-      atClientHome,
-      clientAddress,
-      travelDistanceKm: travel.distanceKm,
-      travelDurationMinutes: travel.durationMinutes,
-      travelFeeCents: travel.feeCents,
+    // A fixed-euro reward code (loyalty points) comes off the guests that
+    // took the code (not the ones with their own rate), in order, never
+    // below zero for any one prestation.
+    let remainingFixedCents = codePromotion?.discount_cents ?? 0;
+    const guestDiscounts = discounts.map((d, i) => {
+      if (remainingFixedCents <= 0 || !d.codeApplied) return { ...d, discountCents: 0 };
+      const addonsCents = addonsPerGuest[i].reduce((a, addon) => a + addon.extra_price_cents, 0);
+      const net = Math.round((services[i].price_cents + addonsCents) * (1 - d.discountPercent / 100));
+      const applied = Math.min(remainingFixedCents, net);
+      remainingFixedCents -= applied;
+      return { ...d, discountCents: applied };
     });
+
+    // A personal reward code is consumed by the booking that uses it —
+    // claimed atomically before inserting, released if the insert fails.
+    const consumedPersonalCodeId =
+      codePromotion?.client_id != null && guestDiscounts.some((d) => d.codeApplied) ? codePromotion.id : null;
+    if (consumedPersonalCodeId !== null && !(await this.promotionsService.markUsed(consumedPersonalCodeId))) {
+      throw new NotFoundException('Ce code promo a déjà été utilisé.');
+    }
+
+    // Same per-guest discount math as the admin reservations list — see
+    // resolveGuestDiscounts — summed across the group, plus the shared
+    // travel fee once (it's per-trip, not per-person).
+    const totalCents =
+      services.reduce((sum, s, i) => {
+        const addonsCents = addonsPerGuest[i].reduce((a, addon) => a + addon.extra_price_cents, 0);
+        const fullPrice = s.price_cents + addonsCents;
+        return sum + Math.round(fullPrice * (1 - guestDiscounts[i].discountPercent / 100)) - guestDiscounts[i].discountCents;
+      }, 0) + (travel.feeCents ?? 0);
+
+    let result: Awaited<ReturnType<typeof this.insertGroup>>;
+    try {
+      result = await this.insertGroup(guests, services, addonsPerGuest, guestDiscounts, {
+        date: dto.date,
+        startTime: dto.startTime,
+        clientEmail: dto.clientEmail,
+        clientPhone: dto.clientPhone,
+        notes: dto.notes || '',
+        status: 'pending',
+        atClientHome,
+        clientAddress,
+        travelDistanceKm: travel.distanceKm,
+        travelDurationMinutes: travel.durationMinutes,
+        travelFeeCents: travel.feeCents,
+        primaryClientId: loggedInClientId,
+      });
+    } catch (err) {
+      if (consumedPersonalCodeId !== null) await this.promotionsService.releaseUse(consumedPersonalCodeId);
+      throw err;
+    }
+
+    // Stripe is entirely optional (config.STRIPE_ENABLED) — when it isn't
+    // configured, the client chose "payer sur place", or the checkout
+    // session fails to create, the booking still goes through exactly as
+    // before: a pending request with no payment step. A Stripe outage
+    // must never block a booking.
+    let checkoutUrl: string | null = null;
+    if (this.stripeService.isEnabled() && dto.paymentOption === 'full' && totalCents > 0) {
+      try {
+        const session = await this.stripeService.createCheckoutSession({
+          groupId: result.groupId,
+          amountCents: totalCents,
+          description: `Réservation — ${siteConfig.siteName}`,
+          customerEmail: dto.clientEmail,
+          successUrl: `${config.PUBLIC_ORIGIN}/mon-rendez-vous/${result.groupId}?paiement=reussi`,
+          cancelUrl: `${config.PUBLIC_ORIGIN}/mon-rendez-vous/${result.groupId}?paiement=annule`,
+        });
+        if (session) {
+          await this.paymentsService.createPending(result.groupId, totalCents, session.sessionId);
+          checkoutUrl = session.url;
+        }
+      } catch (err) {
+        this.logger.error(`Stripe checkout session creation failed for group ${result.groupId}: ${(err as Error).message}`);
+      }
+    }
 
     await this.mailService.sendBookingReceived({
       clientName: dto.clientName,
@@ -342,7 +426,7 @@ export class ReservationsService {
       url: '/admin',
     });
 
-    return result;
+    return { ...result, checkoutUrl, totalCents };
   }
 
   // Admin-only: log a reservation directly (walk-in, phone booking…),
@@ -414,6 +498,7 @@ export class ReservationsService {
       travelDistanceKm: travel.distanceKm,
       travelDurationMinutes: travel.durationMinutes,
       travelFeeCents: travel.feeCents,
+      primaryClientId: null,
     });
 
     // A manual booking is usually entered as already-confirmed, so send the
@@ -493,7 +578,7 @@ export class ReservationsService {
     // Aligned with `guests` by index — each guest's own resolved discount,
     // see resolveGuestDiscounts (never a single value blanket-applied to
     // the whole group).
-    guestDiscounts: { promotionId: number | null; discountPercent: number }[],
+    guestDiscounts: { promotionId: number | null; discountPercent: number; discountCents?: number }[],
     common: {
       date: string;
       startTime: string;
@@ -506,6 +591,11 @@ export class ReservationsService {
       travelDistanceKm: number | null;
       travelDurationMinutes: number | null;
       travelFeeCents: number | null;
+      // Auto-links only the FIRST guest's row (the account holder booking
+      // for themselves) — additional guests (e.g. a mother booking for her
+      // child too) are never auto-linked, same as the admin's own manual
+      // "fiche" matching stays a deliberate, per-person decision.
+      primaryClientId: number | null;
     },
   ): Promise<{ groupId: string; date: string; startTime: string; endTime: string; guests: BookedGuest[]; atClientHome: boolean; clientAddress: string | null }> {
     const groupId = crypto.randomUUID();
@@ -540,6 +630,8 @@ export class ReservationsService {
           travel_fee_cents: common.travelFeeCents,
           promotion_id: guestDiscounts[i].promotionId,
           discount_percent: guestDiscounts[i].discountPercent,
+          discount_cents: guestDiscounts[i].discountCents ?? 0,
+          client_id: i === 0 ? common.primaryClientId : null,
         });
         const reservationId = Number(inserted.identifiers[0].id);
 
@@ -581,12 +673,12 @@ export class ReservationsService {
   }
 
   async findAllForAdmin(): Promise<ReservationWithServiceRow[]> {
-    const rows: Omit<ReservationWithServiceRow, 'addons'>[] = await this.dataSource.query(
+    const rows: Omit<ReservationWithServiceRow, 'addons' | 'payment_status' | 'payment_amount_cents'>[] = await this.dataSource.query(
       `SELECT r.id, r.group_id, r.client_name, r.client_email, r.client_phone, r.reservation_date,
               r.start_time, r.end_time, r.notes, r.status, r.created_at, r.service_id, r.client_id,
               r.at_client_home, r.client_address,
               r.travel_distance_km::float8 AS travel_distance_km, r.travel_duration_minutes, r.travel_fee_cents,
-              r.promotion_id, r.discount_percent, p.label AS promotion_label, r.cancellation_reason,
+              r.promotion_id, r.discount_percent, r.discount_cents, p.label AS promotion_label, r.cancellation_reason, r.paid_on_site,
               s.name AS service_name, s.price_cents
        FROM reservations r
        JOIN services s ON s.id = r.service_id
@@ -607,7 +699,26 @@ export class ReservationsService {
       addonsByReservation.set(a.reservation_id, list);
     }
 
-    return rows.map((r) => ({ ...r, addons: addonsByReservation.get(r.id) ?? [] }));
+    // One online payment per booking group (see Payment entity) — batched
+    // by group_id rather than N+1'd per row. Only exists for the "payer en
+    // ligne" choice; "payer sur place" bookings never get a row here (see
+    // paid_on_site instead).
+    const groupIds = [...new Set(rows.map((r) => r.group_id).filter((id): id is string => Boolean(id)))];
+    const paymentRows: { group_id: string; status: string; amount_cents: number }[] =
+      groupIds.length > 0
+        ? await this.dataSource.query(`SELECT group_id, status, amount_cents FROM payments WHERE group_id = ANY($1)`, [groupIds])
+        : [];
+    const paymentByGroup = new Map(paymentRows.map((p) => [p.group_id, p]));
+
+    return rows.map((r) => {
+      const payment = r.group_id ? paymentByGroup.get(r.group_id) : undefined;
+      return {
+        ...r,
+        addons: addonsByReservation.get(r.id) ?? [],
+        payment_status: payment?.status ?? null,
+        payment_amount_cents: payment?.amount_cents ?? null,
+      };
+    });
   }
 
   // Editing a mistaken date/time/service/client detail after the fact — a
@@ -688,10 +799,14 @@ export class ReservationsService {
 
     let promotionId = existing.promotion_id;
     let discountPercent = existing.discount_percent;
+    let discountCents = existing.discount_cents;
     if (dto.promotionId !== undefined) {
       const promotion = await this.resolveAdminPromotion(dto.promotionId);
       promotionId = promotion?.id ?? null;
       discountPercent = promotion?.discountPercent ?? 0;
+      // A fixed-euro reward belongs to the code it came from: changing the
+      // promotion drops it.
+      discountCents = 0;
     }
 
     await this.dataSource.transaction(async (manager) => {
@@ -711,6 +826,7 @@ export class ReservationsService {
         travel_fee_cents: travel.feeCents,
         promotion_id: promotionId,
         discount_percent: discountPercent,
+        discount_cents: discountCents,
       });
 
       if (dto.addonIds !== undefined) {
@@ -782,6 +898,12 @@ export class ReservationsService {
       [id],
     );
     const row = rows[0];
+    if (row?.group_id) {
+      await this.settlePaymentForGroupStatus(row.group_id, status);
+    }
+    if (status === 'completed') {
+      await this.rewardsService.onReservationsCompleted([id]);
+    }
     if (row) {
       await this.mailService.sendStatusUpdate({
         clientName: row.client_name,
@@ -793,6 +915,34 @@ export class ReservationsService {
         clientAddress: row.client_address,
         guests: [{ name: row.client_name, serviceName: row.service_name, startTime: row.start_time, endTime: row.end_time }],
       });
+    }
+  }
+
+  // Captures (on 'confirmed') or releases (on 'refused') the payment hold
+  // placed at booking — see StripeService.createCheckoutSession's
+  // capture_method: 'manual'. Only acts once every row in the group shares
+  // the new status: a single guest in a multi-person booking changing
+  // status shouldn't move money for the whole group's shared payment (see
+  // Payment.group_id) while the others are still pending/confirmed.
+  // updateGroupStatus always satisfies this trivially since it updates the
+  // whole group atomically; updateStatus (single row) only triggers once
+  // the last guest catches up.
+  private async settlePaymentForGroupStatus(groupId: string, status: ReservationStatus): Promise<void> {
+    if (status !== 'confirmed' && status !== 'refused') return;
+
+    const rows: { status: ReservationStatus }[] = await this.dataSource.query(`SELECT DISTINCT status FROM reservations WHERE group_id = $1`, [groupId]);
+    if (rows.length !== 1 || rows[0].status !== status) return;
+
+    try {
+      if (status === 'confirmed') {
+        await this.paymentsService.capture(groupId);
+      } else {
+        await this.paymentsService.cancelAuthorization(groupId);
+      }
+    } catch {
+      // Already logged by PaymentsService — must never block the status
+      // change itself (she'll see the stale payment status in the admin
+      // list and can retry or handle it by hand via the Stripe dashboard).
     }
   }
 
@@ -849,6 +999,8 @@ export class ReservationsService {
       throw new NotFoundException('Groupe de réservations introuvable.');
     }
 
+    await this.settlePaymentForGroupStatus(groupId, status);
+
     const rows: {
       client_name: string;
       client_email: string;
@@ -864,6 +1016,11 @@ export class ReservationsService {
        FROM reservations r JOIN services s ON s.id = r.service_id WHERE r.group_id = $1 ORDER BY r.start_time ASC`,
       [groupId],
     );
+
+    if (status === 'completed') {
+      const ids: { id: number }[] = await this.dataSource.query(`SELECT id FROM reservations WHERE group_id = $1`, [groupId]);
+      await this.rewardsService.onReservationsCompleted(ids.map((r) => r.id));
+    }
 
     if (rows.length > 0) {
       const [primary] = rows;
@@ -933,9 +1090,10 @@ export class ReservationsService {
       service_name: string;
       at_client_home: boolean;
       client_address: string | null;
+      paid_on_site: boolean;
     }[] = await this.dataSource.query(
       `SELECT r.client_name, r.client_email, r.reservation_date, r.start_time, r.end_time, r.status,
-              r.at_client_home, r.client_address, s.name AS service_name
+              r.at_client_home, r.client_address, r.paid_on_site, s.name AS service_name
        FROM reservations r JOIN services s ON s.id = r.service_id WHERE r.group_id = $1 ORDER BY r.start_time ASC`,
       [groupId],
     );
@@ -944,6 +1102,7 @@ export class ReservationsService {
     }
 
     const [primary] = rows;
+    const payment = await this.paymentsService.findByGroupId(groupId);
     return {
       groupId,
       clientName: primary.client_name,
@@ -953,12 +1112,37 @@ export class ReservationsService {
       atClientHome: primary.at_client_home,
       clientAddress: primary.client_address,
       guests: rows.map((r) => ({ name: r.client_name, serviceName: r.service_name, startTime: r.start_time, endTime: r.end_time })),
+      payment: payment
+        ? { status: payment.status, amountCents: payment.amount_cents, cancelOutcome: this.cancelOutcomeFor(payment.status) }
+        : null,
+      paidOnSite: payment ? null : primary.paid_on_site,
     };
   }
 
+  // What cancelling now would do to the online payment — same rules as
+  // cancelByGroupId, so the client can be told before they confirm.
+  // 'release' = unconfirmed hold lifted, never charged; 'refund' = charged
+  // money returned in full; null = nothing to say.
+  private cancelOutcomeFor(paymentStatus: string): 'release' | 'refund' | null {
+    if (paymentStatus === 'authorized') return 'release';
+    if (paymentStatus === 'paid') return 'refund';
+    return null;
+  }
+
+  // Purely a bookkeeping toggle for "payer sur place" bookings — no Stripe
+  // involved at all. Carla flips it herself once she's actually been paid
+  // (cash, or the SumUp app's own Tap to Pay on her phone, neither
+  // integrated with this system).
+  async setPaidOnSite(groupId: string, paid: boolean): Promise<void> {
+    const result = await this.reservationRepo.update({ group_id: groupId }, { paid_on_site: paid });
+    if (result.affected === 0) {
+      throw new NotFoundException('Réservation introuvable.');
+    }
+  }
+
   async cancelByGroupId(groupId: string, reason: string): Promise<void> {
-    const rows: { status: ReservationStatus; client_name: string; reservation_date: string }[] = await this.dataSource.query(
-      `SELECT status, client_name, reservation_date FROM reservations WHERE group_id = $1 LIMIT 1`,
+    const rows: { status: ReservationStatus; client_name: string; reservation_date: string; start_time: string }[] = await this.dataSource.query(
+      `SELECT status, client_name, reservation_date, start_time FROM reservations WHERE group_id = $1 ORDER BY start_time ASC LIMIT 1`,
       [groupId],
     );
     if (rows.length === 0) {
@@ -987,12 +1171,43 @@ export class ReservationsService {
     // required by CancelReservationDto, so always a real, non-empty string.
     await this.reservationRepo.update({ group_id: groupId }, { cancellation_reason: reason });
 
+    // null = there was never an online payment to refund (Stripe disabled,
+    // the client chose "payer sur place", or abandoned checkout without
+    // paying) — distinct from true/false, which both mean a payment existed.
+    let paymentRefunded: boolean | null = null;
+    const payment = await this.paymentsService.findByGroupId(groupId);
+    if (payment && payment.status === 'authorized') {
+      // Still just a hold, never actually charged (the appointment hadn't
+      // been confirmed yet) — always release it, the refund-deadline
+      // policy below only makes sense once real money has moved.
+      try {
+        await this.paymentsService.cancelAuthorization(groupId);
+        paymentRefunded = true;
+      } catch (err) {
+        this.logger.error(`Authorization cancel failed for group ${groupId}: ${(err as Error).message}`);
+        paymentRefunded = false;
+      }
+    } else if (payment && payment.status === 'paid') {
+      // Charged (the appointment had been confirmed): always refunded in full,
+      // whatever the notice — no deadline policy for now.
+      try {
+        await this.paymentsService.refund(groupId);
+        paymentRefunded = true;
+      } catch (err) {
+        // Refund failure must not block the cancellation itself — she'll
+        // see "à rembourser à la main" in the notification below and can
+        // refund from the Stripe dashboard.
+        this.logger.error(`Refund failed for group ${groupId}: ${(err as Error).message}`);
+        paymentRefunded = false;
+      }
+    }
+
     // Only the client-initiated path notifies — an admin changing the
     // status herself (updateGroupStatus called elsewhere) doesn't need a
     // push/email telling her about her own action.
     await this.pushService.notifyAdmins({
       title: 'Rendez-vous annulé par le client',
-      body: `${rows[0].client_name} — ${rows[0].reservation_date} — Motif : ${reason}`,
+      body: `${rows[0].client_name} — ${rows[0].reservation_date} — Motif : ${reason}${paymentRefunded === true ? ' — paiement remboursé' : paymentRefunded === false ? ' — remboursement à faire à la main' : ''}`,
       url: '/admin',
     });
     if (guestRows.length > 0) {
@@ -1004,6 +1219,7 @@ export class ReservationsService {
         date: rows[0].reservation_date,
         guests: guestRows.map((r) => ({ name: r.client_name, serviceName: r.service_name, startTime: r.start_time, endTime: r.end_time })),
         cancellationReason: reason,
+        paymentRefunded,
       });
     }
   }

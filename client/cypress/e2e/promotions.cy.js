@@ -20,6 +20,7 @@ describe('Admin — Promotions', () => {
       const match = $inputs.toArray().find((el) => el.value === label);
       cy.wrap(match).closest('tr').within(() => {
         cy.contains('button', 'Supprimer').click();
+        cy.confirmDialog();
       });
     });
     cy.get('body').should(($body) => {

@@ -48,6 +48,7 @@ describe('DashboardService', () => {
             status: 'confirmed',
             at_client_home: true,
             discount_percent: 0,
+            discount_cents: 0,
           },
           {
             id: 2,
@@ -60,6 +61,7 @@ describe('DashboardService', () => {
             status: 'pending',
             at_client_home: false,
             discount_percent: 0,
+            discount_cents: 0,
           },
         ]);
       }
@@ -133,6 +135,7 @@ describe('DashboardService', () => {
             status: 'confirmed',
             at_client_home: false,
             discount_percent: 10, // -10% tarif étudiant
+            discount_cents: 0,
           },
         ]);
       }
@@ -184,6 +187,7 @@ describe('DashboardService', () => {
               status: 'confirmed',
               at_client_home: false,
               discount_percent: 0,
+              discount_cents: 0,
             },
             {
               id: 2,
@@ -196,6 +200,7 @@ describe('DashboardService', () => {
               status: 'confirmed',
               at_client_home: false,
               discount_percent: 0,
+              discount_cents: 0,
             },
           ]);
         }

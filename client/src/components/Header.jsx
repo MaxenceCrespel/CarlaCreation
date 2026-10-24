@@ -11,7 +11,8 @@ export default function Header() {
     <header className="site-header">
       <div className="container header-inner">
         <Link className="brand" to="/" onClick={() => setIsOpen(false)}>
-          <img className="brand-logo" src={logo} alt={siteName} />
+          <img className="brand-logo" src={logo} alt="" />
+          <span className="brand-text">{siteName}</span>
         </Link>
 
         <nav className={`main-nav ${isOpen ? 'is-open' : ''}`} aria-label="Navigation principale">
@@ -33,6 +34,16 @@ export default function Header() {
             </li>
           </ul>
         </nav>
+
+        {/* Kept outside <nav> deliberately — a persistent icon, reachable
+            in one tap whether the mobile menu is open or closed, instead
+            of being buried behind the hamburger like the rest of the nav. */}
+        <NavLink to="/mon-compte" className="account-icon-link" aria-label="Mon compte" onClick={() => setIsOpen(false)}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="12" cy="8" r="4" />
+            <path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" />
+          </svg>
+        </NavLink>
 
         <button
           type="button"

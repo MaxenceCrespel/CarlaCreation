@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useConfirm } from '../../context/ConfirmContext';
 import { apiFetch } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 
@@ -10,7 +11,7 @@ const STATUS_LABELS = {
   refused: 'Refusée',
 };
 
-const EMPTY_CLIENT_FORM = { name: '', phone: '', notes: '' };
+const EMPTY_CLIENT_FORM = { name: '', phone: '', notes: '', birthdate: '' };
 
 function AddClientForm({ onCreated, onCancel, prefill }) {
   const showToast = useToast();
@@ -32,6 +33,7 @@ function AddClientForm({ onCreated, onCancel, prefill }) {
           name: form.name.trim(),
           phone: form.phone.trim(),
           notes: form.notes.trim(),
+          birthdate: form.birthdate || undefined,
         },
       });
       onCreated(created);
@@ -58,6 +60,10 @@ function AddClientForm({ onCreated, onCancel, prefill }) {
         </div>
       </div>
       <div className="form-row">
+        <label htmlFor="client-add-birthdate">Date de naissance (optionnel — pour le cadeau d'anniversaire)</label>
+        <input type="date" id="client-add-birthdate" value={form.birthdate} onChange={update('birthdate')} />
+      </div>
+      <div className="form-row">
         <label htmlFor="client-add-notes">Notes (optionnel)</label>
         <textarea id="client-add-notes" rows={3} maxLength={5000} placeholder="Ex : a fait un 4.1 au dernier rdv…" value={form.notes} onChange={update('notes')} />
       </div>
@@ -72,12 +78,14 @@ function AddClientForm({ onCreated, onCancel, prefill }) {
 }
 
 function ClientDetail({ client, onClose, onUpdated, onDeleted }) {
+  const confirm = useConfirm();
   const showToast = useToast();
   const [detail, setDetail] = useState(null);
   const [error, setError] = useState(null);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [notes, setNotes] = useState('');
+  const [birthdate, setBirthdate] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -87,6 +95,7 @@ function ClientDetail({ client, onClose, onUpdated, onDeleted }) {
         setName(data.name);
         setPhone(data.phone);
         setNotes(data.notes);
+        setBirthdate(data.birthdate || '');
       })
       .catch((err) => setError(err.message));
   }, [client.id]);
@@ -96,7 +105,7 @@ function ClientDetail({ client, onClose, onUpdated, onDeleted }) {
     try {
       const updated = await apiFetch(`/admin/clients/${client.id}`, {
         method: 'PATCH',
-        body: { name: name.trim(), phone: phone.trim(), notes: notes.trim() },
+        body: { name: name.trim(), phone: phone.trim(), notes: notes.trim(), birthdate: birthdate || undefined },
       });
       onUpdated(updated);
       showToast('Fiche mise à jour.', 'success');
@@ -108,7 +117,7 @@ function ClientDetail({ client, onClose, onUpdated, onDeleted }) {
   }
 
   async function remove() {
-    if (!window.confirm(`Supprimer définitivement la fiche de ${client.name} ? Ses rendez-vous resteront mais ne seront plus liés.`)) return;
+    if (!await confirm(`Supprimer définitivement la fiche de ${client.name} ? Cette action est définitive : ses points, codes et données personnelles sont effacés, ses rendez-vous restent mais sont anonymisés (les factures émises sont conservées).`)) return;
     try {
       await apiFetch(`/admin/clients/${client.id}`, { method: 'DELETE' });
       onDeleted(client.id);
@@ -121,7 +130,14 @@ function ClientDetail({ client, onClose, onUpdated, onDeleted }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card" role="dialog" aria-modal="true" aria-label="Fiche client" onClick={(e) => e.stopPropagation()}>
-        <h2>Fiche client</h2>
+        <h2>
+          Fiche client{' '}
+          {detail && (
+            <span className={`status-badge ${detail.hasAccount ? 'status-confirmed' : 'status-pending'}`} style={{ fontSize: '0.6em', verticalAlign: 'middle' }}>
+              {detail.hasAccount ? 'Compte créé' : 'Pas de compte'}
+            </span>
+          )}
+        </h2>
 
         {error && <p className="form-feedback error">{error}</p>}
         {!error && !detail && <p className="loading-text">Chargement…</p>}
@@ -139,12 +155,16 @@ function ClientDetail({ client, onClose, onUpdated, onDeleted }) {
               </div>
             </div>
             <div className="form-row">
+              <label htmlFor="client-detail-birthdate">Date de naissance (pour le cadeau d'anniversaire)</label>
+              <input type="date" id="client-detail-birthdate" value={birthdate} onChange={(e) => setBirthdate(e.target.value)} />
+            </div>
+            <div className="form-row">
               <label htmlFor="client-detail-notes">Notes</label>
               <textarea id="client-detail-notes" rows={4} maxLength={5000} value={notes} onChange={(e) => setNotes(e.target.value)} />
             </div>
 
             <div className="modal-actions">
-              <button type="button" className="danger" onClick={remove}>Supprimer la fiche</button>
+              <button type="button" className="btn btn-outline-danger" onClick={remove}>Supprimer la fiche</button>
               <button type="button" className="btn btn-primary" disabled={saving} onClick={save}>
                 {saving ? 'Enregistrement…' : 'Enregistrer'}
               </button>
@@ -156,11 +176,10 @@ function ClientDetail({ client, onClose, onUpdated, onDeleted }) {
                 <p className="loading-text">Aucun rendez-vous enregistré sur cette fiche.</p>
               ) : (
                 <div className="table-wrap" style={{ marginTop: 8 }}>
-                  <table className="admin-table">
+                  <table className="admin-table history-table">
                     <thead>
                       <tr>
                         <th>Date</th>
-                        <th>Heure</th>
                         <th>Prestation</th>
                         <th>Statut</th>
                       </tr>
@@ -168,8 +187,7 @@ function ClientDetail({ client, onClose, onUpdated, onDeleted }) {
                     <tbody>
                       {detail.history.map((h) => (
                         <tr key={h.id}>
-                          <td data-label="Date">{h.reservation_date}</td>
-                          <td data-label="Heure">{h.start_time}</td>
+                          <td data-label="Date">{h.reservation_date} · {h.start_time}</td>
                           <td data-label="Prestation">{h.service_name}</td>
                           <td data-label="Statut"><span className={`status-badge status-${h.status}`}>{STATUS_LABELS[h.status] || h.status}</span></td>
                         </tr>
@@ -261,7 +279,7 @@ export default function ClientsTab() {
 
       {!error && clients !== null && clients.length > 0 && (
         <div className="table-wrap">
-          <table className="admin-table">
+          <table className="admin-table clients-table">
             <thead>
               <tr>
                 <th>Nom</th>

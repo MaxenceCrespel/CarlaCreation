@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
+import { useConfirm } from '../../context/ConfirmContext';
 import { apiFetch } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
+import { formatPrice } from '../../utils/format';
 
 const EMPTY_FORM = { label: '', discountPercent: '10', requiresCode: false, code: '' };
 
@@ -116,6 +118,26 @@ function PromotionRow({ promotion, onSave, onRemove }) {
     }
   }
 
+  // Personal reward codes (loyalty redemptions, birthday) are issued
+  // automatically to one client — shown read-only, only (de)activation.
+  if (promotion.client_id != null) {
+    const amount = promotion.discount_cents ? formatPrice(promotion.discount_cents) : `${promotion.discount_percent}%`;
+    const state = promotion.used_at ? 'Utilisé' : promotion.expires_at && new Date(promotion.expires_at) < new Date() ? 'Expiré' : promotion.active ? 'Active' : 'Désactivée';
+    return (
+      <tr>
+        <td data-label="Libellé">{promotion.label}</td>
+        <td data-label="Type">Code personnel (usage unique)</td>
+        <td data-label="Code">{promotion.code}</td>
+        <td data-label="Réduction">{amount}</td>
+        <td data-label="Statut"><span className={`status-badge ${state === 'Active' ? 'status-confirmed' : 'status-cancelled'}`}>{state}</span></td>
+        <td className="row-actions">
+          <button type="button" onClick={toggleActive}>{promotion.active ? 'Désactiver' : 'Activer'}</button>
+          <button type="button" className="danger" onClick={() => onRemove(promotion.id)}>Supprimer</button>
+        </td>
+      </tr>
+    );
+  }
+
   return (
     <tr>
       <td data-label="Libellé"><input type="text" value={label} maxLength={100} onChange={(e) => setLabel(e.target.value)} /></td>
@@ -143,6 +165,7 @@ function PromotionRow({ promotion, onSave, onRemove }) {
 }
 
 export default function PromotionsTab() {
+  const confirm = useConfirm();
   const showToast = useToast();
   const [promotions, setPromotions] = useState(null);
   const [error, setError] = useState(null);
@@ -163,7 +186,7 @@ export default function PromotionsTab() {
   }
 
   async function removePromotion(id) {
-    if (!window.confirm('Supprimer définitivement cette promotion ?')) return;
+    if (!await confirm('Supprimer définitivement cette promotion ?')) return;
     try {
       await apiFetch(`/admin/promotions/${id}`, { method: 'DELETE' });
       setPromotions((rows) => rows.filter((p) => p.id !== id));

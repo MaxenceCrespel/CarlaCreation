@@ -90,6 +90,19 @@ const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '';
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:carlacreation59@gmail.com';
 const PUSH_ENABLED = Boolean(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY);
 
+// Also entirely optional, same pattern as SMTP/geocoding/push above.
+// Without both keys, the booking flow works exactly as it does today — no
+// payment step, a reservation is purely a request Carla confirms by hand.
+// Once configured, the client can choose to pay online at booking time via
+// Stripe Checkout (see StripeService/ReservationsService). Test-mode keys from the
+// Stripe dashboard work fine here; swap for live keys only once ready to
+// take real payments. STRIPE_WEBHOOK_SECRET comes from the webhook
+// endpoint's settings in the Stripe dashboard (or `stripe listen` locally).
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
+const STRIPE_PUBLISHABLE_KEY = process.env.STRIPE_PUBLISHABLE_KEY || '';
+const STRIPE_ENABLED = Boolean(STRIPE_SECRET_KEY && STRIPE_WEBHOOK_SECRET);
+
 export const config = {
   NODE_ENV,
   isProd,
@@ -111,4 +124,8 @@ export const config = {
   VAPID_PRIVATE_KEY,
   VAPID_SUBJECT,
   PUSH_ENABLED,
+  STRIPE_SECRET_KEY,
+  STRIPE_WEBHOOK_SECRET,
+  STRIPE_PUBLISHABLE_KEY,
+  STRIPE_ENABLED,
 };

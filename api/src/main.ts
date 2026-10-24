@@ -12,6 +12,11 @@ import { issueCsrfToken } from './common/csrf';
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: config.isProd ? ['error', 'warn', 'log'] : ['error', 'warn', 'log', 'debug'],
+    // Keeps the exact raw bytes of every request body available as
+    // `req.rawBody`, alongside the normal JSON-parsed body everywhere else
+    // — needed only by the Stripe webhook, whose signature check hashes
+    // the raw bytes Stripe actually sent (see webhook.controller.ts).
+    rawBody: true,
   });
 
   app.set('trust proxy', 1);

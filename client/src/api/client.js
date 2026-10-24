@@ -27,7 +27,9 @@ async function handleResponse(res) {
     // `message` must win, or every specific error collapses into the
     // generic English phrase.
     const message = (data && ((Array.isArray(data.message) ? data.message[0] : data.message) || data.error)) || 'Une erreur est survenue.';
-    throw new Error(message);
+    const error = new Error(message);
+    error.code = data && data.code;
+    throw error;
   }
   return data;
 }

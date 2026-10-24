@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useConfirm } from '../../context/ConfirmContext';
 import { apiFetch, apiUpload } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 
@@ -19,6 +20,7 @@ function orderedCategoryTree(categories) {
 }
 
 export default function GalleryTab() {
+  const confirm = useConfirm();
   const showToast = useToast();
   const [items, setItems] = useState(null);
   const [categories, setCategories] = useState([]);
@@ -91,7 +93,7 @@ export default function GalleryTab() {
   }
 
   async function remove(id) {
-    if (!window.confirm('Supprimer définitivement cette photo ?')) return;
+    if (!await confirm('Supprimer définitivement cette photo ?')) return;
     try {
       await apiFetch(`/admin/gallery/${id}`, { method: 'DELETE' });
       setItems((rows) => rows.filter((i) => i.id !== id));

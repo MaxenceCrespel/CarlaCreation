@@ -2,7 +2,14 @@ import { Body, Controller, Delete, Get, Param, Put, UseGuards } from '@nestjs/co
 import { AdminAuthGuard } from '../../common/admin-auth.guard';
 import { CsrfGuard } from '../../common/csrf';
 import { SettingsService } from './settings.service';
-import { UpdateDailyHoursDto, UpdateTravelBufferDto, UpdateTravelFeeFallbackDto, UpdateTravelFeeTiersDto } from './dto/settings.dto';
+import {
+  UpdateBirthdayDiscountDto,
+  UpdateDailyHoursDto,
+  UpdateTravelBufferDto,
+  UpdateTravelFeeFallbackDto,
+  UpdateTravelFeeTiersDto,
+} from './dto/settings.dto';
+import { config } from '../../config';
 
 @UseGuards(AdminAuthGuard)
 @Controller('api/admin/settings')
@@ -59,6 +66,25 @@ export class AdminSettingsController {
   @Put('travel-fee/tiers')
   async setTravelFeeTiers(@Body() dto: UpdateTravelFeeTiersDto) {
     await this.settingsService.setTravelFeeTiers(dto.tiers);
+    return { success: true };
+  }
+
+  @Get('payments')
+  async getPaymentSettings() {
+    return {
+      stripeEnabled: config.STRIPE_ENABLED,
+    };
+  }
+
+  @Get('loyalty')
+  async getLoyalty() {
+    return { birthdayDiscountPercent: await this.settingsService.getBirthdayDiscountPercent() };
+  }
+
+  @UseGuards(CsrfGuard)
+  @Put('loyalty/birthday-discount-percent')
+  async setBirthdayDiscount(@Body() dto: UpdateBirthdayDiscountDto) {
+    await this.settingsService.setBirthdayDiscountPercent(dto.percent);
     return { success: true };
   }
 }

@@ -16,12 +16,15 @@ const WINDOW_DAYS = 60;
 const DEFAULT_TRAVEL_BUFFER_MINUTES = 30;
 // Same fallback rationale as above — mirrors the app_settings default.
 const DEFAULT_TRAVEL_FEE_FALLBACK_CENTS = 200;
+// Same rationale, mirroring the AddPayments migration's default.
 // Same rationale, mirroring the seeded default tier schedule (free under
 // 10km, then a flat 2€ surcharge) in case the table is somehow empty.
 const DEFAULT_TRAVEL_FEE_TIERS: TravelFeeTierDto[] = [
   { minKm: 0, feeCents: 0 },
   { minKm: 10, feeCents: 200 },
 ];
+// Same fallback rationale as above, mirroring the app_settings default.
+const DEFAULT_BIRTHDAY_DISCOUNT_PERCENT = 10;
 
 @Injectable()
 export class SettingsService {
@@ -134,6 +137,24 @@ export class SettingsService {
       .into(AppSettings)
       .values({ id: 1, travel_fee_fallback_cents: cents })
       .orUpdate(['travel_fee_fallback_cents'], ['id'])
+      .execute();
+  }
+
+  async getBirthdayDiscountPercent(): Promise<number> {
+    const row = await this.dataSource.getRepository(AppSettings).findOne({ where: { id: 1 } });
+    return row?.birthday_discount_percent ?? DEFAULT_BIRTHDAY_DISCOUNT_PERCENT;
+  }
+
+  async setBirthdayDiscountPercent(percent: number): Promise<void> {
+    if (!Number.isInteger(percent) || percent < 0 || percent > 100) {
+      throw new BadRequestException("Le pourcentage d'anniversaire doit être un entier entre 0 et 100.");
+    }
+    await this.dataSource
+      .createQueryBuilder()
+      .insert()
+      .into(AppSettings)
+      .values({ id: 1, birthday_discount_percent: percent })
+      .orUpdate(['birthday_discount_percent'], ['id'])
       .execute();
   }
 

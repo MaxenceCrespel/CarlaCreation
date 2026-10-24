@@ -18,6 +18,7 @@ describe('Admin — Réservations (création manuelle)', () => {
 
     cy.contains('tr', clientName).within(() => {
       cy.contains('button', 'Refuser').click();
+      cy.confirmDialog();
     });
 
     // Refused rows drop out of the default "Confirmées" filter — switch to

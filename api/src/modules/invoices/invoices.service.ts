@@ -65,6 +65,15 @@ export class InvoicesService {
       items.push({ description: label, quantity: 1, unitPriceCents: -discountCents });
     }
 
+    if (reservation.discount_cents > 0) {
+      const promotion = reservation.promotion_id ? await this.promotionRepo.findOne({ where: { id: reservation.promotion_id } }) : null;
+      items.push({
+        description: promotion ? `Bon fidélité (${promotion.label})` : 'Bon fidélité',
+        quantity: 1,
+        unitPriceCents: -reservation.discount_cents,
+      });
+    }
+
     if (reservation.travel_fee_cents) {
       items.push({ description: 'Frais de déplacement', quantity: 1, unitPriceCents: reservation.travel_fee_cents });
     }

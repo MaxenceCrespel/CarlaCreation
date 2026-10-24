@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import PasswordInput from '../../components/PasswordInput';
+import { useConfirm } from '../../context/ConfirmContext';
 import { apiFetch } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { disablePushNotifications, enablePushNotifications, getExistingSubscription, pushSupported } from '../../utils/push';
@@ -9,6 +11,7 @@ import { disablePushNotifications, enablePushNotifications, getExistingSubscript
 // (see api's CalendarFeedController), so regenerating it invalidates
 // whatever's currently subscribed until re-added with the new link.
 function CalendarSyncCard() {
+  const confirm = useConfirm();
   const showToast = useToast();
   const [url, setUrl] = useState(undefined); // undefined = loading, null = not generated yet
   const [working, setWorking] = useState(false);
@@ -22,7 +25,7 @@ function CalendarSyncCard() {
   useEffect(load, []);
 
   async function generate() {
-    if (url && !window.confirm("Régénérer le lien ? L'ancien arrêtera de se mettre à jour dans Apple Calendrier (ou autre) tant qu'il n'est pas remplacé par le nouveau.")) {
+    if (url && !await confirm("Régénérer le lien ? L'ancien arrêtera de se mettre à jour dans Apple Calendrier (ou autre) tant qu'il n'est pas remplacé par le nouveau.")) {
       return;
     }
     setWorking(true);
@@ -270,8 +273,7 @@ export default function AccountTab({ username, onCredentialsUpdated }) {
       <div className="form-row two-col">
         <div>
           <label htmlFor="account-new-password">Nouveau mot de passe (optionnel)</label>
-          <input
-            type="password"
+          <PasswordInput
             id="account-new-password"
             autoComplete="new-password"
             minLength={10}
@@ -282,8 +284,7 @@ export default function AccountTab({ username, onCredentialsUpdated }) {
         </div>
         <div>
           <label htmlFor="account-confirm-password">Confirmer le nouveau mot de passe</label>
-          <input
-            type="password"
+          <PasswordInput
             id="account-confirm-password"
             autoComplete="new-password"
             minLength={10}
@@ -295,8 +296,7 @@ export default function AccountTab({ username, onCredentialsUpdated }) {
 
       <div className="form-row">
         <label htmlFor="account-current-password">Mot de passe actuel</label>
-        <input
-          type="password"
+        <PasswordInput
           id="account-current-password"
           autoComplete="current-password"
           required

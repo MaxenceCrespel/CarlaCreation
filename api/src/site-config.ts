@@ -13,6 +13,12 @@ export const siteConfig = {
   // City + postal code only — safe to show publicly (e.g. Contact page)
   // without pinpointing Carla's exact home/studio address.
   sitePublicArea: 'Loos, 59120',
+  // Statut légal, affiché sur les mentions légales/CGV — à ajuster si
+  // jamais elle change de statut (ex: passage en société).
+  legalForm: 'Entreprise individuelle (micro-entreprise)',
+  // Vide = les pages légales affichent "en cours d'immatriculation".
+  // NB : 9 chiffres = un SIREN ; un SIRET complet en compte 14 (SIREN + NIC).
+  siret: '109 692 541 00013',
   navLinks: [
     { href: '/', label: 'Accueil', key: 'home' },
     { href: '/services', label: 'Prestations', key: 'services' },

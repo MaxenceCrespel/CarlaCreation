@@ -235,11 +235,24 @@ export class CreateReservationDto {
   @IsString()
   @Length(3, 30)
   promoCode?: string;
+
+  // Only meaningful when Stripe is actually configured — ignored otherwise
+  // (see ReservationsService.create). 'full' pays online now via Stripe
+  // Checkout; omitted (or any other value) means "payer sur place" —
+  // Carla collects payment in person later, see Reservation.paid_on_site.
+  @IsOptional()
+  @IsIn(['full'])
+  paymentOption?: 'full';
 }
 
 export class UpdateReservationStatusDto {
   @IsIn(['pending', 'confirmed', 'cancelled', 'completed', 'refused'])
   status!: 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'refused';
+}
+
+export class SetPaidOnSiteDto {
+  @IsBoolean()
+  paid!: boolean;
 }
 
 // Admin editing a single existing reservation row (not the status endpoint —

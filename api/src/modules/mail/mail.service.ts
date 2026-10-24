@@ -22,6 +22,10 @@ export interface BookingEmailInput {
   // Only ever set on sendAdminCancellationNotification — the client's own
   // reason for a self-cancellation.
   cancellationReason?: string;
+  // Same: null when there was no online payment to begin with (Stripe not
+  // configured, "payer sur place", or the client never paid), true/false
+  // once there was one.
+  paymentRefunded?: boolean | null;
 }
 
 const DAY_NAMES_FR = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
@@ -147,6 +151,13 @@ export class MailService {
         <p><strong>${escapeHtml(input.clientName)}</strong> — ${escapeHtml(input.clientEmail)}${input.clientPhone ? ` — ${escapeHtml(input.clientPhone)}` : ''}</p>
         <p style="margin:16px 0 4px;"><strong>Date :</strong> ${formatDateFr(input.date)}</p>
         ${input.cancellationReason ? `<p style="margin:0 0 16px;"><strong>Motif :</strong> ${escapeHtml(input.cancellationReason)}</p>` : ''}
+        ${
+          input.paymentRefunded === true
+            ? `<p style="margin:0 0 16px;"><strong>Paiement :</strong> remboursé automatiquement.</p>`
+            : input.paymentRefunded === false
+              ? `<p style="margin:0 0 16px;"><strong>Paiement :</strong> le remboursement automatique a échoué — à rembourser à la main depuis le tableau de bord Stripe.</p>`
+              : ''
+        }
         <table style="border-collapse:collapse;width:100%;margin:12px 0;">
           <thead>
             <tr style="background:#F8F4EF;">
@@ -226,6 +237,95 @@ export class MailService {
     await this.send(input.clientEmail, subject, html);
   }
 
+  // Sent when a client exchanges loyalty points for a euro code — see
+  // RewardsService.redeem.
+  async sendRedeemedReward(input: { clientName: string; clientEmail: string; code: string; amountCents: number }): Promise<void> {
+    const subject = `Votre récompense fidélité — ${siteConfig.siteName}`;
+    const euros = (input.amountCents / 100).toLocaleString('fr-FR', { minimumFractionDigits: 0 });
+    const html = `
+      <div style="font-family: Segoe UI, Arial, sans-serif; color:#3A2E27; max-width:560px; margin:0 auto;">
+        <img src="${config.PUBLIC_ORIGIN}/logo-email.png" alt="${escapeHtml(siteConfig.siteName)}" width="140" style="display:block;margin:0 0 16px;" />
+        <p>Bonjour ${escapeHtml(input.clientName)},</p>
+        <p>Merci pour votre fidélité ! Voici votre code, à utiliser à votre prochaine réservation (une seule fois, depuis votre compte) :</p>
+        <p style="margin:16px 0;font-size:1.4em;font-weight:700;letter-spacing:0.05em;color:#9A5F4B;">${escapeHtml(input.code)}</p>
+        <p>Il vous offre <strong>${euros} €</strong> sur votre prochaine prestation.</p>
+        <p style="margin-top:24px;">
+          <a href="${config.PUBLIC_ORIGIN}/booking" style="display:inline-block;background:#9A5F4B;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;">Prendre rendez-vous</a>
+        </p>
+        <p style="color:#6B5C51;font-size:0.85em;margin-top:32px;">${escapeHtml(siteConfig.siteName)}</p>
+      </div>
+    `;
+    await this.send(input.clientEmail, subject, html);
+  }
+
+  // Sent once a year, around a client's birthday — see
+  // RewardsService.sendBirthdayRewards.
+  async sendBirthdayReward(input: { clientName: string; clientEmail: string; code: string; discountPercent: number; validUntil: Date }): Promise<void> {
+    const subject = `Joyeux anniversaire ! Un petit cadeau — ${siteConfig.siteName}`;
+    const html = `
+      <div style="font-family: Segoe UI, Arial, sans-serif; color:#3A2E27; max-width:560px; margin:0 auto;">
+        <img src="${config.PUBLIC_ORIGIN}/logo-email.png" alt="${escapeHtml(siteConfig.siteName)}" width="140" style="display:block;margin:0 0 16px;" />
+        <p>Bonjour ${escapeHtml(input.clientName)},</p>
+        <p>Joyeux anniversaire ! 🎉 Pour l'occasion, voici un code promo à utiliser à votre prochaine réservation :</p>
+        <p style="margin:16px 0;font-size:1.4em;font-weight:700;letter-spacing:0.05em;color:#9A5F4B;">${escapeHtml(input.code)}</p>
+        <p>Il vous donne <strong>${input.discountPercent}%</strong> de réduction sur une prestation, valable jusqu'au <strong>${formatDateFr(input.validUntil.toISOString().slice(0, 10))}</strong> (une seule utilisation, depuis votre compte).</p>
+        <p style="margin-top:24px;">
+          <a href="${config.PUBLIC_ORIGIN}/booking" style="display:inline-block;background:#9A5F4B;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;">Prendre rendez-vous</a>
+        </p>
+        <p style="color:#6B5C51;font-size:0.85em;margin-top:32px;">${escapeHtml(siteConfig.siteName)}</p>
+      </div>
+    `;
+    await this.send(input.clientEmail, subject, html);
+  }
+
+  private accountEmailHtml(clientName: string, bodyHtml: string, button?: { href: string; label: string }): string {
+    return `
+      <div style="font-family: Segoe UI, Arial, sans-serif; color:#3A2E27; max-width:560px; margin:0 auto;">
+        <img src="${config.PUBLIC_ORIGIN}/logo-email.png" alt="${escapeHtml(siteConfig.siteName)}" width="140" style="display:block;margin:0 0 16px;" />
+        <p>Bonjour ${escapeHtml(clientName)},</p>
+        ${bodyHtml}
+        ${button ? `<p style="margin-top:24px;"><a href="${button.href}" style="display:inline-block;background:#9A5F4B;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;">${escapeHtml(button.label)}</a></p><p style="color:#6B5C51;font-size:0.85em;">Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur :<br>${button.href}</p>` : ''}
+        <p style="color:#6B5C51;font-size:0.85em;margin-top:32px;">${escapeHtml(siteConfig.siteName)}</p>
+      </div>
+    `;
+  }
+
+  // Sent at signup — the account only works once this link is clicked.
+  async sendEmailVerification(input: { clientName: string; clientEmail: string; link: string }): Promise<void> {
+    const html = this.accountEmailHtml(
+      input.clientName,
+      '<p>Merci pour votre inscription ! Confirmez votre adresse email pour activer votre compte (le lien est valable 24 heures).</p><p>Si vous n\'êtes pas à l\'origine de cette inscription, ignorez simplement ce message.</p>',
+      { href: input.link, label: 'Confirmer mon adresse email' },
+    );
+    await this.send(input.clientEmail, `Confirmez votre adresse email — ${siteConfig.siteName}`, html);
+  }
+
+  async sendPasswordReset(input: { clientName: string; clientEmail: string; link: string }): Promise<void> {
+    const html = this.accountEmailHtml(
+      input.clientName,
+      '<p>Vous avez demandé à réinitialiser votre mot de passe. Ce lien est valable 1 heure et ne peut servir qu\'une fois.</p><p>Si vous n\'êtes pas à l\'origine de cette demande, ignorez ce message : votre mot de passe reste inchangé.</p>',
+      { href: input.link, label: 'Choisir un nouveau mot de passe' },
+    );
+    await this.send(input.clientEmail, `Réinitialisation de votre mot de passe — ${siteConfig.siteName}`, html);
+  }
+
+  async sendAccountDeleted(input: { clientName: string; clientEmail: string }): Promise<void> {
+    const html = this.accountEmailHtml(
+      input.clientName,
+      '<p>Votre compte et vos points de fidélité ont bien été supprimés, et vos réservations anonymisées. Seules les factures émises sont conservées, conformément à nos obligations légales.</p><p>Merci de votre confiance, et à bientôt peut-être.</p>',
+    );
+    await this.send(input.clientEmail, `Votre compte a été supprimé — ${siteConfig.siteName}`, html);
+  }
+
+  async sendInactivityWarning(input: { clientName: string; clientEmail: string; loginLink: string; days: number }): Promise<void> {
+    const html = this.accountEmailHtml(
+      input.clientName,
+      `<p>Vous ne vous êtes pas connecté(e) depuis longtemps. Sans connexion de votre part, votre compte et vos points de fidélité seront supprimés dans environ <strong>${input.days} jours</strong>, conformément à notre politique de conservation des données.</p><p>Pour les conserver, il suffit de vous connecter.</p>`,
+      { href: input.loginLink, label: 'Me connecter' },
+    );
+    await this.send(input.clientEmail, `Votre compte va être supprimé — ${siteConfig.siteName}`, html);
+  }
+
   private renderBookingEmail(input: BookingEmailInput, introHtml: string, statusLabel?: string, revealAddress = false): string {
     const rows = input.guests
       .map(
@@ -279,6 +379,7 @@ export class MailService {
   private async send(to: string, subject: string, html: string): Promise<void> {
     if (!this.transporter) {
       this.logger.log(`[MAIL DISABLED] Would send to ${to}: "${subject}"`);
+      if (config.NODE_ENV !== 'production') this.logger.log(htmlToText(html));
       return;
     }
     try {

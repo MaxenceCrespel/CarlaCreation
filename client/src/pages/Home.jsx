@@ -77,7 +77,7 @@ function ReviewForm() {
     <form className="card review-form" noValidate onSubmit={handleSubmit}>
       <h3>Laisser un avis</h3>
       <div className="form-row">
-        <label htmlFor="reviewName">Nom</label>
+        <label htmlFor="reviewName">Votre prénom</label>
         <input type="text" id="reviewName" required minLength={2} maxLength={100} value={form.clientName} onChange={update('clientName')} />
       </div>
       <div className="form-row">
@@ -105,7 +105,7 @@ function ReviewForm() {
 }
 
 export default function Home() {
-  const { siteTagline } = useSiteConfig();
+  const { siteTagline, travelFreeRadiusKm } = useSiteConfig();
   useSeo({
     description:
       'Studio de coiffure et de nail art à Lille (Hauts-de-France) : coupe, coloration, balayage, manucure et pose semi-permanent. Réservez votre rendez-vous en ligne 24h/24.',
@@ -115,11 +115,31 @@ export default function Home() {
   const [galleryError, setGalleryError] = useState(false);
   const [reviewSummary, setReviewSummary] = useState(null);
   const [reviewError, setReviewError] = useState(false);
+  const [offers, setOffers] = useState([]); // [{ id, name, fromCents }]
 
   useEffect(() => {
     apiFetch('/gallery')
       .then((items) => setGallery(items.slice(0, 6)))
       .catch(() => setGalleryError(true));
+  }, []);
+
+  useEffect(() => {
+    Promise.all([apiFetch('/services'), apiFetch('/service-categories')])
+      .then(([services, categories]) => {
+        const roots = categories.filter((c) => c.parent_id === null).sort((a, b) => a.sort_order - b.sort_order);
+        const childToRoot = new Map(categories.map((c) => [c.id, c.parent_id ?? c.id]));
+        setOffers(
+          roots
+            .map((root) => {
+              const prices = services.filter((s) => childToRoot.get(s.category_id) === root.id).map((s) => s.price_cents);
+              return { id: root.id, name: root.name, fromCents: prices.length ? Math.min(...prices) : null };
+            })
+            .filter((o) => o.fromCents !== null),
+        );
+      })
+      .catch(() => {
+        // Optional section: stays hidden if the catalogue can't load.
+      });
   }, []);
 
   useEffect(() => {
@@ -142,16 +162,34 @@ export default function Home() {
             <Link to="/booking" className="btn btn-primary">Réserver un créneau</Link>
             <Link to="/gallery" className="btn btn-outline">Voir mes réalisations</Link>
           </div>
-          <ul className="hero-stats">
-            <li><strong>8+</strong><span>ans d'expérience</span></li>
-            <li><strong>2500+</strong><span>client·e·s satisfait·e·s</span></li>
-            <li>
-              <strong>{reviewSummary?.average != null ? `${reviewSummary.average}/5` : '—'}</strong>
-              <span>{reviewSummary?.count ? `note moyenne (${reviewSummary.count} avis)` : 'note moyenne'}</span>
-            </li>
+          <ul className="trust-list">
+            <li>Paiement en ligne sécurisé ou sur place</li>
+            {Number.isFinite(travelFreeRadiusKm) && <li>Déplacement offert jusqu'à {travelFreeRadiusKm} km</li>}
+            <li>Réservation et annulation en ligne</li>
+            {reviewSummary?.count > 0 && <li>{reviewSummary.average}/5 · {reviewSummary.count} avis</li>}
           </ul>
         </div>
       </section>
+
+      {offers.length > 0 && (
+        <section className="section section-tight">
+          <div className="container">
+            <p className="eyebrow">Prestations</p>
+            <h2>{offers.length === 2 ? 'Deux savoir-faire' : 'Nos savoir-faire'}</h2>
+            <div className="offer-grid">
+              {offers.map((o) => (
+                <Link key={o.id} to="/services" className="offer-card">
+                  <span className="offer-card-head">
+                    <span className="offer-card-title">{o.name}</span>
+                    <span className="offer-card-arrow" aria-hidden="true">→</span>
+                  </span>
+                  <span className="offer-card-price">À partir de {Math.round(o.fromCents / 100)} €</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="section">
         <div className="container about-grid">
@@ -220,6 +258,28 @@ export default function Home() {
           <p className="center" style={{ marginTop: 40 }}>
             <Link to="/booking" className="btn btn-primary">Prendre rendez-vous</Link>
           </p>
+        </div>
+      </section>
+
+      <section className="section section-tight">
+        <div className="container">
+          <div className="card how-card">
+            <h2>Comment ça se passe</h2>
+            <ol className="how-list">
+              <li>
+                <strong>Vous réservez en ligne</strong>
+                <span>Prestation, lieu, créneau : le prix total s'affiche en direct.</span>
+              </li>
+              <li>
+                <strong>Vous payez comme vous voulez</strong>
+                <span>En ligne par carte, ou sur place le jour du rendez-vous.</span>
+              </li>
+              <li>
+                <strong>Vous suivez votre rendez-vous</strong>
+                <span>Un lien par email pour le consulter ou l'annuler.</span>
+              </li>
+            </ol>
+          </div>
         </div>
       </section>
     </>

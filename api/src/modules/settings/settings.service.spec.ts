@@ -177,4 +177,47 @@ describe('SettingsService — travel fee tiers', () => {
       { min_km: 15, fee_cents: 300 },
     ]);
   });
+
+});
+
+describe('SettingsService — loyalty & birthday rewards', () => {
+  let service: SettingsService;
+  let dataSource: { getRepository: jest.Mock; createQueryBuilder: jest.Mock };
+
+  beforeEach(async () => {
+    dataSource = { getRepository: jest.fn(), createQueryBuilder: jest.fn() };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [SettingsService, { provide: getDataSourceToken(), useValue: dataSource }],
+    }).compile();
+
+    service = module.get(SettingsService);
+  });
+
+  function mockUpsert() {
+    const execute = jest.fn().mockResolvedValue(undefined);
+    const orUpdate = jest.fn().mockReturnValue({ execute });
+    const values = jest.fn().mockReturnValue({ orUpdate });
+    const into = jest.fn().mockReturnValue({ values });
+    const insert = jest.fn().mockReturnValue({ into });
+    dataSource.createQueryBuilder.mockReturnValue({ insert });
+    return { values, orUpdate, execute };
+  }
+
+  it('getBirthdayDiscountPercent returns the stored value, defaulting to 10', async () => {
+    dataSource.getRepository.mockReturnValue({ findOne: jest.fn().mockResolvedValue(null) });
+    await expect(service.getBirthdayDiscountPercent()).resolves.toBe(10);
+  });
+
+  it('setBirthdayDiscountPercent rejects values outside 0-100', async () => {
+    await expect(service.setBirthdayDiscountPercent(-1)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.setBirthdayDiscountPercent(101)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('setBirthdayDiscountPercent upserts a valid value', async () => {
+    const { values, orUpdate } = mockUpsert();
+    await service.setBirthdayDiscountPercent(12);
+    expect(values).toHaveBeenCalledWith({ id: 1, birthday_discount_percent: 12 });
+    expect(orUpdate).toHaveBeenCalledWith(['birthday_discount_percent'], ['id']);
+  });
 });

@@ -25,6 +25,7 @@ describe('Admin — Stock', () => {
       const match = $inputs.toArray().find((el) => el.value === productName);
       cy.wrap(match).closest('tr').within(() => {
         cy.contains('button', 'Supprimer').click();
+        cy.confirmDialog();
       });
     });
     // The table itself may disappear entirely if that was the last

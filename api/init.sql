@@ -10,6 +10,9 @@
 -- one-command bootstrap path for a brand new database (Docker, or a local
 -- Postgres you're setting up by hand).
 
+DROP TABLE IF EXISTS client_tokens;
+DROP TABLE IF EXISTS loyalty_points;
+DROP TABLE IF EXISTS payments;
 DROP TABLE IF EXISTS page_views;
 DROP TABLE IF EXISTS expenses;
 DROP TABLE IF EXISTS invoice_items;
@@ -45,15 +48,51 @@ CREATE TABLE
     IF NOT EXISTS clients (
         id SERIAL PRIMARY KEY,
         name TEXT NOT NULL,
+        first_name TEXT,
+        last_name TEXT,
         normalized_name TEXT NOT NULL,
         phone TEXT NOT NULL DEFAULT '',
         email TEXT NOT NULL DEFAULT '',
         notes TEXT NOT NULL DEFAULT '',
+        password_hash TEXT,
+        birthdate TEXT,
+        referral_code TEXT UNIQUE,
+        referred_by_client_id INTEGER REFERENCES clients (id) ON DELETE SET NULL,
+        referral_rewarded_at TIMESTAMPTZ,
+        birthday_reward_year INTEGER,
+        email_verified_at TIMESTAMPTZ,
+        last_login_at TIMESTAMPTZ,
+        purge_warned_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
 CREATE INDEX IF NOT EXISTS "IDX_clients_normalized_name" ON clients (normalized_name);
+
+CREATE TABLE
+    IF NOT EXISTS loyalty_points (
+        id SERIAL PRIMARY KEY,
+        client_id INTEGER NOT NULL REFERENCES clients (id) ON DELETE CASCADE,
+        points INTEGER NOT NULL,
+        reason TEXT NOT NULL,
+        dedupe_key TEXT UNIQUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+CREATE INDEX IF NOT EXISTS "IDX_loyalty_points_client_id" ON loyalty_points (client_id);
+
+CREATE TABLE
+    IF NOT EXISTS client_tokens (
+        id SERIAL PRIMARY KEY,
+        client_id INTEGER NOT NULL REFERENCES clients (id) ON DELETE CASCADE,
+        type TEXT NOT NULL,
+        token_hash TEXT NOT NULL UNIQUE,
+        expires_at TIMESTAMPTZ NOT NULL,
+        used_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+CREATE INDEX IF NOT EXISTS "IDX_client_tokens_client_id" ON client_tokens (client_id);
 
 CREATE TABLE
     IF NOT EXISTS push_subscriptions (
@@ -142,6 +181,10 @@ CREATE TABLE
         requires_code BOOLEAN NOT NULL DEFAULT false,
         code TEXT,
         active BOOLEAN NOT NULL DEFAULT true,
+        client_id INTEGER,
+        used_at TIMESTAMPTZ,
+        discount_cents INTEGER,
+        expires_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
@@ -170,7 +213,9 @@ CREATE TABLE
         client_id INTEGER REFERENCES clients (id) ON DELETE SET NULL,
         promotion_id INTEGER REFERENCES promotions (id) ON DELETE SET NULL,
         discount_percent INTEGER NOT NULL DEFAULT 0,
+        discount_cents INTEGER NOT NULL DEFAULT 0,
         cancellation_reason TEXT,
+        paid_on_site BOOLEAN NOT NULL DEFAULT false,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
@@ -284,10 +329,13 @@ CREATE TABLE
     IF NOT EXISTS app_settings (
         id INTEGER PRIMARY KEY DEFAULT 1,
         travel_buffer_minutes INTEGER NOT NULL DEFAULT 30,
-        travel_fee_fallback_cents INTEGER NOT NULL DEFAULT 200
+        travel_fee_fallback_cents INTEGER NOT NULL DEFAULT 200,
+        refund_deadline_hours INTEGER NOT NULL DEFAULT 48,
+        birthday_discount_percent INTEGER NOT NULL DEFAULT 10
     );
 
-INSERT INTO app_settings (id, travel_buffer_minutes, travel_fee_fallback_cents) VALUES (1, 30, 200);
+INSERT INTO app_settings (id, travel_buffer_minutes, travel_fee_fallback_cents, refund_deadline_hours, birthday_discount_percent)
+VALUES (1, 30, 200, 48, 10);
 
 CREATE TABLE
     IF NOT EXISTS travel_fee_tiers (
@@ -313,6 +361,23 @@ CREATE TABLE
 
 CREATE INDEX IF NOT EXISTS "IDX_page_views_created_at" ON page_views (created_at);
 CREATE INDEX IF NOT EXISTS "IDX_page_views_visitor_id_created_at" ON page_views (visitor_id, created_at);
+
+CREATE TABLE
+    IF NOT EXISTS payments (
+        id SERIAL PRIMARY KEY,
+        group_id TEXT NOT NULL,
+        amount_cents INTEGER NOT NULL,
+        stripe_checkout_session_id TEXT,
+        stripe_payment_intent_id TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        refunded_amount_cents INTEGER,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        authorized_at TIMESTAMPTZ,
+        paid_at TIMESTAMPTZ,
+        refunded_at TIMESTAMPTZ
+    );
+
+CREATE INDEX IF NOT EXISTS "IDX_payments_group_id" ON payments (group_id);
 
 -- doesn't try to re-run the (already-executed-via-this-file) InitSchema
 -- migration against this database later.
@@ -350,7 +415,14 @@ VALUES
     (1786100000000, 'AddContactMessageIsRead1786100000000'),
     (1786200000000, 'AddReviewAdminReply1786200000000'),
     (1786300000000, 'ContactMessagePhoneInsteadOfEmail1786300000000'),
-    (1786400000000, 'AddPageViews1786400000000');
+    (1786400000000, 'AddPageViews1786400000000'),
+    (1786500000000, 'AddPayments1786500000000'),
+    (1786600000000, 'AddAuthorizedAtAndOnSitePayment1786600000000'),
+    (1786700000000, 'AddClientAccountsAndLoyalty1786700000000'),
+    (1786800000000, 'AddPromotionOwnerAndUsage1786800000000'),
+    (1786900000000, 'AddPointsLoyaltyAndReferral1786900000000'),
+    (1787000000000, 'AddAccountLifecycle1787000000000'),
+    (1787100000000, 'AddClientFirstAndLastName1787100000000');
 
 -- Admin account — username "carla", password "Carla0303!" (bcrypt, cost 12).
 -- Change this password after first login in a real deployment.

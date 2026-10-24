@@ -1,17 +1,25 @@
-# Reverse proxy pour le VPS staging+prod (un seul VPS, un seul Caddy).
-# Démarré une fois via docker-compose.caddy.yml, indépendamment des
-# déploiements applicatifs (redéployer seulement si ce fichier change).
+# ATTENTION : sur le VPS, ce fichier est ÉDITÉ À LA MAIN (il contient aussi le
+# bloc d'une autre application hébergée sur la même machine, usronchin.fr).
+# Ce fichier du dépôt n'est donc qu'une RÉFÉRENCE des blocs de Carla Création :
+# ne jamais le copier tel quel sur le VPS, y reporter seulement les blocs
+# nécessaires (voir docs/MISE-EN-PROD.md), puis recharger sans coupure :
+#   docker exec deploy-caddy-1 caddy reload --config /etc/caddy/Caddyfile
 #
-# {$DOMAIN} est lu depuis le .env racine du VPS (voir .env.example).
+# {$DOMAIN} = carlacreation.fr (lu depuis le .env racine du VPS).
 
-staging.{$DOMAIN} {
-	reverse_proxy 127.0.0.1:3001
+# Prod — stack docker-compose.prod.yml, dossier /opt/carla-prod, port 3000.
+{$DOMAIN} {
+	reverse_proxy 127.0.0.1:3000
 }
 
-# Prod — décommenter quand le VPS de prod (ou cette même machine) est prêt.
-# La stack applicative correspondante (docker-compose.prod.yml) écoutera
-# alors sur 127.0.0.1:3000, comme le service `web` par défaut.
-#
-# {$DOMAIN} {
-# 	reverse_proxy 127.0.0.1:3000
-# }
+www.{$DOMAIN} {
+	redir https://{$DOMAIN}{uri} permanent
+}
+
+# Ancienne adresse du site (staging, utilisé par des clientes) : redirection
+# permanente en conservant le chemin, pour que les anciens emails et favoris
+# continuent de fonctionner. Avant la bascule, ce bloc reste un
+# `reverse_proxy 127.0.0.1:3001` vers l'ancien staging.
+staging.{$DOMAIN} {
+	redir https://{$DOMAIN}{uri} permanent
+}

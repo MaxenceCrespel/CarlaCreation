@@ -38,7 +38,8 @@ describe('Booking flow', () => {
         ).to.eq(true);
 
         // Step 1 — Prestation: name, then pick a service, then advance
-        cy.get('#clientName').type('Cypress Visitor');
+        cy.get('#clientFirstName').type('Cypress');
+        cy.get('#clientLastName').type('Visitor');
         cy.get('.service-pick-card').first().click();
         cy.contains('button', 'Suivant').click();
 
@@ -54,10 +55,9 @@ describe('Booking flow', () => {
           expect(slotsResult.response.body.slots.length, 'Available open slots validation').to.be.greaterThan(0);
         });
 
-        // Safe to interact with the select input now
-        cy.get('#slot').should('not.be.disabled');
-        cy.get('#slot option').should('have.length.at.least', 1);
-        cy.get('#slot').select(0);
+        // Slots render as chips — pick the first one
+        cy.get('#slot .slot-chip', { timeout: 15000 }).should('have.length.at.least', 1);
+        cy.get('#slot .slot-chip').first().click();
         cy.contains('button', 'Suivant').click();
 
         // Step 4 — Coordonnées

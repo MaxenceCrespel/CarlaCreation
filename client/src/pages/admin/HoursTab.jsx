@@ -313,6 +313,70 @@ function TravelBufferCard() {
   );
 }
 
+// Birthday gift percentage — see api/src/modules/rewards. The loyalty
+// points scale (1 pt / 4 €, 50/100/150/250 pts tiers) and the referral
+// bonuses are fixed in code (rewards/loyalty.constants.ts), not editable here.
+function LoyaltySettingsCard() {
+  const showToast = useToast();
+  const [birthdayDiscountPercent, setBirthdayDiscountPercent] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  function load() {
+    apiFetch('/admin/settings/loyalty')
+      .then((data) => setBirthdayDiscountPercent(data.birthdayDiscountPercent.toString()))
+      .catch(() => showToast('Impossible de charger les réglages de fidélité.', 'error'));
+  }
+
+  useEffect(load, []);
+
+  async function save(e) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await apiFetch('/admin/settings/loyalty/birthday-discount-percent', { method: 'PUT', body: { percent: Number(birthdayDiscountPercent) } });
+      showToast('Réglage mis à jour.', 'success');
+      load();
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (birthdayDiscountPercent === null) {
+    return <p className="loading-text">Chargement…</p>;
+  }
+
+  return (
+    <form className="travel-buffer-card" onSubmit={save}>
+      <p className="section-lead">
+        Carte de fidélité : 1 point par tranche de 4 € dépensés, crédité quand le rendez-vous est passé en « terminé ».
+        À 50, 100, 150 et 250 points, la cliente peut échanger ses points contre 5 €, 12 €, 20 € ou 35 € offerts
+        (code personnel à usage unique). Parrainage : 20 points pour la marraine et 10 pour la filleule, une fois le
+        premier rendez-vous de la filleule marqué « terminé ». Anniversaire : un code personnel valable 1 mois.
+      </p>
+      <div className="form-row">
+        <label htmlFor="birthday-discount-percent">Réduction anniversaire (%)</label>
+        <input
+          type="number"
+          id="birthday-discount-percent"
+          min={0}
+          max={100}
+          step={5}
+          required
+          value={birthdayDiscountPercent}
+          onChange={(e) => setBirthdayDiscountPercent(e.target.value)}
+        />
+      </div>
+      <div className="travel-buffer-save" style={{ marginTop: 16 }}>
+        <button type="submit" className="btn btn-primary" disabled={saving}>
+          {saving ? 'Enregistrement…' : 'Enregistrer'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 export default function HoursTab() {
   const showToast = useToast();
   const [days, setDays] = useState(null);
@@ -394,6 +458,13 @@ export default function HoursTab() {
         hint="Ne sert que si la distance réelle ne peut pas être calculée — à ouvrir seulement si besoin d'ajuster."
       >
         <TravelBufferCard />
+      </CollapsibleCard>
+
+      <CollapsibleCard
+        title="Fidélité & anniversaire"
+        hint="Codes promo automatiques : carte de fidélité et cadeau d'anniversaire."
+      >
+        <LoyaltySettingsCard />
       </CollapsibleCard>
     </>
   );
