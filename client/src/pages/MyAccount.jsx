@@ -3,7 +3,7 @@ import PasswordInput from '../components/PasswordInput';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import { useToast } from '../context/ToastContext';
-import { firstError, newPasswordError } from '../utils/validate';
+import { firstError, newPasswordError, phoneError } from '../utils/validate';
 import { useSeo } from '../hooks/useSeo';
 import { formatPrice } from '../utils/format';
 import AccountAuthForms from '../components/AccountAuthForms';
@@ -42,7 +42,7 @@ function AccountDashboard({ profile, onUpdated }) {
 
   async function saveProfile(e) {
     e.preventDefault();
-    const problem = firstError([[!form.firstName.trim(), 'Indiquez votre prénom.'], [!form.lastName.trim(), 'Indiquez votre nom.']]);
+    const problem = firstError([[!form.firstName.trim(), 'Indiquez votre prénom.'], [!form.lastName.trim(), 'Indiquez votre nom.'], [!!phoneError(form.phone), phoneError(form.phone)]]);
     if (problem) {
       showToast(problem, 'error');
       return;
@@ -191,7 +191,7 @@ function AccountDashboard({ profile, onUpdated }) {
             <div className="form-row two-col">
               <div>
                 <label htmlFor="account-phone">Téléphone</label>
-                <input type="tel" id="account-phone" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} />
+                <input type="tel" id="account-phone" autoComplete="tel" required value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} />
               </div>
               <div>
                 <label htmlFor="account-birthdate">Date de naissance</label>

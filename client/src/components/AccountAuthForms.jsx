@@ -3,7 +3,7 @@ import PasswordInput from './PasswordInput';
 import { Link, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import { useToast } from '../context/ToastContext';
-import { emailError, firstError, newPasswordError } from '../utils/validate';
+import { emailError, firstError, newPasswordError, phoneError } from '../utils/validate';
 import { clearStoredReferral, getStoredReferral } from '../utils/referralStorage';
 
 const EMPTY_SIGNUP = { firstName: '', lastName: '', email: '', phone: '', password: '', birthdate: '', referralCode: '' };
@@ -53,6 +53,7 @@ export default function AccountAuthForms({ onLoggedIn }) {
       [!signupForm.firstName.trim(), 'Indiquez votre prénom.'],
       [!signupForm.lastName.trim(), 'Indiquez votre nom.'],
       [!!emailError(signupForm.email), emailError(signupForm.email)],
+      [!!phoneError(signupForm.phone), phoneError(signupForm.phone)],
       [!!newPasswordError(signupForm.password), newPasswordError(signupForm.password)],
     ]);
     if (problem) {
@@ -177,10 +178,12 @@ export default function AccountAuthForms({ onLoggedIn }) {
           </div>
           <div className="form-row two-col">
             <div>
-              <label htmlFor="signup-phone">Téléphone (optionnel)</label>
+              <label htmlFor="signup-phone">Téléphone</label>
               <input
                 type="tel"
                 id="signup-phone"
+                autoComplete="tel"
+                required
                 value={signupForm.phone}
                 onChange={(e) => setSignupForm((f) => ({ ...f, phone: e.target.value }))}
               />

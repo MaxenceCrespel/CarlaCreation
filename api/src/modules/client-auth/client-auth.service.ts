@@ -73,7 +73,7 @@ export class ClientAuthService {
       client.normalized_name = normalizeClientName(fullName);
       client.password_hash = passwordHash;
       client.email_verified_at = null;
-      if (dto.phone) client.phone = dto.phone.trim();
+      client.phone = dto.phone.trim();
       if (dto.birthdate) client.birthdate = dto.birthdate;
       if (sponsorId && !client.referred_by_client_id) client.referred_by_client_id = sponsorId;
     } else {
@@ -83,7 +83,7 @@ export class ClientAuthService {
         last_name: dto.lastName.trim(),
         normalized_name: normalizeClientName(fullName),
         email,
-        phone: dto.phone?.trim() ?? '',
+        phone: dto.phone.trim(),
         password_hash: passwordHash,
         birthdate: dto.birthdate ?? null,
         referred_by_client_id: sponsorId,

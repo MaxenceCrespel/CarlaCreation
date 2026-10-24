@@ -41,7 +41,7 @@ describe('ClientAuthService', () => {
     it('creates a brand new client when no fiche exists for that email', async () => {
       clientRepo.findOne.mockResolvedValue(null);
 
-      const result = await service.signup({ firstName: 'Jeanne', lastName: 'Dupont', email: 'jeanne@example.com', password: 'motdepasse123' });
+      const result = await service.signup({ firstName: 'Jeanne', lastName: 'Dupont', email: 'jeanne@example.com', phone: '0612345678', password: 'motdepasse123' });
 
       expect(clientRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({ name: 'Jeanne Dupont', email: 'jeanne@example.com', password_hash: expect.any(String) }),
@@ -55,7 +55,7 @@ describe('ClientAuthService', () => {
     it('claims an existing admin-created fiche that has no password yet', async () => {
       clientRepo.findOne.mockResolvedValue({ id: 7, name: 'J. Dupont', email: 'jeanne@example.com', password_hash: null, phone: '0600000000' });
 
-      const { client } = await service.signup({ firstName: 'Jeanne', lastName: 'Dupont', email: 'jeanne@example.com', password: 'motdepasse123' });
+      const { client } = await service.signup({ firstName: 'Jeanne', lastName: 'Dupont', email: 'jeanne@example.com', phone: '0612345678', password: 'motdepasse123' });
 
       expect(client.id).toBe(7);
       expect(clientRepo.save).toHaveBeenCalledWith(expect.objectContaining({ id: 7, password_hash: expect.any(String) }));
@@ -66,7 +66,7 @@ describe('ClientAuthService', () => {
     it('stores first and last name separately (compound names stay intact) and composes the display name', async () => {
       clientRepo.findOne.mockResolvedValue(null);
 
-      await service.signup({ firstName: 'Marie-Claire', lastName: 'de la Fontaine', email: 'mc@example.com', password: 'motdepasse123' });
+      await service.signup({ firstName: 'Marie-Claire', lastName: 'de la Fontaine', email: 'mc@example.com', phone: '0612345678', password: 'motdepasse123' });
 
       expect(clientRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({ name: 'Marie-Claire de la Fontaine', first_name: 'Marie-Claire', last_name: 'de la Fontaine' }),
@@ -76,7 +76,7 @@ describe('ClientAuthService', () => {
     it('lets a still-unverified signup be registered over (typo / hijack never locks the owner out)', async () => {
       clientRepo.findOne.mockResolvedValue({ id: 7, email: 'jeanne@example.com', password_hash: 'old', email_verified_at: null });
 
-      await service.signup({ firstName: 'Jeanne', lastName: 'Test', email: 'jeanne@example.com', password: 'motdepasse123' });
+      await service.signup({ firstName: 'Jeanne', lastName: 'Test', email: 'jeanne@example.com', phone: '0612345678', password: 'motdepasse123' });
 
       expect(clientRepo.save).toHaveBeenCalledWith(expect.objectContaining({ id: 7, email_verified_at: null }));
       expect(lifecycle.sendVerificationEmail).toHaveBeenCalled();
@@ -85,7 +85,7 @@ describe('ClientAuthService', () => {
     it('rejects signup when the fiche already has a verified account', async () => {
       clientRepo.findOne.mockResolvedValue({ id: 7, email: 'jeanne@example.com', password_hash: 'already-hashed', email_verified_at: new Date() });
 
-      await expect(service.signup({ firstName: 'Jeanne', lastName: 'Dupont', email: 'jeanne@example.com', password: 'motdepasse123' })).rejects.toBeInstanceOf(
+      await expect(service.signup({ firstName: 'Jeanne', lastName: 'Dupont', email: 'jeanne@example.com', phone: '0612345678', password: 'motdepasse123' })).rejects.toBeInstanceOf(
         ConflictException,
       );
     });
@@ -167,14 +167,14 @@ describe('ClientAuthService', () => {
         where.referral_code ? { id: 9 } : null,
       );
 
-      await service.signup({ firstName: 'Nouvelle', lastName: 'Test', email: 'n@e.com', password: 'motdepasse123', referralCode: ' abc234 ' });
+      await service.signup({ firstName: 'Nouvelle', lastName: 'Test', email: 'n@e.com', phone: '0612345678', password: 'motdepasse123', referralCode: ' abc234 ' });
 
       expect(clientRepo.create).toHaveBeenCalledWith(expect.objectContaining({ referred_by_client_id: 9 }));
     });
 
     it('rejects an unknown referral code', async () => {
       clientRepo.findOne.mockResolvedValue(null);
-      await expect(service.signup({ firstName: 'N', lastName: 'Test', email: 'n@e.com', password: 'motdepasse123', referralCode: 'NOPE' })).rejects.toThrow('Code de parrainage invalide.');
+      await expect(service.signup({ firstName: 'N', lastName: 'Test', email: 'n@e.com', phone: '0612345678', password: 'motdepasse123', referralCode: 'NOPE' })).rejects.toThrow('Code de parrainage invalide.');
     });
 
     it('ignores the referral for an existing fiche that already has completed visits', async () => {
@@ -183,7 +183,7 @@ describe('ClientAuthService', () => {
       );
       dataSource.query.mockResolvedValue([{ n: 2 }]);
 
-      await service.signup({ firstName: 'Old', lastName: 'Test', email: 'o@e.com', password: 'motdepasse123', referralCode: 'ABC234' });
+      await service.signup({ firstName: 'Old', lastName: 'Test', email: 'o@e.com', phone: '0612345678', password: 'motdepasse123', referralCode: 'ABC234' });
 
       expect(clientRepo.save).toHaveBeenCalledWith(expect.not.objectContaining({ referred_by_client_id: 9 }));
     });

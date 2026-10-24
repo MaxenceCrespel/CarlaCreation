@@ -1,4 +1,8 @@
-import { IsDateString, IsEmail, IsInt, IsOptional, IsString, Length } from 'class-validator';
+import { IsDateString, IsEmail, IsInt, IsOptional, IsString, Length, Matches } from 'class-validator';
+
+// At least 10 digits (spaces, +, dots, dashes allowed) — a number she can really call.
+const PHONE_RE = /^(?=(?:\D*\d){10})[0-9+\s().-]{10,25}$/;
+const PHONE_MESSAGE = 'Indiquez un numéro de téléphone valide (10 chiffres minimum).';
 
 export class SignupDto {
   @IsString()
@@ -13,10 +17,9 @@ export class SignupDto {
   @Length(1, 200)
   email!: string;
 
-  @IsOptional()
   @IsString()
-  @Length(0, 50)
-  phone?: string;
+  @Matches(PHONE_RE, { message: PHONE_MESSAGE })
+  phone!: string;
 
   // Same 10-character minimum as the admin account, for consistency.
   @IsString()
@@ -90,9 +93,10 @@ export class UpdateClientProfileDto {
   @Length(1, 100)
   lastName?: string;
 
+  // Can be changed but never emptied: a phone number is required.
   @IsOptional()
   @IsString()
-  @Length(0, 50)
+  @Matches(PHONE_RE, { message: PHONE_MESSAGE })
   phone?: string;
 
   @IsOptional()
