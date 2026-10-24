@@ -15,6 +15,7 @@ import { SettingsModule } from './modules/settings/settings.module';
 import { ContactModule } from './modules/contact/contact.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { StripeModule } from './modules/stripe/stripe.module';
+import { ImagesModule } from './modules/images/images.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { SeoModule } from './modules/seo/seo.module';
 import { HealthModule } from './modules/health/health.module';
@@ -58,7 +59,18 @@ class NoopThrottlerGuard implements CanActivate {
     // excluding /api, /uploads and /healthz, which are handled by controllers.
     ServeStaticModule.forRoot({
       rootPath: path.join(__dirname, '..', '..', 'client', 'dist'),
-      exclude: ['/api/{*splat}', '/uploads/{*splat}', '/healthz', '/robots.txt', '/sitemap.xml'],
+      exclude: ['/api/{*splat}', '/uploads/{*splat}', '/img/{*splat}', '/healthz', '/robots.txt', '/sitemap.xml'],
+      serveStaticOptions: {
+        // The build's /assets files carry a content hash in their name: cache
+        // them for a year. index.html (which points at them) must always be
+        // revalidated, or a new deployment would never be picked up.
+        setHeaders: (res: import('http').ServerResponse, filePath: string) => {
+          res.setHeader(
+            'Cache-Control',
+            filePath.endsWith('index.html') ? 'no-cache' : filePath.includes(`${path.sep}assets${path.sep}`) || filePath.includes(`${path.sep}fonts${path.sep}`) ? 'public, max-age=31536000, immutable' : 'public, max-age=86400',
+          );
+        },
+      },
     }),
     DatabaseModule,
     MailModule,
@@ -84,6 +96,7 @@ class NoopThrottlerGuard implements CanActivate {
     RewardsModule,
     AnalyticsModule,
     StripeModule,
+    ImagesModule,
   ],
   providers: [
     {

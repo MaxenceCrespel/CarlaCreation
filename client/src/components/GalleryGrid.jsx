@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { photoSrc, photoSrcSet } from '../utils/image';
 import BeforeAfterSlider from './BeforeAfterSlider';
 
 export default function GalleryGrid({ items, previewClass = false }) {
@@ -33,7 +34,14 @@ export default function GalleryGrid({ items, previewClass = false }) {
               aria-label={`Agrandir : ${item.alt_text}`}
               onClick={() => setLightbox(item)}
             >
-              <img src={`/${item.url}`} alt={item.alt_text} loading="lazy" />
+              <img
+                src={photoSrc(item.url, 800)}
+                srcSet={photoSrcSet(item.url)}
+                sizes="(max-width: 640px) 92vw, (max-width: 1024px) 45vw, 30vw"
+                alt={item.alt_text}
+                loading="lazy"
+                decoding="async"
+              />
             </button>
           ),
         )}
@@ -44,7 +52,7 @@ export default function GalleryGrid({ items, previewClass = false }) {
           <button className="lightbox-close" aria-label="Fermer" onClick={() => setLightbox(null)}>
             &times;
           </button>
-          <img src={`/${lightbox.url}`} alt={lightbox.alt_text} onClick={(e) => e.stopPropagation()} />
+          <img src={photoSrc(lightbox.url, 1200)} alt={lightbox.alt_text} onClick={(e) => e.stopPropagation()} />
         </div>
       )}
     </>
