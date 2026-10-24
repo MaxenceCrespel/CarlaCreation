@@ -101,7 +101,7 @@ export default function ManageReservation() {
   const [cancelReasonSelect, setCancelReasonSelect] = useState('');
   const [cancelReasonDetails, setCancelReasonDetails] = useState('');
 
-  useSeo({ title: 'Mon rendez-vous', path: `/mon-rendez-vous/${groupId}` });
+  useSeo({ title: 'Mon rendez-vous', path: `/mon-rendez-vous/${groupId}`, noindex: true });
   const paymentNotice = reservation ? describePayment(reservation) : null;
 
   function load() {

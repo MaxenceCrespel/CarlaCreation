@@ -8,8 +8,8 @@ import { getSavedContact, saveContact } from '../utils/contactStorage';
 export default function Contact() {
   const { sitePhone, sitePhoneHref, siteEmail, sitePublicArea } = useSiteConfig();
   useSeo({
-    title: 'Contact — Studio à Lille',
-    description: 'Téléphone, email et formulaire de contact de mon studio coiffure et ongles à Lille (Hauts-de-France).',
+    title: 'Contact — Coiffeuse et ongles à Loos, près de Lille',
+    description: 'Téléphone, email et formulaire de contact de ma prestation de coiffeuse et d\'ongles à Loos, près de Lille (Hauts-de-France).',
     path: '/contact',
   });
   const showToast = useToast();

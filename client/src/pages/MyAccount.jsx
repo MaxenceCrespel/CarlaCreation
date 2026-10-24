@@ -400,7 +400,7 @@ function AccountDashboard({ profile, onUpdated }) {
 }
 
 export default function MyAccount() {
-  useSeo({ title: 'Mon compte', path: '/mon-compte' });
+  useSeo({ title: 'Mon compte', path: '/mon-compte', noindex: true });
   const [profile, setProfile] = useState(null); // undefined-ish: null = not loaded yet, false = logged out
   const [loaded, setLoaded] = useState(false);
 

@@ -26,12 +26,18 @@ function upsertLink(rel, href) {
 // whichever page calls it. Plain DOM manipulation instead of a library like
 // react-helmet — this SPA only has a handful of routes, each calling this
 // once on mount, so a dependency isn't worth it.
-export function useSeo({ title, description, path, image }) {
+// Pages that must never show up in Google (private tracking links, account
+// screens): `noindex` — and every other page explicitly resets it, since the
+// tag would otherwise linger when navigating from a private page to a public one.
+const DEFAULT_IMAGE = '/og-image.png';
+
+export function useSeo({ title, description, path, image = DEFAULT_IMAGE, noindex = false }) {
   useEffect(() => {
-    const fullTitle = title ? `${title} | Carla Création` : 'Carla Création — Coiffure & Ongles';
+    const fullTitle = title ? `${title} | Carla Création` : 'Carla Création — Coiffeuse et prothésiste ongulaire à Loos, Lille';
     document.title = fullTitle;
 
     upsertMeta('name', 'description', description);
+    upsertMeta('name', 'robots', noindex ? 'noindex, nofollow' : 'index, follow');
     upsertMeta('property', 'og:title', fullTitle);
     upsertMeta('property', 'og:description', description);
     upsertMeta('property', 'og:type', 'website');
@@ -46,5 +52,5 @@ export function useSeo({ title, description, path, image }) {
       const absoluteImage = image.startsWith('http') ? image : `${origin}${image}`;
       upsertMeta('property', 'og:image', absoluteImage);
     }
-  }, [title, description, path, image]);
+  }, [title, description, path, image, noindex]);
 }

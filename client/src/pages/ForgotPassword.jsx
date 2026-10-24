@@ -9,7 +9,7 @@ import { useSeo } from '../hooks/useSeo';
 // Without ?token: asks for the email to send the reset link to.
 // With ?token (the emailed link): lets the client pick a new password.
 export default function ForgotPassword() {
-  useSeo({ title: 'Mot de passe oublié', path: '/mot-de-passe-oublie' });
+  useSeo({ title: 'Mot de passe oublié', path: '/mot-de-passe-oublie', noindex: true });
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
   const navigate = useNavigate();

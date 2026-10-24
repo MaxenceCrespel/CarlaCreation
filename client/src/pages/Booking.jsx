@@ -211,9 +211,9 @@ let guestKeySeq = 0;
 export default function Booking() {
   const { sitePhone, sitePhoneHref, travelFeeFallbackCents, travelFreeRadiusKm, stripeEnabled } = useSiteConfig();
   useSeo({
-    title: 'Réserver un rendez-vous à Lille',
+    title: 'Rendez-vous coiffeuse et ongles à Loos, Lille',
     description:
-      'Réservez votre rendez-vous coiffure ou ongles en ligne à Lille (Hauts-de-France), 24h/24, en quelques clics.',
+      'Réservez votre rendez-vous coiffeuse ou ongles en ligne à Loos, près de Lille (Hauts-de-France), 24h/24, en quelques clics.',
     path: '/booking',
   });
   const showToast = useToast();

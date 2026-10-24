@@ -7,7 +7,7 @@ import { useSeo } from '../hooks/useSeo';
 // Landing page of the link emailed at signup. Verifying also logs the
 // client in, then sends them to their account.
 export default function VerifyEmail() {
-  useSeo({ title: "Confirmation de l'email", path: '/verification-email' });
+  useSeo({ title: "Confirmation de l'email", path: '/verification-email', noindex: true });
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
   const navigate = useNavigate();
