@@ -50,6 +50,9 @@ describe('Client self-cancellation', () => {
         cy.contains('label.cancel-reason', 'Contrainte professionnelle').click();
         cy.get('#cancel-reason-details').type('Réunion imprévue au travail.');
         cy.contains('button', "Confirmer l'annulation").click();
+        // Second check, in the site's own dialog.
+        cy.get('.confirm-dialog').should('contain', 'Annuler définitivement');
+        cy.confirmDialog();
         cy.contains('.status-badge', 'Annulé', { timeout: 10000 }).should('be.visible');
 
         // 4. ADMIN: the reason (motif + detail) shows up on the reservation.

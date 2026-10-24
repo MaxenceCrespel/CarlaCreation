@@ -772,6 +772,34 @@ describe('ReservationsService', () => {
     expect(result.guests[0]).toMatchObject({ name: 'Mother', serviceName: 'Coupe Femme' });
   });
 
+  describe('findByGroupId — what cancelling would do to the payment', () => {
+    const row = (date: string) => [
+      { client_name: 'M', client_email: 'm@e.com', reservation_date: date, start_time: '10:00', end_time: '10:45', status: 'confirmed', service_name: 'Coupe', at_client_home: false, client_address: null, paid_on_site: false },
+    ];
+    const farDate = '2099-01-01';
+    const pastDate = '2000-01-01';
+
+    it("an unconfirmed hold is 'release'", async () => {
+      dataSource.query.mockResolvedValue(row(farDate));
+      paymentsService.findByGroupId.mockResolvedValue({ status: 'authorized', amount_cents: 1800 });
+      expect((await service.findByGroupId('g')).payment?.cancelOutcome).toBe('release');
+    });
+
+    it("a captured payment far enough ahead is 'refund', too close is 'keep'", async () => {
+      paymentsService.findByGroupId.mockResolvedValue({ status: 'paid', amount_cents: 1800 });
+      dataSource.query.mockResolvedValue(row(farDate));
+      expect((await service.findByGroupId('g')).payment?.cancelOutcome).toBe('refund');
+      dataSource.query.mockResolvedValue(row(pastDate));
+      expect((await service.findByGroupId('g')).payment?.cancelOutcome).toBe('keep');
+    });
+
+    it('a refunded or cancelled payment has nothing to announce', async () => {
+      dataSource.query.mockResolvedValue(row(farDate));
+      paymentsService.findByGroupId.mockResolvedValue({ status: 'refunded', amount_cents: 1800 });
+      expect((await service.findByGroupId('g')).payment?.cancelOutcome).toBeNull();
+    });
+  });
+
   it('findByGroupId throws NotFoundException for an unknown group', async () => {
     dataSource.query.mockResolvedValue([]);
     await expect(service.findByGroupId('unknown')).rejects.toBeInstanceOf(NotFoundException);

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import { useToast } from '../context/ToastContext';
+import { useConfirm } from '../context/ConfirmContext';
 import { useSeo } from '../hooks/useSeo';
 import { formatPrice } from '../utils/format';
 
@@ -89,6 +90,7 @@ export default function ManageReservation() {
   const [searchParams] = useSearchParams();
   const paiementParam = searchParams.get('paiement');
   const showToast = useToast();
+  const confirm = useConfirm();
   const [reservation, setReservation] = useState(null);
   const [error, setError] = useState(null);
   const [cancelling, setCancelling] = useState(false);
@@ -125,6 +127,22 @@ export default function ManageReservation() {
     }
     const details = cancelReasonDetails.trim();
     const reason = details ? `${cancelReasonSelect} — ${details}` : cancelReasonSelect;
+
+    // Second check, in the site's own dialog, telling the client exactly what
+    // cancelling will do to their payment before it happens.
+    const amount = reservation.payment ? formatPrice(reservation.payment.amountCents) : '';
+    const outcome = {
+      refund: `Vous serez remboursé de ${amount} sur votre carte (comptez 5 à 10 jours ouvrés).`,
+      release: `Aucun débit : les ${amount} réservés sur votre carte seront libérés.`,
+      keep: `Attention : ce rendez-vous est trop proche pour un remboursement, le paiement de ${amount} ne sera pas remboursé.`,
+    }[reservation.payment?.cancelOutcome];
+    const confirmed = await confirm({
+      title: 'Annuler définitivement ce rendez-vous ?',
+      message: `${formatDateFr(reservation.date)} — ${outcome || 'le créneau sera libéré pour quelqu\'un d\'autre.'}`,
+      confirmLabel: "Oui, j'annule",
+      cancelLabel: 'Non, le garder',
+    });
+    if (!confirmed) return;
     setCancelling(true);
     try {
       await apiFetch(`/reservations/lookup/${groupId}/cancel`, { method: 'POST', body: { reason } });
