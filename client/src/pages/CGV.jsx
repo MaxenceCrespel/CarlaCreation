@@ -47,10 +47,10 @@ export default function CGV() {
 
         <h2>4. Annulation et remboursement</h2>
         <p>
-          Vous pouvez annuler votre rendez-vous vous-même depuis le lien reçu par email. Si vous avez payé en ligne
-          et que vous annulez suffisamment à l'avance (le délai applicable vous est rappelé lors de l'annulation),
-          le montant payé est remboursé automatiquement sur le moyen de paiement utilisé. Passé ce délai, le
-          montant reste dû au titre du temps réservé qui n'a pas pu être proposé à une autre cliente.
+          Vous pouvez annuler votre rendez-vous vous-même depuis le lien reçu par email. Si vous avez payé en ligne,
+          le montant payé vous est remboursé automatiquement sur le moyen de paiement utilisé (comptez 5 à 10
+          jours ouvrés pour le voir apparaître sur votre relevé). Merci de prévenir dès que possible : cela permet
+          de proposer le créneau à une autre cliente.
         </p>
         <p>
           {siteName} se réserve le droit d'annuler ou de reporter un rendez-vous en cas d'imprévu (maladie,

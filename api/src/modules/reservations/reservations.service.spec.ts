@@ -31,7 +31,6 @@ describe('ReservationsService', () => {
     getTravelBufferMinutes: jest.Mock;
     getTravelFeeFallbackCents: jest.Mock;
     getTravelFeeTiers: jest.Mock;
-    getRefundDeadlineHours: jest.Mock;
   };
   let distanceService: { estimate: jest.Mock };
   let pushService: { notifyAdmins: jest.Mock };
@@ -80,7 +79,6 @@ describe('ReservationsService', () => {
         { minKm: 0, feeCents: 0 },
         { minKm: 10, feeCents: 200 },
       ]),
-      getRefundDeadlineHours: jest.fn().mockResolvedValue(48),
     };
     // No address geocoded by default — most tests don't care about travel
     // distance, so this keeps them on the "flat fallback fee only" path.
@@ -785,12 +783,12 @@ describe('ReservationsService', () => {
       expect((await service.findByGroupId('g')).payment?.cancelOutcome).toBe('release');
     });
 
-    it("a captured payment far enough ahead is 'refund', too close is 'keep'", async () => {
+    it("a captured payment is 'refund', whatever the date", async () => {
       paymentsService.findByGroupId.mockResolvedValue({ status: 'paid', amount_cents: 1800 });
       dataSource.query.mockResolvedValue(row(farDate));
       expect((await service.findByGroupId('g')).payment?.cancelOutcome).toBe('refund');
       dataSource.query.mockResolvedValue(row(pastDate));
-      expect((await service.findByGroupId('g')).payment?.cancelOutcome).toBe('keep');
+      expect((await service.findByGroupId('g')).payment?.cancelOutcome).toBe('refund');
     });
 
     it('a refunded or cancelled payment has nothing to announce', async () => {
@@ -893,9 +891,9 @@ describe('ReservationsService', () => {
       reservationRepo.update.mockResolvedValue({ affected: 1 });
     }
 
-    it('refunds automatically when cancelled well within the deadline', async () => {
+    it('refunds a captured payment in full', async () => {
       paymentsService.findByGroupId.mockResolvedValue({ status: 'paid', stripe_payment_intent_id: 'pi_123' });
-      mockCancelQueries(futureAppointment(72)); // 72h notice, deadline is 48h
+      mockCancelQueries(futureAppointment(72));
 
       await service.cancelByGroupId('some-group', 'Empêchement');
 
@@ -904,15 +902,14 @@ describe('ReservationsService', () => {
       expect(pushService.notifyAdmins).toHaveBeenCalledWith(expect.objectContaining({ body: expect.stringContaining('paiement remboursé') }));
     });
 
-    it('does not refund when cancelled too close to the appointment', async () => {
+    it('refunds in full even when cancelled shortly before the appointment (no deadline policy)', async () => {
       paymentsService.findByGroupId.mockResolvedValue({ status: 'paid', stripe_payment_intent_id: 'pi_123' });
       mockCancelQueries(futureAppointment(2)); // only 2h notice
 
       await service.cancelByGroupId('some-group', 'Empêchement');
 
-      expect(paymentsService.refund).not.toHaveBeenCalled();
-      expect(mailService.sendAdminCancellationNotification).toHaveBeenCalledWith(expect.objectContaining({ paymentRefunded: false }));
-      expect(pushService.notifyAdmins).toHaveBeenCalledWith(expect.objectContaining({ body: expect.stringContaining('paiement conservé') }));
+      expect(paymentsService.refund).toHaveBeenCalledWith('some-group');
+      expect(mailService.sendAdminCancellationNotification).toHaveBeenCalledWith(expect.objectContaining({ paymentRefunded: true }));
     });
 
     it('still cancels the booking even if the Stripe refund call fails', async () => {
@@ -928,7 +925,7 @@ describe('ReservationsService', () => {
 
     it('releases the hold (no refund) when cancelled before the appointment was ever confirmed', async () => {
       paymentsService.findByGroupId.mockResolvedValue({ status: 'authorized', stripe_payment_intent_id: 'pi_123' });
-      mockCancelQueries(futureAppointment(2)); // even with short notice — nothing was charged yet, deadline doesn't apply
+      mockCancelQueries(futureAppointment(2)); // nothing was charged yet
 
       await service.cancelByGroupId('some-group', 'Empêchement');
 

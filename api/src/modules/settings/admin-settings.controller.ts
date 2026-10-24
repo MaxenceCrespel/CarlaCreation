@@ -5,7 +5,6 @@ import { SettingsService } from './settings.service';
 import {
   UpdateBirthdayDiscountDto,
   UpdateDailyHoursDto,
-  UpdateRefundDeadlineDto,
   UpdateTravelBufferDto,
   UpdateTravelFeeFallbackDto,
   UpdateTravelFeeTiersDto,
@@ -74,15 +73,7 @@ export class AdminSettingsController {
   async getPaymentSettings() {
     return {
       stripeEnabled: config.STRIPE_ENABLED,
-      refundDeadlineHours: await this.settingsService.getRefundDeadlineHours(),
     };
-  }
-
-  @UseGuards(CsrfGuard)
-  @Put('payments/refund-deadline')
-  async setRefundDeadline(@Body() dto: UpdateRefundDeadlineDto) {
-    await this.settingsService.setRefundDeadlineHours(dto.hours);
-    return { success: true };
   }
 
   @Get('loyalty')

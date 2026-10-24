@@ -155,7 +155,7 @@ export class MailService {
           input.paymentRefunded === true
             ? `<p style="margin:0 0 16px;"><strong>Paiement :</strong> remboursé automatiquement.</p>`
             : input.paymentRefunded === false
-              ? `<p style="margin:0 0 16px;"><strong>Paiement :</strong> conservé (annulation hors délai de remboursement).</p>`
+              ? `<p style="margin:0 0 16px;"><strong>Paiement :</strong> le remboursement automatique a échoué — à rembourser à la main depuis le tableau de bord Stripe.</p>`
               : ''
         }
         <table style="border-collapse:collapse;width:100%;margin:12px 0;">

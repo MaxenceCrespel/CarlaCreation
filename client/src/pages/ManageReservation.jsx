@@ -38,7 +38,7 @@ function describePayment(reservation) {
       };
     case 'paid':
       return ended
-        ? { tone: 'warn', text: `Annulation hors délai de remboursement : le paiement de ${amount} est conservé.` }
+        ? { tone: 'warn', text: `Votre remboursement de ${amount} est en cours de traitement : Carla vous recontacte si besoin.` }
         : { tone: 'ok', text: `Paiement de ${amount} réglé en ligne.` };
     case 'refunded':
       return {
@@ -134,7 +134,6 @@ export default function ManageReservation() {
     const outcome = {
       refund: `Vous serez remboursé de ${amount} sur votre carte (comptez 5 à 10 jours ouvrés).`,
       release: `Aucun débit : les ${amount} réservés sur votre carte seront libérés.`,
-      keep: `Attention : ce rendez-vous est trop proche pour un remboursement, le paiement de ${amount} ne sera pas remboursé.`,
     }[reservation.payment?.cancelOutcome];
     const confirmed = await confirm({
       title: 'Annuler définitivement ce rendez-vous ?',

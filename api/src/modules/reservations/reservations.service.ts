@@ -1107,7 +1107,7 @@ export class ReservationsService {
       clientAddress: primary.client_address,
       guests: rows.map((r) => ({ name: r.client_name, serviceName: r.service_name, startTime: r.start_time, endTime: r.end_time })),
       payment: payment
-        ? { status: payment.status, amountCents: payment.amount_cents, cancelOutcome: await this.cancelOutcomeFor(payment.status, primary.reservation_date, primary.start_time) }
+        ? { status: payment.status, amountCents: payment.amount_cents, cancelOutcome: this.cancelOutcomeFor(payment.status) }
         : null,
       paidOnSite: payment ? null : primary.paid_on_site,
     };
@@ -1116,13 +1116,11 @@ export class ReservationsService {
   // What cancelling now would do to the online payment — same rules as
   // cancelByGroupId, so the client can be told before they confirm.
   // 'release' = unconfirmed hold lifted, never charged; 'refund' = charged
-  // money returned; 'keep' = too late for a refund; null = nothing to say.
-  private async cancelOutcomeFor(paymentStatus: string, date: string, startTime: string): Promise<'release' | 'refund' | 'keep' | null> {
+  // money returned in full; null = nothing to say.
+  private cancelOutcomeFor(paymentStatus: string): 'release' | 'refund' | null {
     if (paymentStatus === 'authorized') return 'release';
-    if (paymentStatus !== 'paid') return null;
-    const refundDeadlineHours = await this.settingsService.getRefundDeadlineHours();
-    const hoursNotice = (new Date(`${date}T${startTime}`).getTime() - Date.now()) / (60 * 60 * 1000);
-    return hoursNotice >= refundDeadlineHours ? 'refund' : 'keep';
+    if (paymentStatus === 'paid') return 'refund';
+    return null;
   }
 
   // Purely a bookkeeping toggle for "payer sur place" bookings — no Stripe
@@ -1184,21 +1182,16 @@ export class ReservationsService {
         paymentRefunded = false;
       }
     } else if (payment && payment.status === 'paid') {
-      const refundDeadlineHours = await this.settingsService.getRefundDeadlineHours();
-      const appointmentStart = new Date(`${rows[0].reservation_date}T${rows[0].start_time}`);
-      const hoursNotice = (appointmentStart.getTime() - Date.now()) / (60 * 60 * 1000);
-      if (hoursNotice >= refundDeadlineHours) {
-        try {
-          await this.paymentsService.refund(groupId);
-          paymentRefunded = true;
-        } catch (err) {
-          // Refund failure must not block the cancellation itself — she'll
-          // see "conservé" in the notification below and can refund by
-          // hand from the Stripe dashboard.
-          this.logger.error(`Refund failed for group ${groupId}: ${(err as Error).message}`);
-          paymentRefunded = false;
-        }
-      } else {
+      // Charged (the appointment had been confirmed): always refunded in full,
+      // whatever the notice — no deadline policy for now.
+      try {
+        await this.paymentsService.refund(groupId);
+        paymentRefunded = true;
+      } catch (err) {
+        // Refund failure must not block the cancellation itself — she'll
+        // see "à rembourser à la main" in the notification below and can
+        // refund from the Stripe dashboard.
+        this.logger.error(`Refund failed for group ${groupId}: ${(err as Error).message}`);
         paymentRefunded = false;
       }
     }
@@ -1208,7 +1201,7 @@ export class ReservationsService {
     // push/email telling her about her own action.
     await this.pushService.notifyAdmins({
       title: 'Rendez-vous annulé par le client',
-      body: `${rows[0].client_name} — ${rows[0].reservation_date} — Motif : ${reason}${paymentRefunded === true ? ' — paiement remboursé' : paymentRefunded === false ? ' — paiement conservé' : ''}`,
+      body: `${rows[0].client_name} — ${rows[0].reservation_date} — Motif : ${reason}${paymentRefunded === true ? ' — paiement remboursé' : paymentRefunded === false ? ' — remboursement à faire à la main' : ''}`,
       url: '/admin',
     });
     if (guestRows.length > 0) {
