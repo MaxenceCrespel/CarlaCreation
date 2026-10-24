@@ -77,7 +77,7 @@ function ReviewForm() {
     <form className="card review-form" noValidate onSubmit={handleSubmit}>
       <h3>Laisser un avis</h3>
       <div className="form-row">
-        <label htmlFor="reviewName">Nom</label>
+        <label htmlFor="reviewName">Votre prénom</label>
         <input type="text" id="reviewName" required minLength={2} maxLength={100} value={form.clientName} onChange={update('clientName')} />
       </div>
       <div className="form-row">

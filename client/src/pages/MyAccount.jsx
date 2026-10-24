@@ -164,7 +164,7 @@ function AccountDashboard({ profile, onUpdated }) {
         ) : (
           <form onSubmit={saveProfile}>
             <div className="form-row">
-              <label htmlFor="account-name">Nom</label>
+              <label htmlFor="account-name">Prénom et nom</label>
               <input type="text" id="account-name" required value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
             </div>
             <div className="form-row two-col">

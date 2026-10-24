@@ -124,10 +124,11 @@ export default function AccountAuthForms({ onLoggedIn }) {
       ) : (
         <form onSubmit={handleSignup}>
           <div className="form-row">
-            <label htmlFor="signup-name">Nom</label>
+            <label htmlFor="signup-name">Prénom et nom</label>
             <input
               type="text"
               id="signup-name"
+              autoComplete="name"
               required
               value={signupForm.name}
               onChange={(e) => setSignupForm((f) => ({ ...f, name: e.target.value }))}

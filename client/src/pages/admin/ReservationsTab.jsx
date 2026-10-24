@@ -317,7 +317,7 @@ function AddReservationForm({ onCreated, onCancel }) {
       </div>
 
       <div className="form-row">
-        <label htmlFor="manual-name">Nom (personne 1)</label>
+        <label htmlFor="manual-name">Prénom et nom (personne 1)</label>
         <ClientNameAutocomplete id="manual-name" value={form.clientName} onChange={update('clientName')} onPick={pickSuggestedClient} />
       </div>
 
@@ -596,7 +596,7 @@ function EditReservationModal({ reservation, onClose, onSaved }) {
         </div>
 
         <div className="form-row">
-          <label htmlFor="edit-name">Nom</label>
+          <label htmlFor="edit-name">Prénom et nom</label>
           <input type="text" id="edit-name" required minLength={2} maxLength={100} value={form.clientName} onChange={update('clientName')} />
         </div>
 
@@ -787,7 +787,7 @@ function ClientMatchModal({ reservation, onClose, onLinked }) {
             <label>Nouvelle fiche client</label>
             <div className="form-row two-col">
               <div>
-                <label htmlFor="client-create-name">Nom</label>
+                <label htmlFor="client-create-name">Prénom et nom</label>
                 <input
                   type="text"
                   id="client-create-name"

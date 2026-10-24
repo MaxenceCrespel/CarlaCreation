@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import Header from './Header';
 import Footer from './Footer';
@@ -43,7 +43,24 @@ function useLocalBusinessSchema() {
 // the booking flow's own primary button.
 function MobileCtaBar() {
   const { pathname } = useLocation();
-  if (pathname === '/booking' || pathname.startsWith('/mon-rendez-vous')) return null;
+  // Hidden while a field is focused: on a phone that means the keyboard is
+  // open and a bar pinned to the bottom would float in the middle of the form.
+  const [typing, setTyping] = useState(false);
+
+  useEffect(() => {
+    const isField = (el) => el && ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName);
+    const onIn = (e) => setTyping(isField(e.target));
+    const onOut = () => setTyping(false);
+    document.addEventListener('focusin', onIn);
+    document.addEventListener('focusout', onOut);
+    return () => {
+      document.removeEventListener('focusin', onIn);
+      document.removeEventListener('focusout', onOut);
+    };
+  }, []);
+
+  const hiddenOn = ['/booking', '/mon-compte', '/verification-email', '/mot-de-passe-oublie', '/contact'];
+  if (typing || hiddenOn.includes(pathname) || pathname.startsWith('/mon-rendez-vous')) return null;
   return (
     <div className="mobile-cta-bar">
       <Link to="/booking" className="btn btn-primary btn-block">Prendre rendez-vous</Link>
