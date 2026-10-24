@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import PasswordInput from './PasswordInput';
 import { Link, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import { useToast } from '../context/ToastContext';
@@ -106,8 +107,7 @@ export default function AccountAuthForms({ onLoggedIn }) {
           </div>
           <div className="form-row">
             <label htmlFor="login-password">Mot de passe</label>
-            <input
-              type="password"
+            <PasswordInput
               id="login-password"
               required
               value={loginForm.password}
@@ -181,8 +181,7 @@ export default function AccountAuthForms({ onLoggedIn }) {
           </div>
           <div className="form-row">
             <label htmlFor="signup-password">Mot de passe (10 caractères minimum)</label>
-            <input
-              type="password"
+            <PasswordInput
               id="signup-password"
               required
               minLength={10}

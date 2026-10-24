@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import PasswordInput from '../components/PasswordInput';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import { useToast } from '../context/ToastContext';
@@ -53,8 +54,7 @@ export default function ForgotPassword() {
             <form onSubmit={resetPassword}>
               <div className="form-row">
                 <label htmlFor="new-password">Nouveau mot de passe (10 caractères minimum)</label>
-                <input
-                  type="password"
+                <PasswordInput
                   id="new-password"
                   required
                   minLength={10}

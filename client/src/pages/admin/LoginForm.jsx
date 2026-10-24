@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import PasswordInput from '../../components/PasswordInput';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../../api/client';
 
@@ -33,7 +34,7 @@ export default function LoginForm({ onLoggedIn }) {
         </div>
         <div className="form-row">
           <label htmlFor="password">Mot de passe</label>
-          <input type="password" id="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+          <PasswordInput id="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
         </div>
         {feedback && (
           <div className="form-feedback error" role="status" aria-live="polite">{feedback}</div>

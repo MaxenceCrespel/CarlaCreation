@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import PasswordInput from '../components/PasswordInput';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import { useToast } from '../context/ToastContext';
@@ -199,8 +200,7 @@ function AccountDashboard({ profile, onUpdated }) {
           <form onSubmit={savePassword} style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--color-bg-alt)' }}>
             <div className="form-row">
               <label htmlFor="current-password">Mot de passe actuel</label>
-              <input
-                type="password"
+              <PasswordInput
                 id="current-password"
                 required
                 value={passwordForm.currentPassword}
@@ -209,8 +209,7 @@ function AccountDashboard({ profile, onUpdated }) {
             </div>
             <div className="form-row">
               <label htmlFor="new-password">Nouveau mot de passe (10 caractères minimum)</label>
-              <input
-                type="password"
+              <PasswordInput
                 id="new-password"
                 required
                 minLength={10}
@@ -365,8 +364,7 @@ function AccountDashboard({ profile, onUpdated }) {
             </p>
             <div className="form-row">
               <label htmlFor="delete-password">Confirmez avec votre mot de passe</label>
-              <input
-                type="password"
+              <PasswordInput
                 id="delete-password"
                 required
                 autoComplete="current-password"

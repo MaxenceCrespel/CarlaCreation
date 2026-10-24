@@ -2321,3 +2321,14 @@ input[aria-invalid="true"] { border: 2px solid #A23B32; }
 .manage-guests li div { display: flex; flex-direction: column; }
 .manage-guests li div span { color: var(--color-text-soft); font-size: 0.9rem; }
 .manage-guest-time { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Password field with show/hide eye */
+.password-field { position: relative; }
+.password-field input { width: 100%; padding-right: 48px; }
+.password-toggle {
+  position: absolute; top: 50%; right: 6px; transform: translateY(-50%);
+  width: 40px; height: 40px; border: 0; background: transparent; color: var(--color-text-soft);
+  display: flex; align-items: center; justify-content: center; border-radius: 50%; cursor: pointer;
+}
+.password-toggle:hover { color: var(--color-text); background: var(--color-bg-alt); }
+.password-toggle svg { width: 20px; height: 20px; }

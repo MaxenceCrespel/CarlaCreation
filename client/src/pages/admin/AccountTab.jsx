@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import PasswordInput from '../../components/PasswordInput';
 import { useConfirm } from '../../context/ConfirmContext';
 import { apiFetch } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
@@ -272,8 +273,7 @@ export default function AccountTab({ username, onCredentialsUpdated }) {
       <div className="form-row two-col">
         <div>
           <label htmlFor="account-new-password">Nouveau mot de passe (optionnel)</label>
-          <input
-            type="password"
+          <PasswordInput
             id="account-new-password"
             autoComplete="new-password"
             minLength={10}
@@ -284,8 +284,7 @@ export default function AccountTab({ username, onCredentialsUpdated }) {
         </div>
         <div>
           <label htmlFor="account-confirm-password">Confirmer le nouveau mot de passe</label>
-          <input
-            type="password"
+          <PasswordInput
             id="account-confirm-password"
             autoComplete="new-password"
             minLength={10}
@@ -297,8 +296,7 @@ export default function AccountTab({ username, onCredentialsUpdated }) {
 
       <div className="form-row">
         <label htmlFor="account-current-password">Mot de passe actuel</label>
-        <input
-          type="password"
+        <PasswordInput
           id="account-current-password"
           autoComplete="current-password"
           required
