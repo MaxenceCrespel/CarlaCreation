@@ -3,6 +3,7 @@ import PasswordInput from './PasswordInput';
 import { Link, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import { useToast } from '../context/ToastContext';
+import { emailError, firstError, newPasswordError } from '../utils/validate';
 import { clearStoredReferral, getStoredReferral } from '../utils/referralStorage';
 
 const EMPTY_SIGNUP = { firstName: '', lastName: '', email: '', phone: '', password: '', birthdate: '', referralCode: '' };
@@ -20,6 +21,11 @@ export default function AccountAuthForms({ onLoggedIn }) {
 
   async function handleLogin(e) {
     e.preventDefault();
+    const problem = firstError([[!!emailError(loginForm.email), emailError(loginForm.email)], [!loginForm.password, 'Indiquez votre mot de passe.']]);
+    if (problem) {
+      showToast(problem, 'error');
+      return;
+    }
     setSubmitting(true);
     try {
       await apiFetch('/client-auth/login', { method: 'POST', body: loginForm });
@@ -43,6 +49,16 @@ export default function AccountAuthForms({ onLoggedIn }) {
 
   async function handleSignup(e) {
     e.preventDefault();
+    const problem = firstError([
+      [!signupForm.firstName.trim(), 'Indiquez votre prénom.'],
+      [!signupForm.lastName.trim(), 'Indiquez votre nom.'],
+      [!!emailError(signupForm.email), emailError(signupForm.email)],
+      [!!newPasswordError(signupForm.password), newPasswordError(signupForm.password)],
+    ]);
+    if (problem) {
+      showToast(problem, 'error');
+      return;
+    }
     setSubmitting(true);
     try {
       await apiFetch('/client-auth/signup', {
@@ -94,7 +110,7 @@ export default function AccountAuthForms({ onLoggedIn }) {
       </div>
 
       {mode === 'login' ? (
-        <form onSubmit={handleLogin}>
+        <form onSubmit={handleLogin} noValidate>
           <div className="form-row">
             <label htmlFor="login-email">Email</label>
             <input
@@ -122,7 +138,7 @@ export default function AccountAuthForms({ onLoggedIn }) {
           </p>
         </form>
       ) : (
-        <form onSubmit={handleSignup}>
+        <form onSubmit={handleSignup} noValidate>
           <div className="form-row two-col">
             <div>
               <label htmlFor="signup-firstname">Prénom</label>

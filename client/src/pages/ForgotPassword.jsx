@@ -3,6 +3,7 @@ import PasswordInput from '../components/PasswordInput';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import { useToast } from '../context/ToastContext';
+import { emailError, newPasswordError } from '../utils/validate';
 import { useSeo } from '../hooks/useSeo';
 
 // Without ?token: asks for the email to send the reset link to.
@@ -20,6 +21,10 @@ export default function ForgotPassword() {
 
   async function requestLink(e) {
     e.preventDefault();
+    if (emailError(email)) {
+      showToast(emailError(email), 'error');
+      return;
+    }
     setSubmitting(true);
     try {
       await apiFetch('/client-auth/forgot-password', { method: 'POST', body: { email } });
@@ -33,6 +38,10 @@ export default function ForgotPassword() {
 
   async function resetPassword(e) {
     e.preventDefault();
+    if (newPasswordError(password)) {
+      showToast(newPasswordError(password), 'error');
+      return;
+    }
     setSubmitting(true);
     try {
       await apiFetch('/client-auth/reset-password', { method: 'POST', body: { token, password } });
@@ -51,7 +60,7 @@ export default function ForgotPassword() {
         <h1 className="center">{token ? 'Nouveau mot de passe' : 'Mot de passe oublié'}</h1>
         <div className="card">
           {token ? (
-            <form onSubmit={resetPassword}>
+            <form onSubmit={resetPassword} noValidate>
               <div className="form-row">
                 <label htmlFor="new-password">Nouveau mot de passe (10 caractères minimum)</label>
                 <PasswordInput
@@ -73,7 +82,7 @@ export default function ForgotPassword() {
               (valable 1 heure). Pensez à vérifier vos spams.
             </p>
           ) : (
-            <form onSubmit={requestLink}>
+            <form onSubmit={requestLink} noValidate>
               <p className="section-lead">Indiquez l'adresse de votre compte : nous vous envoyons un lien pour choisir un nouveau mot de passe.</p>
               <div className="form-row">
                 <label htmlFor="forgot-email">Email</label>

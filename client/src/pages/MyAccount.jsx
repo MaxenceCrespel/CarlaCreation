@@ -3,6 +3,7 @@ import PasswordInput from '../components/PasswordInput';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import { useToast } from '../context/ToastContext';
+import { firstError, newPasswordError } from '../utils/validate';
 import { useSeo } from '../hooks/useSeo';
 import { formatPrice } from '../utils/format';
 import AccountAuthForms from '../components/AccountAuthForms';
@@ -41,6 +42,11 @@ function AccountDashboard({ profile, onUpdated }) {
 
   async function saveProfile(e) {
     e.preventDefault();
+    const problem = firstError([[!form.firstName.trim(), 'Indiquez votre prénom.'], [!form.lastName.trim(), 'Indiquez votre nom.']]);
+    if (problem) {
+      showToast(problem, 'error');
+      return;
+    }
     setSaving(true);
     try {
       await apiFetch('/client-auth/me', { method: 'PATCH', body: { ...form, birthdate: form.birthdate || undefined } });
@@ -56,6 +62,14 @@ function AccountDashboard({ profile, onUpdated }) {
 
   async function savePassword(e) {
     e.preventDefault();
+    const problem = firstError([
+      [!passwordForm.currentPassword, 'Indiquez votre mot de passe actuel.'],
+      [!!newPasswordError(passwordForm.newPassword), newPasswordError(passwordForm.newPassword)],
+    ]);
+    if (problem) {
+      showToast(problem, 'error');
+      return;
+    }
     setSaving(true);
     try {
       await apiFetch('/client-auth/me', { method: 'PATCH', body: passwordForm });
@@ -163,7 +177,7 @@ function AccountDashboard({ profile, onUpdated }) {
             </div>
           </>
         ) : (
-          <form onSubmit={saveProfile}>
+          <form onSubmit={saveProfile} noValidate>
             <div className="form-row two-col">
               <div>
                 <label htmlFor="account-firstname">Prénom</label>
@@ -197,7 +211,7 @@ function AccountDashboard({ profile, onUpdated }) {
         )}
 
         {showPasswordForm && (
-          <form onSubmit={savePassword} style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--color-bg-alt)' }}>
+          <form onSubmit={savePassword} noValidate style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--color-bg-alt)' }}>
             <div className="form-row">
               <label htmlFor="current-password">Mot de passe actuel</label>
               <PasswordInput

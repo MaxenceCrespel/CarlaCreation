@@ -1176,7 +1176,14 @@ export default function ReservationsTab() {
     : viewMode === 'calendar'
       ? []
       : dateFiltered;
-  const days = viewMode === 'calendar' ? [{ date: null, rows }] : groupByDay(rows);
+  // Finished statuses (terminées, annulées, refusées) are a history: most
+  // recent day first. Upcoming ones stay in chronological order. Within a day
+  // the times keep ascending order.
+  const newestFirst = ['completed', 'cancelled', 'refused'].includes(filter);
+  const orderedRows = newestFirst
+    ? [...rows].sort((a, b) => b.reservation_date.localeCompare(a.reservation_date) || a.start_time.localeCompare(b.start_time))
+    : rows;
+  const days = viewMode === 'calendar' ? [{ date: null, rows }] : groupByDay(orderedRows);
 
   return (
     <>
