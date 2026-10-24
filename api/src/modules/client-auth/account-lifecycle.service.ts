@@ -99,6 +99,17 @@ export class AccountLifecycleService {
     });
   }
 
+  // Lets the reset page tell, before showing the form, that a link was
+  // already used or has expired (without consuming it).
+  async isResetTokenValid(rawToken: string): Promise<boolean> {
+    const rows: { n: number }[] = await this.dataSource.query(
+      `SELECT COUNT(*)::int AS n FROM client_tokens
+       WHERE token_hash = $1 AND type = 'reset_password' AND used_at IS NULL AND expires_at > now()`,
+      [hashToken(rawToken)],
+    );
+    return Number(rows[0]?.n) > 0;
+  }
+
   async resetPassword(rawToken: string, newPassword: string): Promise<void> {
     const clientId = await this.consumeToken(rawToken, 'reset_password');
     // Reaching this link proves the mailbox is theirs, so it also verifies it.

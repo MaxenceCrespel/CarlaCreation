@@ -2332,3 +2332,12 @@ input[aria-invalid="true"] { border: 2px solid #A23B32; }
 }
 .password-toggle:hover { color: var(--color-text); background: var(--color-bg-alt); }
 .password-toggle svg { width: 20px; height: 20px; }
+
+/* Modal buttons: clear spacing between stacked buttons and above the first one */
+.modal-card > .btn-block { margin-top: 0; }
+.modal-card > .btn-block + .btn-block { margin-top: 14px; }
+.modal-card > p + .btn-block,
+.modal-card > .form-row + .btn-block,
+.modal-card > fieldset + .btn-block { margin-top: 24px; }
+.confirm-dialog .btn + .btn { margin-top: 14px; }
+.confirm-dialog p + .btn { margin-top: 24px; }

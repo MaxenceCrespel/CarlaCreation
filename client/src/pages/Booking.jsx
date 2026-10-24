@@ -96,6 +96,10 @@ function contactFieldError(id, rawValue) {
   return null;
 }
 
+// A guest's own rate ("tarif étudiant") and an order-wide code stack: the code
+// applies to what is left after the rate. Same rounding as the server.
+const combinePercents = (rate, code) => Math.round(100 * (1 - (1 - rate / 100) * (1 - code / 100)));
+
 const joinName = (first, last) => [first, last].map((p) => (p || '').trim()).filter(Boolean).join(' ');
 
 function ServicePicker({ services, categories, category, onCategoryChange, subcategory, onSubcategoryChange, selectedServiceId, onSelectService }) {
@@ -361,7 +365,6 @@ export default function Booking() {
   async function applyPromoCode() {
     const code = promoCodeInput.trim();
     if (!code) return;
-    setSelectedPromotionId('');
     setPromoCodeState('loading');
     try {
       const promo = await apiFetch(`/promotions/by-code/${encodeURIComponent(code)}`);
@@ -438,9 +441,9 @@ export default function Booking() {
         return {
           name: form.clientName,
           priceCents: priceFor(selectedService, selectedAddonIds),
-          discountPercent: promo ? promo.discount_percent : codePercent,
-          discountLabel: promo ? promo.label : appliedPromoCode?.label,
-          usesCode: !promo,
+          discountPercent: combinePercents(promo ? promo.discount_percent : 0, codePercent),
+          discountLabel: [promo?.label, appliedPromoCode?.label].filter(Boolean).join(' + '),
+          usesCode: Boolean(appliedPromoCode),
         };
       })(),
       ...guests.map((g) => {
@@ -449,14 +452,14 @@ export default function Booking() {
         return {
           name: g.name,
           priceCents: priceFor(svc, g.addonIds),
-          discountPercent: promo ? promo.discount_percent : codePercent,
-          discountLabel: promo ? promo.label : appliedPromoCode?.label,
-          usesCode: !promo,
+          discountPercent: combinePercents(promo ? promo.discount_percent : 0, codePercent),
+          discountLabel: [promo?.label, appliedPromoCode?.label].filter(Boolean).join(' + '),
+          usesCode: Boolean(appliedPromoCode),
         };
       }),
     ];
-    // A fixed-euro code (loyalty reward) comes off the guests that took the
-    // code, in order, never below zero — same allocation as the backend.
+    // A fixed-euro code (loyalty reward) comes off every guest in order, after
+    // their percentage, never below zero — same allocation as the backend.
     let remainingFixed = appliedPromoCode?.discount_cents ?? 0;
     return rows.map((r) => {
       const percentCents = Math.round(r.priceCents * (r.discountPercent / 100));
@@ -1129,7 +1132,7 @@ export default function Booking() {
                 {promotions.length > 0 && (
                   <div className="form-row">
                     <label htmlFor="promotion-select">Tarif spécial de cette personne (optionnel)</label>
-                    <select id="promotion-select" value={selectedPromotionId} onChange={(e) => selectPromotion(e.target.value)}>
+                    <select id="promotion-select" value={selectedPromotionId} onChange={(e) => setSelectedPromotionId(e.target.value)}>
                       <option value="">Tarif standard</option>
                       {promotions.map((p) => (
                         <option key={p.id} value={p.id}>
@@ -1508,7 +1511,6 @@ export default function Booking() {
                       id="promo-code"
                       placeholder="Ex : BIENVENUE10"
                       value={promoCodeInput}
-                      disabled={Boolean(selectedPromotionId)}
                       onChange={(e) => {
                         setPromoCodeInput(e.target.value);
                         setPromoCodeState('idle');
@@ -1518,7 +1520,7 @@ export default function Booking() {
                     <button
                       type="button"
                       className="btn btn-outline btn-sm"
-                      disabled={!promoCodeInput.trim() || promoCodeState === 'loading' || Boolean(selectedPromotionId)}
+                      disabled={!promoCodeInput.trim() || promoCodeState === 'loading'}
                       onClick={applyPromoCode}
                     >
                       {promoCodeState === 'loading' ? 'Vérification…' : 'Appliquer'}

@@ -63,6 +63,14 @@ export class ClientAuthController {
     return { success: true };
   }
 
+  @Throttle({ default: { limit: 30, ttl: 900_000 } })
+  @UseGuards(CsrfGuard)
+  @Post('reset-password/check')
+  @HttpCode(200)
+  async checkResetToken(@Body() dto: TokenDto) {
+    return { valid: await this.lifecycle.isResetTokenValid(dto.token) };
+  }
+
   @Throttle({ default: { limit: 10, ttl: 900_000 } })
   @UseGuards(CsrfGuard)
   @Post('reset-password')

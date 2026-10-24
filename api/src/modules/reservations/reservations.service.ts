@@ -1,6 +1,7 @@
 import * as crypto from 'crypto';
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { combinePercents } from './discount.util';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import { Reservation } from '../../database/entities/reservation.entity';
@@ -109,23 +110,28 @@ export class ReservationsService {
   // booking — a rate-based "tarif spécial" (e.g. tarif étudiant) is
   // personal to whoever qualifies for it, and must never leak onto every
   // other prestation in the same order. `fallback`, when given, is a
-  // booking-wide promo code applied to any guest who didn't pick their own
-  // rate — a guest's own rate always wins over it for that one person, the
-  // two never stack.
+  // booking-wide promo code: it applies to EVERY guest and stacks on top of
+  // a guest's own rate (rate first, then the code on what is left — see
+  // combinePercents), e.g. a student using a loyalty reward code.
   private resolveGuestDiscounts(
     guests: Guest[],
     eligiblePromotions: { id: number; discount_percent: number }[],
     fallback: { id: number; discountPercent: number } | null,
     invalidMessage: string,
-  ): { promotionId: number | null; discountPercent: number }[] {
+  ): { promotionId: number | null; discountPercent: number; codeApplied: boolean }[] {
     return guests.map((g) => {
+      let rate: { id: number; discount_percent: number } | null = null;
       if (g.promotionId) {
-        const promo = eligiblePromotions.find((p) => p.id === g.promotionId);
-        if (!promo) throw new BadRequestException(invalidMessage);
-        return { promotionId: promo.id, discountPercent: promo.discount_percent };
+        rate = eligiblePromotions.find((p) => p.id === g.promotionId) ?? null;
+        if (!rate) throw new BadRequestException(invalidMessage);
       }
-      if (fallback) return { promotionId: fallback.id, discountPercent: fallback.discountPercent };
-      return { promotionId: null, discountPercent: 0 };
+      return {
+        // The row keeps one promotion reference: the guest's own rate when
+        // there is one (it names the tarif), otherwise the code.
+        promotionId: rate ? rate.id : fallback ? fallback.id : null,
+        discountPercent: combinePercents(rate?.discount_percent ?? 0, fallback?.discountPercent ?? 0),
+        codeApplied: fallback !== null,
+      };
     });
   }
 
@@ -322,7 +328,7 @@ export class ReservationsService {
     // below zero for any one prestation.
     let remainingFixedCents = codePromotion?.discount_cents ?? 0;
     const guestDiscounts = discounts.map((d, i) => {
-      if (remainingFixedCents <= 0 || d.promotionId !== codePromotion?.id) return { ...d, discountCents: 0 };
+      if (remainingFixedCents <= 0 || !d.codeApplied) return { ...d, discountCents: 0 };
       const addonsCents = addonsPerGuest[i].reduce((a, addon) => a + addon.extra_price_cents, 0);
       const net = Math.round((services[i].price_cents + addonsCents) * (1 - d.discountPercent / 100));
       const applied = Math.min(remainingFixedCents, net);
@@ -333,7 +339,7 @@ export class ReservationsService {
     // A personal reward code is consumed by the booking that uses it —
     // claimed atomically before inserting, released if the insert fails.
     const consumedPersonalCodeId =
-      codePromotion?.client_id != null && guestDiscounts.some((d) => d.promotionId === codePromotion.id) ? codePromotion.id : null;
+      codePromotion?.client_id != null && guestDiscounts.some((d) => d.codeApplied) ? codePromotion.id : null;
     if (consumedPersonalCodeId !== null && !(await this.promotionsService.markUsed(consumedPersonalCodeId))) {
       throw new NotFoundException('Ce code promo a déjà été utilisé.');
     }

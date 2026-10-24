@@ -83,6 +83,13 @@ describe('AccountLifecycleService', () => {
     expect(mail.sendPasswordReset).toHaveBeenCalledWith(expect.objectContaining({ clientEmail: 'j@e.com' }));
   });
 
+  it('tells whether a reset link is still usable, without consuming it', async () => {
+    dataSource.query.mockResolvedValue([{ n: 1 }]);
+    await expect(service.isResetTokenValid('t'.repeat(40))).resolves.toBe(true);
+    dataSource.query.mockResolvedValue([{ n: 0 }]);
+    await expect(service.isResetTokenValid('t'.repeat(40))).resolves.toBe(false);
+  });
+
   it('resets the password, marks the email verified and drops the tokens', async () => {
     dataSource.query.mockResolvedValue([{ client_id: 2 }]);
 

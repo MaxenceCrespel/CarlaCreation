@@ -1085,9 +1085,17 @@ describe('ReservationsService', () => {
       ];
       const result = (await (service as any).resolvePublicGuestDiscounts(guests, undefined, null)).discounts;
       expect(result).toEqual([
-        { promotionId: 1, discountPercent: 10 },
-        { promotionId: null, discountPercent: 0 },
+        { promotionId: 1, discountPercent: 10, codeApplied: false },
+        { promotionId: null, discountPercent: 0, codeApplied: false },
       ]);
+    });
+
+    it('a fixed-euro reward code (0%) keeps the guest\'s own rate and is still marked as applied', async () => {
+      promotionsService.findSelectable.mockResolvedValue([STUDENT_RATE]);
+      promotionsService.findByCode.mockResolvedValue({ id: 3, label: 'Fidélité — 5 €', discount_percent: 0, discount_cents: 500, requires_code: true, code: 'FID5', client_id: 7 });
+      const guests = [{ name: 'Étudiante', serviceId: 1, addonIds: [], promotionId: 1 }];
+      const result = (await (service as any).resolvePublicGuestDiscounts(guests, 'fid5', 7)).discounts;
+      expect(result).toEqual([{ promotionId: 1, discountPercent: 10, codeApplied: true }]);
     });
 
     it('resolvePublicGuestDiscounts rejects a promotionId not in the selectable list', async () => {
@@ -1105,12 +1113,12 @@ describe('ReservationsService', () => {
       ];
       const result = (await (service as any).resolvePublicGuestDiscounts(guests, 'bienvenue20', null)).discounts;
       expect(result).toEqual([
-        { promotionId: 2, discountPercent: 20 },
-        { promotionId: 2, discountPercent: 20 },
+        { promotionId: 2, discountPercent: 20, codeApplied: true },
+        { promotionId: 2, discountPercent: 20, codeApplied: true },
       ]);
     });
 
-    it("resolvePublicGuestDiscounts lets a guest's own rate win over the order-wide code, for that guest only", async () => {
+    it("resolvePublicGuestDiscounts stacks a guest's own rate with the order-wide code (rate first, then the code)", async () => {
       promotionsService.findSelectable.mockResolvedValue([STUDENT_RATE]);
       promotionsService.findByCode.mockResolvedValue(WELCOME_CODE);
       const guests = [
@@ -1119,8 +1127,8 @@ describe('ReservationsService', () => {
       ];
       const result = (await (service as any).resolvePublicGuestDiscounts(guests, 'bienvenue20', null)).discounts;
       expect(result).toEqual([
-        { promotionId: 1, discountPercent: 10 }, // her own rate, not the code
-        { promotionId: 2, discountPercent: 20 }, // the order-wide code
+        { promotionId: 1, discountPercent: 28, codeApplied: true }, // 10% rate then 20% code = 28%
+        { promotionId: 2, discountPercent: 20, codeApplied: true }, // the code alone
       ]);
     });
 
@@ -1128,7 +1136,7 @@ describe('ReservationsService', () => {
       promotionsService.findSelectable.mockResolvedValue([]);
       const guests = [{ name: 'Test', serviceId: 1, addonIds: [] }];
       const result = (await (service as any).resolvePublicGuestDiscounts(guests, undefined, null)).discounts;
-      expect(result).toEqual([{ promotionId: null, discountPercent: 0 }]);
+      expect(result).toEqual([{ promotionId: null, discountPercent: 0, codeApplied: false }]);
     });
 
     it('resolveAdminPromotion applies any active promotion by id, code-based or not', async () => {

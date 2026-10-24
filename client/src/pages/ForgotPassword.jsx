@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import PasswordInput from '../components/PasswordInput';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../api/client';
@@ -18,6 +18,15 @@ export default function ForgotPassword() {
   const [password, setPassword] = useState('');
   const [sent, setSent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // With a link token: is it still usable? (already used / expired links are refused up front)
+  const [tokenState, setTokenState] = useState(token ? 'checking' : null); // checking | valid | invalid
+
+  useEffect(() => {
+    if (!token) return;
+    apiFetch('/client-auth/reset-password/check', { method: 'POST', body: { token } })
+      .then((r) => setTokenState(r.valid ? 'valid' : 'invalid'))
+      .catch(() => setTokenState('invalid'));
+  }, [token]);
 
   async function requestLink(e) {
     e.preventDefault();
@@ -59,7 +68,14 @@ export default function ForgotPassword() {
       <div className="container" style={{ maxWidth: 520 }}>
         <h1 className="center">{token ? 'Nouveau mot de passe' : 'Mot de passe oublié'}</h1>
         <div className="card">
-          {token ? (
+          {token && tokenState === 'checking' ? (
+            <p className="loading-text">Vérification du lien…</p>
+          ) : token && tokenState === 'invalid' ? (
+            <>
+              <p>Ce lien est invalide ou a déjà été utilisé. Demandez-en un nouveau pour choisir un mot de passe.</p>
+              <Link to="/mot-de-passe-oublie" className="btn btn-primary">Recevoir un nouveau lien</Link>
+            </>
+          ) : token ? (
             <form onSubmit={resetPassword} noValidate>
               <div className="form-row">
                 <label htmlFor="new-password">Nouveau mot de passe (10 caractères minimum)</label>
