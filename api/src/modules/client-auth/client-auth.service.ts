@@ -3,7 +3,7 @@ import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
-import { Client, normalizeClientName } from '../../database/entities/client.entity';
+import { Client, joinName, normalizeClientName, splitName } from '../../database/entities/client.entity';
 import { RewardsService } from '../rewards/rewards.service';
 import { REWARD_TIERS } from '../rewards/loyalty.constants';
 import { AccountLifecycleService } from './account-lifecycle.service';
@@ -45,6 +45,7 @@ export class ClientAuthService {
   // over, so a typo'd or hijacked signup never locks the real owner out.
   async signup(dto: SignupDto): Promise<{ client: Client }> {
     const email = dto.email.trim().toLowerCase();
+    const fullName = joinName(dto.firstName, dto.lastName);
     let client = await this.clientRepo.findOne({ where: { email } });
 
     if (client?.password_hash && client.email_verified_at) {
@@ -66,8 +67,10 @@ export class ClientAuthService {
     }
 
     if (client) {
-      client.name = dto.name.trim();
-      client.normalized_name = normalizeClientName(dto.name);
+      client.name = fullName;
+      client.first_name = dto.firstName.trim();
+      client.last_name = dto.lastName.trim();
+      client.normalized_name = normalizeClientName(fullName);
       client.password_hash = passwordHash;
       client.email_verified_at = null;
       if (dto.phone) client.phone = dto.phone.trim();
@@ -75,8 +78,10 @@ export class ClientAuthService {
       if (sponsorId && !client.referred_by_client_id) client.referred_by_client_id = sponsorId;
     } else {
       client = this.clientRepo.create({
-        name: dto.name.trim(),
-        normalized_name: normalizeClientName(dto.name),
+        name: fullName,
+        first_name: dto.firstName.trim(),
+        last_name: dto.lastName.trim(),
+        normalized_name: normalizeClientName(fullName),
         email,
         phone: dto.phone?.trim() ?? '',
         password_hash: passwordHash,
@@ -142,8 +147,11 @@ export class ClientAuthService {
       [clientId],
     );
 
+    const { firstName, lastName } = client.first_name != null ? { firstName: client.first_name, lastName: client.last_name ?? '' } : splitName(client.name);
     return {
       name: client.name,
+      firstName,
+      lastName,
       email: client.email,
       phone: client.phone,
       birthdate: client.birthdate,
@@ -209,9 +217,12 @@ export class ClientAuthService {
     const client = await this.clientRepo.findOne({ where: { id: clientId } });
     if (!client) throw new NotFoundException('Compte introuvable.');
 
-    if (dto.name !== undefined) {
-      client.name = dto.name.trim();
-      client.normalized_name = normalizeClientName(dto.name);
+    if (dto.firstName !== undefined || dto.lastName !== undefined) {
+      const current = client.first_name != null ? { firstName: client.first_name, lastName: client.last_name ?? '' } : splitName(client.name);
+      client.first_name = (dto.firstName ?? current.firstName).trim();
+      client.last_name = (dto.lastName ?? current.lastName).trim();
+      client.name = joinName(client.first_name, client.last_name);
+      client.normalized_name = normalizeClientName(client.name);
     }
     if (dto.phone !== undefined) client.phone = dto.phone.trim();
     if (dto.birthdate !== undefined) client.birthdate = dto.birthdate;

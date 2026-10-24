@@ -15,8 +15,17 @@ export class Client {
   @PrimaryGeneratedColumn()
   id: number;
 
+  // `name` is always the full display name ("Prénom Nom"); first_name /
+  // last_name are set when the client entered them separately (signup,
+  // profile) and null on older or admin-created fiches — see splitName().
   @Column()
   name: string;
+
+  @Column({ type: 'text', nullable: true })
+  first_name: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  last_name: string | null;
 
   @Column()
   @Index()
@@ -81,6 +90,17 @@ export class Client {
 
   @UpdateDateColumn({ type: 'timestamptz' })
   updated_at: Date;
+}
+
+// Best-effort split of a single full name — only used for fiches that never
+// had first/last entered separately.
+export function splitName(fullName: string): { firstName: string; lastName: string } {
+  const [first = '', ...rest] = fullName.trim().split(/\s+/);
+  return { firstName: first, lastName: rest.join(' ') };
+}
+
+export function joinName(firstName: string, lastName: string): string {
+  return [firstName, lastName].map((part) => part.trim()).filter(Boolean).join(' ');
 }
 
 export function normalizeClientName(name: string): string {

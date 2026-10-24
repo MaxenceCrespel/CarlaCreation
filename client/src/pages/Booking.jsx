@@ -96,6 +96,8 @@ function contactFieldError(id, rawValue) {
   return null;
 }
 
+const joinName = (first, last) => [first, last].map((p) => (p || '').trim()).filter(Boolean).join(' ');
+
 function ServicePicker({ services, categories, category, onCategoryChange, subcategory, onSubcategoryChange, selectedServiceId, onSelectService }) {
   const topLevelCategories = useMemo(() => categories.filter((c) => !c.parent_id).sort((a, b) => a.sort_order - b.sort_order), [categories]);
   const subcategories = useMemo(
@@ -225,7 +227,7 @@ export default function Booking() {
       .then((me) => {
         setAccount({ name: me.name, email: me.email, phone: me.phone, canApplyReferral: Boolean(me.referral?.canApplyCode) });
         if (prefill) {
-          setForm((f) => ({ ...f, clientName: me.name || f.clientName, clientEmail: me.email || f.clientEmail, clientPhone: me.phone || f.clientPhone }));
+          setForm((f) => ({ ...f, firstName: me.firstName || f.firstName, lastName: me.lastName || f.lastName, clientName: me.name || f.clientName, clientEmail: me.email || f.clientEmail, clientPhone: me.phone || f.clientPhone }));
         }
       })
       .catch(() => setAccount(null));
@@ -281,6 +283,8 @@ export default function Booking() {
   // retype their details every time; only saved locally in the browser.
   const [form, setForm] = useState(() => ({
     clientName: '',
+    firstName: '',
+    lastName: '',
     clientEmail: '',
     clientPhone: '',
     clientAddress: '',
@@ -566,7 +570,7 @@ export default function Booking() {
   function addGuest() {
     if (guests.length >= MAX_ADDITIONAL_GUESTS) return;
     guestKeySeq += 1;
-    setGuests((g) => [...g, { key: guestKeySeq, name: '', category: firstTopLevelCategoryId(categories), subcategory: null, serviceId: null, addonIds: [], promotionId: '' }]);
+    setGuests((g) => [...g, { key: guestKeySeq, name: '', firstName: '', lastName: '', category: firstTopLevelCategoryId(categories), subcategory: null, serviceId: null, addonIds: [], promotionId: '' }]);
     setSlots([]);
     setSlotsState('idle');
     setSelectedSlot('');
@@ -727,19 +731,40 @@ export default function Booking() {
     return (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
   }
 
+  // First and last name are separate inputs (compound names are common);
+  // `clientName` stays the joined string everything else reads.
+  function updateName(part, value) {
+    setForm((f) => {
+      const next = { ...f, [part]: value };
+      return { ...next, clientName: joinName(next.firstName, next.lastName) };
+    });
+  }
+
+  // Unlike updateGuest, typing a name must not reset the guest's addons/slots.
+  function updateGuestName(key, part, value) {
+    setGuests((g) =>
+      g.map((guest) => {
+        if (guest.key !== key) return guest;
+        const next = { ...guest, [part]: value };
+        return { ...next, name: joinName(next.firstName, next.lastName) };
+      }),
+    );
+  }
+
   // Each step validates only what it's responsible for — returns
   // { message, fieldId } (fieldId names the input to jump to and outline in
   // red, see focusInvalidField — null when there's no single input for it),
   // or null when the step is complete and it's safe to move on.
   function validateStep(n) {
     if (n === 1) {
-      if (!form.clientName.trim()) return { message: 'Indiquez votre nom.', fieldId: 'clientName' };
+      if (!form.firstName.trim()) return { message: 'Indiquez votre prénom.', fieldId: 'clientFirstName' };
+      if (!form.lastName.trim()) return { message: 'Indiquez votre nom.', fieldId: 'clientLastName' };
       if (!selectedServiceId) return { message: 'Choisissez une prestation.', fieldId: 'service-picker' };
-      const badGuest = guests.find((g) => !g.name.trim() || !g.serviceId);
+      const badGuest = guests.find((g) => !g.firstName.trim() || !g.lastName.trim() || !g.serviceId);
       if (badGuest) {
-        return badGuest.name.trim()
-          ? { message: 'Choisissez une prestation pour chaque personne ajoutée, ou retirez-la.', fieldId: `guest-block-${badGuest.key}` }
-          : { message: 'Indiquez le nom de chaque personne ajoutée, ou retirez-la.', fieldId: `guest-name-${badGuest.key}` };
+        if (!badGuest.firstName.trim()) return { message: 'Indiquez le prénom de chaque personne ajoutée, ou retirez-la.', fieldId: `guest-name-${badGuest.key}` };
+        if (!badGuest.lastName.trim()) return { message: 'Indiquez le nom de chaque personne ajoutée, ou retirez-la.', fieldId: `guest-lastname-${badGuest.key}` };
+        return { message: 'Choisissez une prestation pour chaque personne ajoutée, ou retirez-la.', fieldId: `guest-block-${badGuest.key}` };
       }
       return null;
     }
@@ -795,7 +820,7 @@ export default function Booking() {
   // rendered.
   useEffect(() => {
     if (!invalidField) return;
-    const guestKey = /^guest-(?:block|name)-(\d+)$/.exec(invalidField)?.[1];
+    const guestKey = /^guest-(?:block|name|lastname)-(\d+)$/.exec(invalidField)?.[1];
     const guestIndex = guestKey ? guests.findIndex((g) => String(g.key) === guestKey) : -1;
     const owner = guestIndex >= 0 ? guestIndex + 1 : 0;
     if (step === 1 && owner !== activePerson) {
@@ -909,7 +934,9 @@ export default function Booking() {
             addonIds: g.addonIds,
             promotionId: g.promotionId ? Number(g.promotionId) : undefined,
           })),
-          ...form,
+          // firstName / lastName are form-only (joined into clientName already).
+          ...Object.fromEntries(Object.entries(form).filter(([key]) => key !== 'firstName' && key !== 'lastName')),
+          clientName: joinName(form.firstName, form.lastName),
           atClientHome,
           clientAddress: atClientHome ? form.clientAddress.trim() : undefined,
           promotionId: selectedPromotionId ? Number(selectedPromotionId) : undefined,
@@ -946,7 +973,7 @@ export default function Booking() {
       });
       setManageGroupId(reservation.groupId);
       showToast('Réservation envoyée avec succès !', 'success');
-      saveContact({ clientName: form.clientName, clientEmail: form.clientEmail, clientPhone: form.clientPhone });
+      saveContact({ clientName: form.clientName, firstName: form.firstName, lastName: form.lastName, clientEmail: form.clientEmail, clientPhone: form.clientPhone });
       setForm((f) => ({ ...f, notes: '', website: '' }));
       setSelectedAddonIds([]);
       setGuests([]);
@@ -1025,7 +1052,7 @@ export default function Booking() {
               <>
                 {guests.length > 0 && (
                   <div className="person-tabs" id="person-tabs" role="tablist" aria-label="Personnes du rendez-vous">
-                    {[form.clientName, ...guests.map((g) => g.name)].map((name, i) => {
+                    {[form.firstName, ...guests.map((g) => g.firstName)].map((name, i) => {
                       const done = i === 0 ? !!selectedServiceId : !!guests[i - 1].serviceId;
                       return (
                         <button
@@ -1037,7 +1064,7 @@ export default function Booking() {
                           onClick={() => setActivePerson(i)}
                         >
                           <span className="person-tab-mark" aria-hidden="true">{done ? '✓' : i + 1}</span>
-                          <span className="person-tab-name">{name.trim().split(' ')[0] || `Personne ${i + 1}`}</span>
+                          <span className="person-tab-name">{name.trim() || `Personne ${i + 1}`}</span>
                         </button>
                       );
                     })}
@@ -1045,24 +1072,41 @@ export default function Booking() {
                 )}
 
                 <div hidden={activePerson !== 0}>
-                <div className="form-row">
-                  <label htmlFor="clientName">Nom complet {guests.length > 0 ? '(personne 1)' : ''}</label>
-                  <input
-                    type="text"
-                    id="clientName"
-                    className={invalidField === 'clientName' ? 'field-invalid' : ''}
-                    autoComplete="name"
-                    required
-                    minLength={2}
-                    maxLength={100}
-                    value={form.clientName}
-                    aria-invalid={inlineError('clientName') ? 'true' : undefined}
-                    aria-describedby={inlineError('clientName') ? 'clientName-error' : undefined}
-                    onChange={(e) => {
-                      updateField('clientName')(e);
-                      if (invalidField === 'clientName') setInvalidField(null);
-                    }}
-                  />
+                <div className="form-row two-col">
+                  <div>
+                    <label htmlFor="clientFirstName">Prénom {guests.length > 0 ? '(personne 1)' : ''}</label>
+                    <input
+                      type="text"
+                      id="clientFirstName"
+                      className={invalidField === 'clientFirstName' ? 'field-invalid' : ''}
+                      autoComplete="given-name"
+                      required
+                      maxLength={100}
+                      value={form.firstName}
+                      aria-invalid={invalidField === 'clientFirstName' ? 'true' : undefined}
+                      onChange={(e) => {
+                        updateName('firstName', e.target.value);
+                        if (invalidField === 'clientFirstName') setInvalidField(null);
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="clientLastName">Nom</label>
+                    <input
+                      type="text"
+                      id="clientLastName"
+                      className={invalidField === 'clientLastName' ? 'field-invalid' : ''}
+                      autoComplete="family-name"
+                      required
+                      maxLength={100}
+                      value={form.lastName}
+                      aria-invalid={invalidField === 'clientLastName' ? 'true' : undefined}
+                      onChange={(e) => {
+                        updateName('lastName', e.target.value);
+                        if (invalidField === 'clientLastName') setInvalidField(null);
+                      }}
+                    />
+                  </div>
                 </div>
 
                 <div className={`form-row ${invalidField === 'service-picker' ? 'field-invalid' : ''}`} ref={servicePickerRef}>
@@ -1112,20 +1156,40 @@ export default function Booking() {
                         Retirer
                       </button>
                     </div>
-                    <input
-                      type="text"
-                      id={`guest-name-${guest.key}`}
-                      className={invalidField === `guest-name-${guest.key}` ? 'field-invalid' : ''}
-                      required
-                      minLength={2}
-                      maxLength={100}
-                      placeholder="Nom complet"
-                      value={guest.name}
-                      onChange={(e) => {
-                        updateGuest(guest.key, { name: e.target.value });
-                        if (invalidField === `guest-name-${guest.key}`) setInvalidField(null);
-                      }}
-                    />
+                    <div className="form-row two-col">
+                      <div>
+                        <input
+                          type="text"
+                          id={`guest-name-${guest.key}`}
+                          className={invalidField === `guest-name-${guest.key}` ? 'field-invalid' : ''}
+                          required
+                          maxLength={100}
+                          placeholder="Prénom"
+                          aria-label={`Prénom de la personne ${i + 2}`}
+                          value={guest.firstName}
+                          onChange={(e) => {
+                            updateGuestName(guest.key, 'firstName', e.target.value);
+                            if (invalidField === `guest-name-${guest.key}`) setInvalidField(null);
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <input
+                          type="text"
+                          id={`guest-lastname-${guest.key}`}
+                          className={invalidField === `guest-lastname-${guest.key}` ? 'field-invalid' : ''}
+                          required
+                          maxLength={100}
+                          placeholder="Nom"
+                          aria-label={`Nom de la personne ${i + 2}`}
+                          value={guest.lastName}
+                          onChange={(e) => {
+                            updateGuestName(guest.key, 'lastName', e.target.value);
+                            if (invalidField === `guest-lastname-${guest.key}`) setInvalidField(null);
+                          }}
+                        />
+                      </div>
+                    </div>
                     <ServicePicker
                       services={services}
                       categories={categories}

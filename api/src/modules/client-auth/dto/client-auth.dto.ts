@@ -2,8 +2,12 @@ import { IsDateString, IsEmail, IsInt, IsOptional, IsString, Length } from 'clas
 
 export class SignupDto {
   @IsString()
-  @Length(1, 200)
-  name!: string;
+  @Length(1, 100)
+  firstName!: string;
+
+  @IsString()
+  @Length(1, 100)
+  lastName!: string;
 
   @IsEmail()
   @Length(1, 200)
@@ -78,8 +82,13 @@ export class ClientLoginDto {
 export class UpdateClientProfileDto {
   @IsOptional()
   @IsString()
-  @Length(1, 200)
-  name?: string;
+  @Length(1, 100)
+  firstName?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(1, 100)
+  lastName?: string;
 
   @IsOptional()
   @IsString()

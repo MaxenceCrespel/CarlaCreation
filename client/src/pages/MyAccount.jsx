@@ -30,7 +30,7 @@ function formatDateFr(dateStr) {
 function AccountDashboard({ profile, onUpdated }) {
   const showToast = useToast();
   const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState({ name: profile.name, phone: profile.phone, birthdate: profile.birthdate || '' });
+  const [form, setForm] = useState({ firstName: profile.firstName, lastName: profile.lastName, phone: profile.phone, birthdate: profile.birthdate || '' });
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '' });
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -139,7 +139,7 @@ function AccountDashboard({ profile, onUpdated }) {
     <>
       <div className="card">
         <div className="manual-reservation-form-actions" style={{ justifyContent: 'space-between', marginBottom: 16 }}>
-          <h2 style={{ margin: 0 }}>Bonjour {profile.name.split(' ')[0]}</h2>
+          <h2 style={{ margin: 0 }}>Bonjour {profile.firstName}</h2>
           <button type="button" className="admin-logout-btn" onClick={logout} aria-label="Se déconnecter" title="Se déconnecter">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -163,9 +163,15 @@ function AccountDashboard({ profile, onUpdated }) {
           </>
         ) : (
           <form onSubmit={saveProfile}>
-            <div className="form-row">
-              <label htmlFor="account-name">Prénom et nom</label>
-              <input type="text" id="account-name" required value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+            <div className="form-row two-col">
+              <div>
+                <label htmlFor="account-firstname">Prénom</label>
+                <input type="text" id="account-firstname" required maxLength={100} value={form.firstName} onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))} />
+              </div>
+              <div>
+                <label htmlFor="account-lastname">Nom</label>
+                <input type="text" id="account-lastname" required maxLength={100} value={form.lastName} onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))} />
+              </div>
             </div>
             <div className="form-row two-col">
               <div>

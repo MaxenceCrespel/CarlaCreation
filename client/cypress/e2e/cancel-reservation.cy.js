@@ -21,7 +21,8 @@ describe('Client self-cancellation', () => {
       cy.wait('@getHours').then((hoursResult) => {
         const openedDayIndex = hoursResult.response.body.days.findIndex((d) => d.date === openedDate);
 
-        cy.get('#clientName').type('Cypress Cancel Test');
+        cy.get('#clientFirstName').type('Cypress');
+        cy.get('#clientLastName').type('Cancel Test');
         cy.get('.service-pick-card').first().click();
         cy.contains('button', 'Suivant').click();
         cy.contains('button', 'Suivant').click();

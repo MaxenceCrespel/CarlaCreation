@@ -10,6 +10,8 @@ export function getSavedContact() {
     const parsed = JSON.parse(raw);
     return {
       clientName: parsed.clientName || '',
+      firstName: parsed.firstName ?? (parsed.clientName || '').trim().split(/\s+/)[0] ?? '',
+      lastName: parsed.lastName ?? (parsed.clientName || '').trim().split(/\s+/).slice(1).join(' '),
       clientEmail: parsed.clientEmail || '',
       clientPhone: parsed.clientPhone || '',
     };
@@ -18,9 +20,9 @@ export function getSavedContact() {
   }
 }
 
-export function saveContact({ clientName, clientEmail, clientPhone }) {
+export function saveContact({ clientName, firstName, lastName, clientEmail, clientPhone }) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ clientName, clientEmail, clientPhone }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ clientName, firstName, lastName, clientEmail, clientPhone }));
   } catch (_) {
     // localStorage unavailable (private browsing, quota, etc.) — non-critical, ignore.
   }

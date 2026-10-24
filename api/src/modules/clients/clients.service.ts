@@ -180,6 +180,9 @@ export class ClientsService {
 
     if (dto.name !== undefined) {
       client.name = dto.name.trim();
+      // Edited as a single string by the admin: let first/last be re-derived from it.
+      client.first_name = null;
+      client.last_name = null;
       client.normalized_name = normalizeClientName(dto.name);
     }
     if (dto.phone !== undefined) client.phone = dto.phone.trim();

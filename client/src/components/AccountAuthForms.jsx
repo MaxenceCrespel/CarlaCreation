@@ -4,7 +4,7 @@ import { apiFetch } from '../api/client';
 import { useToast } from '../context/ToastContext';
 import { clearStoredReferral, getStoredReferral } from '../utils/referralStorage';
 
-const EMPTY_SIGNUP = { name: '', email: '', phone: '', password: '', birthdate: '', referralCode: '' };
+const EMPTY_SIGNUP = { firstName: '', lastName: '', email: '', phone: '', password: '', birthdate: '', referralCode: '' };
 const EMPTY_LOGIN = { email: '', password: '' };
 
 export default function AccountAuthForms({ onLoggedIn }) {
@@ -123,16 +123,31 @@ export default function AccountAuthForms({ onLoggedIn }) {
         </form>
       ) : (
         <form onSubmit={handleSignup}>
-          <div className="form-row">
-            <label htmlFor="signup-name">Prénom et nom</label>
-            <input
-              type="text"
-              id="signup-name"
-              autoComplete="name"
-              required
-              value={signupForm.name}
-              onChange={(e) => setSignupForm((f) => ({ ...f, name: e.target.value }))}
-            />
+          <div className="form-row two-col">
+            <div>
+              <label htmlFor="signup-firstname">Prénom</label>
+              <input
+                type="text"
+                id="signup-firstname"
+                autoComplete="given-name"
+                required
+                maxLength={100}
+                value={signupForm.firstName}
+                onChange={(e) => setSignupForm((f) => ({ ...f, firstName: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label htmlFor="signup-lastname">Nom</label>
+              <input
+                type="text"
+                id="signup-lastname"
+                autoComplete="family-name"
+                required
+                maxLength={100}
+                value={signupForm.lastName}
+                onChange={(e) => setSignupForm((f) => ({ ...f, lastName: e.target.value }))}
+              />
+            </div>
           </div>
           <div className="form-row">
             <label htmlFor="signup-email">Email</label>

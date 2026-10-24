@@ -38,7 +38,8 @@ describe('Booking flow', () => {
         ).to.eq(true);
 
         // Step 1 — Prestation: name, then pick a service, then advance
-        cy.get('#clientName').type('Cypress Visitor');
+        cy.get('#clientFirstName').type('Cypress');
+        cy.get('#clientLastName').type('Visitor');
         cy.get('.service-pick-card').first().click();
         cy.contains('button', 'Suivant').click();
 
