@@ -1526,6 +1526,7 @@ export default function Booking() {
                       {promoCodeState === 'loading' ? 'Vérification…' : 'Appliquer'}
                     </button>
                   </div>
+                  <p className="form-hint">Un seul code promo par réservation (cumulable avec un tarif spécial).</p>
                   {promoCodeState === 'valid' && (
                     <p className="form-feedback success">Code appliqué : {appliedPromoCode.label} ({appliedPromoCode.discount_cents ? `-${formatPrice(appliedPromoCode.discount_cents)}` : `-${appliedPromoCode.discount_percent}%`})</p>
                   )}
