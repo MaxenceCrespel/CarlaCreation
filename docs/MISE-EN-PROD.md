@@ -122,3 +122,41 @@ sur la prod entre-temps seraient à reporter à la main).
    après 2 à 4 semaines, une fois les sauvegardes de `~/backups` vérifiées, puis
    supprimer ses volumes. **Garder le dossier `/opt/carla-creation`** tant que
    Caddy y est branché.
+
+
+---
+
+## Exploitation courante
+
+### Déploiement automatique
+Chaque push sur `main` (via une pull request) lance la CI : tests, scans de
+sécurité, E2E. Si tout est vert, le job **Deploy-Production** se connecte au VPS
+(secrets GitHub `STAGING_SSH_*`, ou `PRODUCTION_SSH_*` s'ils sont définis) et :
+1. sauvegarde la base (`~/backups/prod-avant-deploiement-*.dump`, 14 conservées) ;
+2. met à jour `/opt/carla-prod`, reconstruit, applique les migrations ;
+3. vérifie que `https://carlacreation.fr/healthz` répond ;
+4. en cas d'échec, redéploie automatiquement la version précédente (les
+   migrations déjà appliquées ne sont pas annulées : restaurer la sauvegarde si besoin).
+
+Redéploiement manuel ou autre branche : Actions → « Deploy Production » → Run workflow.
+
+### Sauvegardes automatiques
+Une fois, sur le VPS : `sudo ./deploy/install-backup-timer.sh` (depuis `/opt/carla-prod`).
+Chaque nuit à 3h : `deploy/backup-prod.sh` écrit la base et les photos dans
+`~/backups` (14 jours). Contrôle : `systemctl list-timers carla-backup.timer` et
+`journalctl -u carla-backup.service -n 20`.
+
+**Copie hors VPS** (recommandée) : installer `rclone`, configurer un stockage
+(`rclone config`), puis relancer l'installation avec
+`sudo RCLONE_REMOTE=nom-du-stockage:carla-backups ./deploy/install-backup-timer.sh`.
+
+### Restaurer une sauvegarde
+```bash
+cd /opt/carla-prod
+docker compose -f docker-compose.yml -f docker-compose.prod.yml stop web
+docker exec carla-prod-postgres-1 psql -U salon -d postgres -c "DROP DATABASE salon WITH (FORCE);" -c "CREATE DATABASE salon;"
+docker exec -i carla-prod-postgres-1 pg_restore -U salon -d salon --no-owner < ~/backups/prod-db-AAAAMMJJ-HHMMSS.dump
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d web
+```
+Photos : extraire `prod-photos-*.tgz` dans le volume `carla-prod_salon-uploads`
+(`docker run --rm -v carla-prod_salon-uploads:/dst -v ~/backups:/src:ro,z alpine tar xzf /src/<fichier> -C /dst`).

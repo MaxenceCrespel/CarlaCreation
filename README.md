@@ -371,10 +371,12 @@ et **une seule stack applicative : la prod**, sur `carlacreation.fr`
 projet Compose `carla-prod`, port `127.0.0.1:3000`). Il n'y a pas
 d'environnement de pré-release.
 
-La prod **ne se déploie jamais automatiquement** : workflow **Deploy
-Production** (onglet Actions de GitHub → Run workflow, taper `deploy`, choisir
-la branche), qui fait `git pull`, `docker compose up -d --build` puis
-`npm run migration:run`. La CI (`main.yml`) ne fait que tester et scanner.
+Chaque push sur `main` déclenche la CI puis, si tout est au vert, le
+déploiement automatique en production (workflow **Deploy Production**) :
+sauvegarde de la base, mise à jour, migrations, contrôle de santé, retour
+arrière automatique en cas d'échec. Il peut aussi être lancé à la main (onglet
+Actions → Run workflow). Une sauvegarde nocturne (base + photos) tourne via un
+timer systemd.
 
 La procédure détaillée — bascule depuis l'ancien staging
 (`staging.carlacreation.fr`), migration de la base et des photos, Caddy,
