@@ -108,7 +108,7 @@ export default function Home() {
   const { siteTagline, travelFreeRadiusKm } = useSiteConfig();
   useSeo({
     description:
-      'Studio de coiffure et de nail art à Lille (Hauts-de-France) : coupe, coloration, balayage, manucure et pose semi-permanent. Réservez votre rendez-vous en ligne 24h/24.',
+      'Carla Création, coiffeuse et prothésiste ongulaire à Loos, près de Lille (Hauts-de-France), en studio ou à domicile : coupe, coloration, balayage, pose d\'ongles, semi-permanent, manucure et nail art. Réservez votre rendez-vous en ligne 24h/24.',
     path: '/',
   });
   const [gallery, setGallery] = useState([]);
@@ -152,7 +152,7 @@ export default function Home() {
     <>
       <section className="hero">
         <div className="container hero-inner">
-          <p className="eyebrow">Nail Studio — Coiffure &amp; Ongles</p>
+          <p className="eyebrow">Coiffeuse &amp; prothésiste ongulaire à Loos, près de Lille</p>
           <h1>{siteTagline}</h1>
           <p className="hero-lead">
             Coupe, coloration, balayage, manucure et nail art sur-mesure dans un cadre chaleureux.

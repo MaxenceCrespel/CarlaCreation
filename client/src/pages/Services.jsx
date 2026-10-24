@@ -42,9 +42,9 @@ const FAQ_ITEMS = [
 
 export default function Services() {
   useSeo({
-    title: 'Prestations coiffure & ongles à Lille',
+    title: 'Tarifs coiffure et pose d\'ongles à Loos, Lille',
     description:
-      'Tous mes tarifs et durées à Lille : coupe, coloration, balayage, brushing, manucure, pose semi-permanent et nail art.',
+      'Tous mes tarifs et durées de coiffeuse à Loos, près de Lille : coupe, coloration, balayage, brushing, pose d\'ongles, semi-permanent, manucure et nail art.',
     path: '/services',
   });
   const [services, setServices] = useState(null);

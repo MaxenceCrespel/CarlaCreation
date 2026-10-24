@@ -6,8 +6,8 @@ import GalleryGrid from '../components/GalleryGrid';
 
 export default function Gallery() {
   useSeo({
-    title: 'Galerie de réalisations à Lille',
-    description: 'Coupes, colorations, balayages, manucures et nail art réalisés dans mon studio de Lille — découvrez mes réalisations en photos.',
+    title: 'Réalisations coiffure et nail art à Loos, Lille',
+    description: 'Coupes, colorations, balayages, manucures et nail art réalisés dans mon studio à Loos, près de Lille — découvrez mes réalisations en photos.',
     path: '/gallery',
   });
   const [items, setItems] = useState(null);

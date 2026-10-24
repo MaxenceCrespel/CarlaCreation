@@ -20,7 +20,13 @@ function useLocalBusinessSchema() {
 
     const schema = {
       '@context': 'https://schema.org',
-      '@type': 'HairSalon',
+      '@type': ['HairSalon', 'NailSalon'],
+      alternateName: 'Carla Création — coiffeuse et prothésiste ongulaire à Loos et Lille',
+      description: 'Coiffeuse et prothésiste ongulaire à Loos, près de Lille : coupe, coloration, balayage, pose d\'ongles, semi-permanent, manucure et nail art, en studio ou à domicile.',
+      areaServed: [
+        { '@type': 'City', name: 'Loos' },
+        { '@type': 'City', name: 'Lille' },
+      ],
       name: siteName,
       url: siteUrl,
       image: `${siteUrl}/favicon.svg`,
