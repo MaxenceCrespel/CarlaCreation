@@ -17,11 +17,11 @@ function buildFaq(radiusKm) {
     },
     {
       q: 'Quelles sont vos spécialités en coiffure ?',
-      a: 'Les coupes femme avec balayage, les colorations, les chignons et les coiffures d\'événement, notamment pour les mariages et les cérémonies. Je fais aussi les coupes homme et enfant, le brushing et les soins.',
+      a: 'Les coupes femme avec balayage, ombré et colorations, les chignons et les coiffures d\'événement, notamment pour les mariages et les cérémonies. Je fais aussi les coupes homme et enfant, le brushing et la permanente.',
     },
     {
       q: 'Faites-vous les coiffures de mariage et d\'événements ?',
-      a: 'Oui, chignons et coiffures de mariage ou de cérémonie, chez vous ou à mon studio. Contactez-moi avec la date et le lieu pour que je vérifie ma disponibilité et vous propose un devis.',
+      a: 'Oui : chignons, attaches et coiffures de mariage ou de cérémonie, chez vous ou à mon studio. Le forfait mariage comprend deux essais en amont, puis la coiffure le jour J (détails et tarif sur la page Prestations). Contactez-moi avec la date et le lieu pour que je vérifie ma disponibilité.',
     },
     {
       q: 'Proposez-vous aussi des prestations d\'ongles ?',
