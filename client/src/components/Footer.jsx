@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { useSiteConfig } from '../context/SiteConfigContext';
 
 export default function Footer() {
-  const { siteName } = useSiteConfig();
+  const { siteName, instagramUrl, googleReviewUrl } = useSiteConfig();
   const year = new Date().getFullYear();
 
   return (
@@ -23,11 +23,20 @@ export default function Footer() {
           <li><Link to="/confidentialite">Confidentialité</Link></li>
         </ul>
         <ul className="social-links" aria-label="Réseaux sociaux">
-          <li>
-            <a href="https://www.instagram.com/creationbycarla/" target="_blank" rel="noopener noreferrer" aria-label="Instagram">
-              Instagram
-            </a>
-          </li>
+          {instagramUrl && (
+            <li>
+              <a href={instagramUrl} target="_blank" rel="noopener noreferrer" aria-label="Instagram">
+                Instagram
+              </a>
+            </li>
+          )}
+          {googleReviewUrl && (
+            <li>
+              <a href={googleReviewUrl} target="_blank" rel="noopener noreferrer">
+                Avis Google
+              </a>
+            </li>
+          )}
         </ul>
       </div>
     </footer>

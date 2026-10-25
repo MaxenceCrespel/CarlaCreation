@@ -228,8 +228,9 @@ export class MailService {
         <p>Merci pour votre visite ! J'espère que la prestation vous a plu.</p>
         <p>Votre avis compte beaucoup et aide d'autres client·e·s à me faire confiance — auriez-vous deux minutes pour en laisser un ?</p>
         <p style="margin-top:24px;">
-          <a href="${reviewUrl}" style="display:inline-block;background:#9A5F4B;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;">Laisser un avis</a>
+          <a href="${siteConfig.googleReviewUrl}" style="display:inline-block;background:#9A5F4B;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;">Laisser un avis sur Google</a>
         </p>
+        <p style="margin-top:12px;color:#6B5C51;font-size:0.9em;">Vous préférez le faire sur mon site ? <a href="${reviewUrl}" style="color:#9A5F4B;">Laisser un avis ici</a>.</p>
         <p style="margin-top:24px;">Une question ? Appelez-moi au ${escapeHtml(siteConfig.sitePhone)} ou répondez à cet email.</p>
         <p style="color:#6B5C51;font-size:0.85em;margin-top:32px;">${escapeHtml(siteConfig.siteName)}</p>
       </div>
