@@ -4,14 +4,16 @@ import { apiFetch } from '../api/client';
 const FALLBACK = {
   siteName: 'Carla Création',
   siteTagline: 'Coiffure & Ongles',
-  sitePhone: '',
-  sitePhoneHref: '',
-  siteEmail: '',
-  sitePublicArea: '',
+  // Real values (same as api/src/site-config.ts) so the first paint already
+  // has its final text — otherwise the page jumps when the config arrives.
+  sitePhone: '06 19 64 07 66',
+  sitePhoneHref: '+33619640766',
+  siteEmail: 'carlacreation59@gmail.com',
+  sitePublicArea: 'Loos, 59120',
   legalForm: '',
   siret: '',
-  instagramUrl: '',
-  googleReviewUrl: '',
+  instagramUrl: 'https://www.instagram.com/creationbycarla/',
+  googleReviewUrl: 'https://g.page/r/CZxWuZLVNj8NEBM/review',
   siteUrl: '',
   travelFeeFallbackCents: 200,
   travelFreeRadiusKm: 10,

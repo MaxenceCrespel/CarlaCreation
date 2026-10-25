@@ -99,7 +99,7 @@ export default function Services() {
       <section className="section section-alt">
         <div className="container">
           {error && <p className="loading-text">Impossible de charger les prestations pour le moment.</p>}
-          {!error && !services && <p className="loading-text">Chargement des prestations…</p>}
+          {!error && !services && <p className="loading-text section-loading">Chargement des prestations…</p>}
 
           {!error && services && (
             <>
