@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useSiteConfig } from '../context/SiteConfigContext';
+import FaqSection from '../components/FaqSection';
 import { useSeo } from '../hooks/useSeo';
 
 // Towns Carla travels to, shown on the page and in the structured data.
@@ -51,22 +52,7 @@ export default function About() {
     path: '/a-propos',
   });
 
-  const faq = buildFaq(travelFreeRadiusKm);
-
-  // FAQPage structured data, scoped to this page (removed on leave).
-  useEffect(() => {
-    const script = document.createElement('script');
-    script.type = 'application/ld+json';
-    script.dataset.seo = 'faq';
-    script.textContent = JSON.stringify({
-      '@context': 'https://schema.org',
-      '@type': 'FAQPage',
-      mainEntity: faq.map(({ q, a }) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })),
-    });
-    document.head.appendChild(script);
-    return () => script.remove();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [travelFreeRadiusKm]);
+  const faq = useMemo(() => buildFaq(travelFreeRadiusKm), [travelFreeRadiusKm]);
 
   return (
     <>
@@ -127,17 +113,7 @@ export default function About() {
             </ol>
           </div>
 
-          <div className="card" id="faq">
-            <h2>Questions fréquentes</h2>
-            <div className="faq-list">
-              {faq.map(({ q, a }) => (
-                <details key={q} className="faq-item">
-                  <summary>{q}</summary>
-                  <p>{a}</p>
-                </details>
-              ))}
-            </div>
-          </div>
+          <FaqSection faq={faq} />
 
           <p className="center">
             <Link to="/booking" className="btn btn-primary">Prendre rendez-vous</Link>{' '}

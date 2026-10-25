@@ -6,6 +6,7 @@ const PUBLIC_PAGES = [
   { path: '/services', priority: '0.8', changefreq: 'weekly' },
   { path: '/gallery', priority: '0.6', changefreq: 'weekly' },
   { path: '/booking', priority: '0.9', changefreq: 'weekly' },
+  { path: '/coiffeuse-a-domicile', priority: '0.8', changefreq: 'monthly' },
   { path: '/a-propos', priority: '0.7', changefreq: 'monthly' },
   { path: '/contact', priority: '0.5', changefreq: 'monthly' },
 ];

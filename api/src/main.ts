@@ -5,6 +5,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
 import compression from 'compression';
+import { seoMetaMiddleware } from './common/seo-meta';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { config } from './config';
@@ -44,6 +45,8 @@ async function bootstrap() {
   );
   // gzip/deflate for the JSON, HTML, CSS and JS responses (images are already compressed).
   app.use(compression());
+  // Per-route <title>/description/canonical for crawlers that don't run the SPA's JavaScript.
+  app.use(seoMetaMiddleware(path.join(__dirname, '..', '..', 'client', 'dist')));
   app.use(helmet.hsts({ maxAge: 63072000, includeSubDomains: true, preload: true }));
 
   app.enableCors({

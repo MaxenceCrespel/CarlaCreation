@@ -15,6 +15,8 @@ export default function Footer() {
         <ul className="footer-links">
           <li><Link to="/">Accueil</Link></li>
           <li><Link to="/booking">Réserver</Link></li>
+          <li><Link to="/coiffeuse-a-domicile">Coiffeuse à domicile</Link></li>
+          <li><Link to="/a-propos">À propos</Link></li>
           <li><Link to="/contact">Contact</Link></li>
         </ul>
         <ul className="footer-links footer-links-legal">
