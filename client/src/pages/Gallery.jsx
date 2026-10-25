@@ -84,7 +84,7 @@ export default function Gallery() {
       <section className="section section-alt">
         <div className="container">
           {error && <p className="loading-text">Impossible de charger la galerie pour le moment.</p>}
-          {!error && !items && <p className="loading-text">Chargement des photos…</p>}
+          {!error && !items && <p className="loading-text section-loading">Chargement des photos…</p>}
 
           {!error && items && visibleTopLevel.length > 0 && (
             <div className="category-tabs center" role="tablist" aria-label="Filtrer par catégorie">

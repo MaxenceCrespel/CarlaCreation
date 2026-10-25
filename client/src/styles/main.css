@@ -2341,3 +2341,9 @@ input[aria-invalid="true"] { border: 2px solid #A23B32; }
 .modal-card > fieldset + .btn-block { margin-top: 24px; }
 .confirm-dialog .btn + .btn { margin-top: 14px; }
 .confirm-dialog p + .btn { margin-top: 24px; }
+
+/* Layout stability (Core Web Vitals / CLS): while a page waits for its data,
+   keep the space the content will take so the footer and following sections
+   don't jump when it arrives. */
+.section-loading { min-height: 100vh; }
+.hours-card ul { min-height: 16rem; }
