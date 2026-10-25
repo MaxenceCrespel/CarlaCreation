@@ -13,7 +13,7 @@ import { storeReferral } from '../utils/referralStorage';
 // works from home / travels to clients, the postal address must only ever
 // appear in the booking confirmation email (see MailService), never here.
 function useLocalBusinessSchema() {
-  const { siteName, sitePhoneHref, siteEmail, siteUrl } = useSiteConfig();
+  const { siteName, sitePhoneHref, siteEmail, siteUrl, instagramUrl } = useSiteConfig();
 
   useEffect(() => {
     if (!siteUrl) return;
@@ -32,6 +32,7 @@ function useLocalBusinessSchema() {
       image: `${siteUrl}/favicon.svg`,
       telephone: sitePhoneHref || undefined,
       email: siteEmail || undefined,
+      sameAs: instagramUrl ? [instagramUrl] : undefined,
     };
 
     let el = document.querySelector('script[data-seo="local-business"]');

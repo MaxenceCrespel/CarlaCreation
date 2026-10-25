@@ -105,7 +105,7 @@ function ReviewForm() {
 }
 
 export default function Home() {
-  const { siteTagline, travelFreeRadiusKm } = useSiteConfig();
+  const { siteTagline, travelFreeRadiusKm, googleReviewUrl } = useSiteConfig();
   useSeo({
     description:
       'Carla Création, coiffeuse et prothésiste ongulaire à Loos, près de Lille (Hauts-de-France), en studio ou à domicile : coupe, coloration, balayage, pose d\'ongles, semi-permanent, manucure et nail art. Réservez votre rendez-vous en ligne 24h/24.',
@@ -249,6 +249,14 @@ export default function Home() {
 
           {!reviewError && reviewSummary && reviewSummary.reviews.length > 0 && (
             <ReviewsCarousel reviews={reviewSummary.reviews} />
+          )}
+
+          {googleReviewUrl && (
+            <p className="center" style={{ marginTop: 24 }}>
+              <a href={googleReviewUrl} target="_blank" rel="noopener noreferrer" className="btn btn-outline">
+                Laisser un avis sur Google
+              </a>
+            </p>
           )}
 
           <div className="testimonials-cta">

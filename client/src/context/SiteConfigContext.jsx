@@ -10,6 +10,8 @@ const FALLBACK = {
   sitePublicArea: '',
   legalForm: '',
   siret: '',
+  instagramUrl: '',
+  googleReviewUrl: '',
   siteUrl: '',
   travelFeeFallbackCents: 200,
   travelFreeRadiusKm: 10,

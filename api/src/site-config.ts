@@ -19,6 +19,11 @@ export const siteConfig = {
   // Vide = les pages légales affichent "en cours d'immatriculation".
   // NB : 9 chiffres = un SIREN ; un SIRET complet en compte 14 (SIREN + NIC).
   siret: '109 692 541 00013',
+  // Réseaux / avis : liens publics. googleReviewUrl = lien direct « laisser un
+  // avis » de la fiche Google Business Profile (proposé à TOUTES les clientes,
+  // jamais seulement aux satisfaites : Google interdit ce tri).
+  instagramUrl: 'https://www.instagram.com/creationbycarla/',
+  googleReviewUrl: 'https://g.page/r/CZxWuZLVNj8NEBM/review',
   navLinks: [
     { href: '/', label: 'Accueil', key: 'home' },
     { href: '/services', label: 'Prestations', key: 'services' },
