@@ -13,10 +13,10 @@ describe('SeoController', () => {
   it('lists every public page in the sitemap, and never /admin', () => {
     const sitemap = controller.sitemap();
     expect(sitemap).toContain('<?xml version="1.0" encoding="UTF-8"?>');
-    for (const path of ['/', '/services', '/gallery', '/booking', '/a-propos', '/contact']) {
+    for (const path of ['/', '/services', '/gallery', '/booking', '/coiffeuse-a-domicile', '/a-propos', '/contact']) {
       expect(sitemap).toMatch(new RegExp(`<loc>[^<]*${path.replace('/', '\\/')}</loc>`));
     }
-    expect((sitemap.match(/<url>/g) || []).length).toBe(6);
+    expect((sitemap.match(/<url>/g) || []).length).toBe(7);
     expect(sitemap).not.toContain('/admin');
   });
 });

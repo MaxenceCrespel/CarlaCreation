@@ -33,7 +33,7 @@ const DEFAULT_IMAGE = '/og-image.png';
 
 export function useSeo({ title, description, path, image = DEFAULT_IMAGE, noindex = false }) {
   useEffect(() => {
-    const fullTitle = title ? `${title} | Carla Création` : 'Carla Création — Coiffeuse et prothésiste ongulaire à Loos, Lille';
+    const fullTitle = title ? `${title} | Carla Création` : 'Carla Création — Coiffeuse à domicile et ongles, Loos & Lille';
     document.title = fullTitle;
 
     upsertMeta('name', 'description', description);

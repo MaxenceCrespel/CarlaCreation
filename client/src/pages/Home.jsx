@@ -108,7 +108,7 @@ export default function Home() {
   const { siteTagline, travelFreeRadiusKm, googleReviewUrl } = useSiteConfig();
   useSeo({
     description:
-      'Carla Création, coiffeuse et prothésiste ongulaire à Loos, près de Lille (Hauts-de-France), en studio ou à domicile : coupe, coloration, balayage, pose d\'ongles, semi-permanent, manucure et nail art. Réservez votre rendez-vous en ligne 24h/24.',
+      'Carla Création, coiffeuse à domicile à Loos et Lille : coupe, balayage, couleur, chignon et mariage. Pose d\'ongles, semi-permanent et nail art. Réservez en ligne.',
     path: '/',
   });
   const [gallery, setGallery] = useState([]);
@@ -205,8 +205,9 @@ export default function Home() {
               Chaque prestation démarre par un diagnostic personnalisé pour un résultat qui vous ressemble.
             </p>
             <p>
-              Coiffeuse à domicile à Loos, Lille, Ronchin, Wattignies, Seclin, Tourcoing et dans toute la métropole
-              lilloise : coupes femme avec balayage, colorations, chignons et coiffures de mariage.
+              <Link to="/coiffeuse-a-domicile">Coiffeuse à domicile</Link> à Loos, Lille, Ronchin, Wattignies, Seclin,
+              Tourcoing et dans toute la métropole lilloise : coupes femme avec balayage, colorations, chignons et
+              coiffures de mariage.
             </p>
             <ul className="checklist">
               <li>Produits professionnels et soins de qualité</li>

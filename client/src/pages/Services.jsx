@@ -93,6 +93,10 @@ export default function Services() {
           <p className="section-lead center">
             Tarifs indicatifs — un devis précis pourra être établi lors de votre diagnostic en studio.
           </p>
+          <p className="section-lead center">
+            Toutes ces prestations sont possibles <Link to="/coiffeuse-a-domicile">à domicile</Link> à Loos, Lille et
+            alentours. <Link to="/a-propos">En savoir plus sur Carla</Link>.
+          </p>
         </div>
       </section>
 
