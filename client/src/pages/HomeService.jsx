@@ -16,12 +16,8 @@ function buildFaq(radiusKm) {
       a: 'Coupes, brushings, colorations, balayages, ombrés, patines, chignons et coiffures de mariage ou de cérémonie, ainsi que les prestations d\'ongles. À la réservation, vous choisissez « À domicile » et la durée de chaque prestation est indiquée.',
     },
     {
-      q: 'De quoi ai-je besoin chez moi ?',
-      a: 'Prévoyez un endroit bien éclairé, une chaise et une prise de courant à proximité. J\'apporte tout le matériel et les produits.',
-    },
-    {
       q: 'Combien de temps faut-il prévoir ?',
-      a: 'Cela dépend de la prestation : de 30 minutes pour un brushing ou une coupe à environ 3 heures pour un balayage avec coupe. La durée de chaque prestation est affichée sur la page Prestations et lors de la réservation.',
+      a: 'La durée de chaque prestation est indiquée sur la page Prestations et au moment de la réservation, et le créneau proposé en tient compte.',
     },
     {
       q: 'Puis-je réserver pour plusieurs personnes ?',
