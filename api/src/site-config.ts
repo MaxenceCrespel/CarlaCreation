@@ -28,6 +28,7 @@ export const siteConfig = {
     { href: '/', label: 'Accueil', key: 'home' },
     { href: '/services', label: 'Prestations', key: 'services' },
     { href: '/gallery', label: 'Réalisations', key: 'gallery' },
+    { href: '/a-propos', label: 'À propos', key: 'about' },
     { href: '/contact', label: 'Contact', key: 'contact' },
   ],
 };

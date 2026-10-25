@@ -9,6 +9,7 @@ import MyAccount from './pages/MyAccount';
 import VerifyEmail from './pages/VerifyEmail';
 import ForgotPassword from './pages/ForgotPassword';
 import Contact from './pages/Contact';
+import About from './pages/About';
 import MentionsLegales from './pages/MentionsLegales';
 import CGV from './pages/CGV';
 import Confidentialite from './pages/Confidentialite';
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="/mon-compte" element={<MyAccount />} />
         <Route path="/verification-email" element={<VerifyEmail />} />
         <Route path="/mot-de-passe-oublie" element={<ForgotPassword />} />
+        <Route path="/a-propos" element={<About />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/mentions-legales" element={<MentionsLegales />} />
         <Route path="/cgv" element={<CGV />} />

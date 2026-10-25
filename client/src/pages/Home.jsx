@@ -204,13 +204,18 @@ export default function Home() {
               de coloration et de nail art modernes, dans le respect de la santé du cheveu et de l'ongle.
               Chaque prestation démarre par un diagnostic personnalisé pour un résultat qui vous ressemble.
             </p>
+            <p>
+              Coiffeuse à domicile à Loos, Lille, Ronchin, Wattignies, Seclin, Tourcoing et dans toute la métropole
+              lilloise : coupes femme avec balayage, colorations, chignons et coiffures de mariage.
+            </p>
             <ul className="checklist">
               <li>Produits professionnels et soins de qualité</li>
               <li>Conseils personnalisés selon vos envies</li>
               <li>Rendez-vous sur place ou à domicile, selon votre préférence</li>
               <li>Réservation en ligne sécurisée, disponible 24h/24</li>
             </ul>
-            <Link to="/services" className="btn btn-outline">Découvrir mes prestations</Link>
+            <Link to="/services" className="btn btn-outline">Découvrir mes prestations</Link>{' '}
+            <Link to="/a-propos" className="btn btn-outline">En savoir plus sur Carla</Link>
           </div>
         </div>
       </section>

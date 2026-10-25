@@ -2347,3 +2347,14 @@ input[aria-invalid="true"] { border: 2px solid #A23B32; }
    don't jump when it arrives. */
 .section-loading { min-height: 100vh; }
 .hours-card ul { min-height: 16rem; }
+
+/* À propos */
+.about-sections { display: grid; gap: 24px; max-width: 820px; margin-inline: auto; }
+.about-sections .card h2 { margin-top: 0; }
+.area-list { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 16px 0; }
+.area-list li { padding: 6px 14px; border-radius: 999px; background: var(--color-bg-alt); font-weight: 600; font-size: 0.9rem; }
+.about-steps { padding-left: 20px; display: grid; gap: 10px; }
+.faq-list { display: grid; gap: 10px; }
+.faq-item { border-radius: 12px; background: var(--color-bg); padding: 4px 16px; }
+.faq-item summary { cursor: pointer; font-weight: 600; padding: 12px 0; }
+.faq-item p { margin: 0 0 14px; color: var(--color-text-soft); }
