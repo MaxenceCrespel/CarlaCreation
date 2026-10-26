@@ -2358,3 +2358,10 @@ input[aria-invalid="true"] { border: 2px solid #A23B32; }
 .faq-item { border-radius: 12px; background: var(--color-bg); padding: 4px 16px; }
 .faq-item summary { cursor: pointer; font-weight: 600; padding: 12px 0; }
 .faq-item p { margin: 0 0 14px; color: var(--color-text-soft); }
+
+/* Accueil : cartes Coiffure / Ongles avec deux actions */
+.offer-card { gap: 18px; }
+.offer-card-main { display: flex; flex-direction: column; gap: 14px; text-decoration: none; color: inherit; }
+.offer-card-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.offer-card-actions .btn { flex: 1 1 140px; justify-content: center; }
+.service-book-link { display: inline-block; margin-top: 12px; font-weight: 600; font-size: 0.9rem; }

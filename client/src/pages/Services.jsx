@@ -1,12 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import { useSeo } from '../hooks/useSeo';
 import { formatDuration, formatPrice } from '../utils/format';
-
-function firstTopLevelCategoryId(categories) {
-  return categories.filter((c) => !c.parent_id).sort((a, b) => a.sort_order - b.sort_order)[0]?.id ?? null;
-}
+import { initialCategoryId } from '../utils/categoryParam';
 
 function ServiceCard({ service }) {
   return (
@@ -17,6 +14,7 @@ function ServiceCard({ service }) {
         <span className="service-price">{formatPrice(service.price_cents)}</span>
         <span className="service-duration">{formatDuration(service.duration_minutes)}</span>
       </div>
+      <Link to={`/booking?prestation=${service.id}`} className="service-book-link">Réserver cette prestation →</Link>
     </article>
   );
 }
@@ -47,6 +45,7 @@ export default function Services() {
       'Tous mes tarifs et durées de coiffeuse à Loos, près de Lille : coupe, coloration, balayage, brushing, pose d\'ongles, semi-permanent, manucure et nail art.',
     path: '/services',
   });
+  const [searchParams] = useSearchParams();
   const [services, setServices] = useState(null);
   const [categories, setCategories] = useState([]);
   const [category, setCategory] = useState(null);
@@ -60,7 +59,7 @@ export default function Services() {
     apiFetch('/service-categories')
       .then((cats) => {
         setCategories(cats);
-        setCategory((current) => current ?? firstTopLevelCategoryId(cats));
+        setCategory((current) => current ?? initialCategoryId(cats, searchParams.get('categorie')));
       })
       .catch(() => {});
   }, []);
@@ -153,7 +152,7 @@ export default function Services() {
           )}
 
           <p className="center" style={{ marginTop: 48 }}>
-            <Link to="/booking" className="btn btn-primary">Réserver une prestation</Link>
+            <Link to={category ? `/booking?categorie=${category}` : '/booking'} className="btn btn-primary">Réserver une prestation</Link>
           </p>
         </div>
       </section>
