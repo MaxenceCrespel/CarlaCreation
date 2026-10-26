@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import { useSiteConfig } from '../context/SiteConfigContext';
 import { useToast } from '../context/ToastContext';
@@ -9,6 +9,7 @@ import { getSavedContact, saveContact } from '../utils/contactStorage';
 import AccountAuthForms from '../components/AccountAuthForms';
 import ReferralCodeForm from '../components/ReferralCodeForm';
 import { getStoredReferral } from '../utils/referralStorage';
+import { categoriesForService, initialCategoryId } from '../utils/categoryParam';
 import { BOOKING_DONE_KEY } from '../components/InstallAppBanner';
 
 const DAY_NAMES = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
@@ -250,8 +251,10 @@ export default function Booking() {
   const [services, setServices] = useState([]);
   const [categories, setCategories] = useState([]);
   const [category, setCategory] = useState(null);
+  const [searchParams] = useSearchParams();
   const [subcategory, setSubcategory] = useState(null);
   const [selectedServiceId, setSelectedServiceId] = useState(null);
+  const prestationParam = Number(searchParams.get('prestation')) || null;
   const [selectedAddonIds, setSelectedAddonIds] = useState([]);
 
   // Additional people booked in the same visit (e.g. a mother booking for
@@ -338,12 +341,25 @@ export default function Booking() {
   const guestBlockRefs = useRef({});
   const isFirstRender = useRef(true);
 
+  // /booking?prestation=<id> (the "Réserver cette prestation" link of the price
+  // list): open with that service already chosen, on the right category tab.
+  useEffect(() => {
+    if (!prestationParam || services.length === 0 || categories.length === 0) return;
+    const wanted = services.find((s) => s.id === prestationParam);
+    if (!wanted) return;
+    const { category: cat, subcategory: sub } = categoriesForService(categories, wanted);
+    setCategory(cat);
+    setSubcategory(sub);
+    setSelectedServiceId(wanted.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prestationParam, services.length, categories.length]);
+
   useEffect(() => {
     apiFetch('/services').then(setServices).catch(() => showToast('Impossible de charger les prestations.', 'error'));
     apiFetch('/service-categories')
       .then((cats) => {
         setCategories(cats);
-        setCategory((current) => current ?? firstTopLevelCategoryId(cats));
+        setCategory((current) => current ?? initialCategoryId(cats, searchParams.get('categorie')));
       })
       .catch(() => showToast('Impossible de charger les catégories.', 'error'));
     apiFetch('/hours')

@@ -178,13 +178,19 @@ export default function Home() {
             <h2>{offers.length === 2 ? 'Deux savoir-faire' : 'Nos savoir-faire'}</h2>
             <div className="offer-grid">
               {offers.map((o) => (
-                <Link key={o.id} to="/services" className="offer-card">
-                  <span className="offer-card-head">
-                    <span className="offer-card-title">{o.name}</span>
-                    <span className="offer-card-arrow" aria-hidden="true">→</span>
-                  </span>
-                  <span className="offer-card-price">À partir de {Math.round(o.fromCents / 100)} €</span>
-                </Link>
+                <div key={o.id} className="offer-card">
+                  <Link to={`/services?categorie=${o.id}`} className="offer-card-main" aria-label={`Voir les prestations ${o.name}`}>
+                    <span className="offer-card-head">
+                      <span className="offer-card-title">{o.name}</span>
+                      <span className="offer-card-arrow" aria-hidden="true">→</span>
+                    </span>
+                    <span className="offer-card-price">À partir de {Math.round(o.fromCents / 100)} €</span>
+                  </Link>
+                  <div className="offer-card-actions">
+                    <Link to={`/services?categorie=${o.id}`} className="btn btn-outline btn-sm">Voir les prestations</Link>
+                    <Link to={`/booking?categorie=${o.id}`} className="btn btn-primary btn-sm">Réserver</Link>
+                  </div>
+                </div>
               ))}
             </div>
           </div>
