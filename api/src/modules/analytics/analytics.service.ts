@@ -47,6 +47,17 @@ function pathLabel(path: string): string {
   return PATH_LABELS[path] || path;
 }
 
+// A tagged link (?src=instagram) has no referrer, so it would count as
+// "direct": the tag tells which bucket it really belongs to.
+const SOCIAL_TAGS = ['instagram', 'facebook', 'whatsapp', 'messenger', 'tiktok', 'snapchat', 'linkedin', 'threads', 'x', 'twitter', 'pinterest'];
+const SEARCH_TAGS = ['google', 'bing', 'maps', 'gmb'];
+export function classifyTag(tag: string): TrafficSource {
+  const t = tag.toLowerCase();
+  if (SOCIAL_TAGS.includes(t)) return 'social';
+  if (SEARCH_TAGS.includes(t)) return 'search';
+  return 'other';
+}
+
 export function classifySource(referrer: string | undefined, publicOrigin: string): TrafficSource {
   if (!referrer) return 'direct';
   let host: string;
@@ -100,6 +111,7 @@ interface RawRow {
   visitor_id: string;
   source: TrafficSource;
   device: DeviceType;
+  campaign: string | null;
   created_at: Date;
 }
 
@@ -110,8 +122,8 @@ export class AnalyticsService {
     @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
-  async record(path: string, visitorId: string, source: TrafficSource, device: DeviceType): Promise<void> {
-    const view = this.pageViewRepo.create({ path: normalizePath(path), visitor_id: visitorId, source, device });
+  async record(path: string, visitorId: string, source: TrafficSource, device: DeviceType, campaign: string | null = null): Promise<void> {
+    const view = this.pageViewRepo.create({ path: normalizePath(path), visitor_id: visitorId, source, device, campaign });
     await this.pageViewRepo.save(view);
   }
 
@@ -148,12 +160,13 @@ export class AnalyticsService {
       topPages: current.topPages,
       sources: current.sources,
       devices: current.devices,
+      campaigns: current.campaigns,
     };
   }
 
   private async fetchRows(from: Date, to: Date): Promise<RawRow[]> {
     return this.dataSource.query(
-      `SELECT path, visitor_id, source, device, created_at FROM page_views WHERE created_at >= $1 AND created_at < $2`,
+      `SELECT path, visitor_id, source, device, campaign, created_at FROM page_views WHERE created_at >= $1 AND created_at < $2`,
       [from.toISOString(), to.toISOString()],
     );
   }
@@ -177,6 +190,7 @@ export class AnalyticsService {
     let bounced = 0;
     const sourceCounts = new Map<TrafficSource, number>();
     const deviceCounts = new Map<DeviceType, number>();
+    const campaignCounts = new Map<string, number>();
     for (const sessionRows of sessions.values()) {
       if (sessionRows.length === 1) bounced += 1;
       // First event of the session decides its source/device — a referrer
@@ -184,6 +198,7 @@ export class AnalyticsService {
       const first = sessionRows.reduce((a, b) => (new Date(a.created_at) <= new Date(b.created_at) ? a : b));
       sourceCounts.set(first.source, (sourceCounts.get(first.source) ?? 0) + 1);
       deviceCounts.set(first.device, (deviceCounts.get(first.device) ?? 0) + 1);
+      if (first.campaign) campaignCounts.set(first.campaign, (campaignCounts.get(first.campaign) ?? 0) + 1);
     }
 
     const pathCounts = new Map<string, number>();
@@ -211,6 +226,7 @@ export class AnalyticsService {
       topPages,
       sources,
       devices,
+      campaigns: [...campaignCounts.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count),
     };
   }
 

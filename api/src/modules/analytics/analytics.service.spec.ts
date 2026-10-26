@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getDataSourceToken, getRepositoryToken } from '@nestjs/typeorm';
 import { BadRequestException } from '@nestjs/common';
-import { AnalyticsService, classifyDevice, classifySource, normalizePath } from './analytics.service';
+import { AnalyticsService, classifyDevice, classifySource, classifyTag, normalizePath } from './analytics.service';
 import { PageView } from '../../database/entities/page-view.entity';
 
 describe('classifySource', () => {
@@ -31,6 +31,16 @@ describe('classifySource', () => {
 
   it('falls back to other for a malformed referrer', () => {
     expect(classifySource('not a url', origin)).toBe('other');
+  });
+});
+
+describe('classifyTag', () => {
+  it('buckets tagged links like the referrer would have', () => {
+    expect(classifyTag('instagram')).toBe('social');
+    expect(classifyTag('WhatsApp')).toBe('social');
+    expect(classifyTag('google')).toBe('search');
+    expect(classifyTag('carte')).toBe('other');
+    expect(classifyTag('qr')).toBe('other');
   });
 });
 
@@ -88,8 +98,15 @@ describe('AnalyticsService', () => {
       visitor_id: 'visitor-1',
       source: 'direct',
       device: 'mobile',
+      campaign: null,
     });
     expect(repo.save).toHaveBeenCalled();
+  });
+
+  it('record() keeps the campaign tag when given', async () => {
+    await service.record('/', 'visitor-1', 'social', 'mobile', 'instagram');
+
+    expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({ source: 'social', campaign: 'instagram' }));
   });
 
   it('rejects an invalid period', async () => {

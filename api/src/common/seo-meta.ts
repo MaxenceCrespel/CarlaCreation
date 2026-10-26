@@ -77,11 +77,18 @@ export function renderSeoHtml(template: string, urlPath: string): string | null 
   return html;
 }
 
+// Old/guessed URLs that were shared or crawled: send them to the real page.
+const REDIRECTS: Record<string, string> = {
+  '/a-domicile': '/coiffeuse-a-domicile',
+};
+
 export function seoMetaMiddleware(clientDist: string) {
   const indexPath = path.join(clientDist, 'index.html');
   let template: string | null = null;
   return (req: Request, res: Response, next: NextFunction): void => {
     if (req.method !== 'GET' || !(req.headers.accept ?? '').includes('text/html')) return next();
+    const target = REDIRECTS[req.path.replace(/\/+$/, '')];
+    if (target) return res.redirect(301, target);
     try {
       template ??= fs.readFileSync(indexPath, 'utf8');
       const html = renderSeoHtml(template, req.path.replace(/\/+$/, '') || '/');

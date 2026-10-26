@@ -356,6 +356,7 @@ CREATE TABLE
         visitor_id TEXT NOT NULL,
         source TEXT NOT NULL,
         device TEXT NOT NULL,
+        campaign TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
@@ -422,7 +423,8 @@ VALUES
     (1786800000000, 'AddPromotionOwnerAndUsage1786800000000'),
     (1786900000000, 'AddPointsLoyaltyAndReferral1786900000000'),
     (1787000000000, 'AddAccountLifecycle1787000000000'),
-    (1787100000000, 'AddClientFirstAndLastName1787100000000');
+    (1787100000000, 'AddClientFirstAndLastName1787100000000'),
+    (1787200000000, 'AddPageViewCampaign1787200000000');
 
 -- Admin account — username "carla", password "Carla0303!" (bcrypt, cost 12).
 -- Change this password after first login in a real deployment.

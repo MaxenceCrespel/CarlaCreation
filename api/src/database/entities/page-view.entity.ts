@@ -26,6 +26,10 @@ export class PageView {
   @Column()
   device: DeviceType;
 
+  // Tag of a link (?src=instagram...) — see TrackController. Null for untagged visits.
+  @Column({ type: 'text', nullable: true })
+  campaign: string | null;
+
   @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;
 }

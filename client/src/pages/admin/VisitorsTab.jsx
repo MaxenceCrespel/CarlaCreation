@@ -264,6 +264,24 @@ export default function VisitorsTab() {
             )}
           </div>
 
+          {stats.campaigns?.length > 0 && (
+            <>
+              <p className="section-label">Liens étiquetés (?src=)</p>
+              <div className="card-wrap">
+                <div className="breakdown">
+                  {stats.campaigns.map((c) => (
+                    <div className="breakdown-row" key={c.name}>
+                      <div className="breakdown-top">
+                        <span className="breakdown-name">{c.name}</span>
+                        <span className="breakdown-pct">{c.count} visiteur{c.count > 1 ? 's' : ''}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
           <p className="section-label">Appareils</p>
           <div className="card-wrap">
             <InfoButton explainKey="appareils" onOpen={setExplainKey} />

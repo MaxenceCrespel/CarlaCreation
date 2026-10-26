@@ -3,7 +3,7 @@ import { Body, Controller, HttpCode, Post, Req, Res, UseGuards } from '@nestjs/c
 import type { Request, Response } from 'express';
 import { config } from '../../config';
 import { CsrfGuard } from '../../common/csrf';
-import { AnalyticsService, classifyDevice, classifySource } from './analytics.service';
+import { AnalyticsService, classifyDevice, classifySource, classifyTag } from './analytics.service';
 import { TrackPageViewDto } from './dto/track.dto';
 
 const VISITOR_COOKIE = 'visitor_id';
@@ -32,8 +32,11 @@ export class TrackController {
       });
     }
 
-    const source = classifySource(req.get('referer') ?? undefined, config.PUBLIC_ORIGIN);
+    const campaign = dto.src ? dto.src.toLowerCase() : null;
+    let source = classifySource(req.get('referer') ?? undefined, config.PUBLIC_ORIGIN);
+    // Apps open links without a referrer ("direct"): the tag knows better.
+    if (campaign && source === 'direct') source = classifyTag(campaign);
     const device = classifyDevice(req.get('user-agent') ?? undefined);
-    await this.analyticsService.record(dto.path, visitorId, source, device);
+    await this.analyticsService.record(dto.path, visitorId, source, device, campaign);
   }
 }
