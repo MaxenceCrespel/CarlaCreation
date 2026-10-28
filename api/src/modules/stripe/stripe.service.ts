@@ -7,6 +7,8 @@ export interface CreateCheckoutSessionParams {
   amountCents: number;
   description: string;
   customerEmail: string;
+  // Unix seconds — Stripe accepts 30 min to 24 h after creation.
+  expiresAt?: number;
   successUrl: string;
   cancelUrl: string;
 }
@@ -57,6 +59,7 @@ export class StripeService {
           quantity: 1,
         },
       ],
+      expires_at: params.expiresAt,
       metadata: { groupId: params.groupId },
       success_url: params.successUrl,
       cancel_url: params.cancelUrl,
@@ -71,6 +74,20 @@ export class StripeService {
     }
 
     return { url: session.url, sessionId: session.id };
+  }
+
+  // Used when a webhook may have been missed: the session itself says whether
+  // the client went through checkout.
+  async retrieveCheckoutSession(sessionId: string): Promise<Stripe.Checkout.Session | null> {
+    if (!this.client) return null;
+    return this.client.checkout.sessions.retrieve(sessionId);
+  }
+
+  // Closes an unpaid checkout so the client can no longer pay for a booking
+  // that was cancelled or abandoned.
+  async expireCheckoutSession(sessionId: string): Promise<void> {
+    if (!this.client) return;
+    await this.client.checkout.sessions.expire(sessionId);
   }
 
   // Raw body (a Buffer, not the parsed JSON) is mandatory here — signature

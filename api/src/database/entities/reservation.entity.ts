@@ -91,6 +91,12 @@ export class Reservation {
   @Column({ type: 'int', nullable: true })
   promotion_id: number | null;
 
+  // The personal single-use code this booking spent (see
+  // ReservationsService.syncPromotionCodes) — promotion_id holds the guest's
+  // own tarif instead when they have one.
+  @Column({ type: 'int', nullable: true })
+  reward_code_id: number | null;
+
   @Column({ type: 'int', default: 0 })
   discount_percent: number;
 

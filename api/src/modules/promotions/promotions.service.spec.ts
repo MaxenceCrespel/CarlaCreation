@@ -6,10 +6,13 @@ import { Promotion } from '../../database/entities/promotion.entity';
 
 describe('PromotionsService', () => {
   let service: PromotionsService;
-  let repo: { find: jest.Mock; findOne: jest.Mock; create: jest.Mock; save: jest.Mock; delete: jest.Mock };
+  let repo: { find: jest.Mock; findOne: jest.Mock; create: jest.Mock; save: jest.Mock; delete: jest.Mock; createQueryBuilder: jest.Mock };
+  let qb: { update: jest.Mock; set: jest.Mock; where: jest.Mock; execute: jest.Mock };
 
   beforeEach(async () => {
+    qb = { update: jest.fn().mockReturnThis(), set: jest.fn().mockReturnThis(), where: jest.fn().mockReturnThis(), execute: jest.fn().mockResolvedValue({ affected: 1 }) };
     repo = {
+      createQueryBuilder: jest.fn(() => qb),
       find: jest.fn(),
       findOne: jest.fn(),
       create: jest.fn((v) => v),
@@ -22,6 +25,34 @@ describe('PromotionsService', () => {
     }).compile();
 
     service = module.get(PromotionsService);
+  });
+
+  it('releaseCodes gives back only personal, spent codes', async () => {
+    await service.releaseCodes([4, 5]);
+    expect(qb.set).toHaveBeenCalledWith(expect.objectContaining({ used_at: null }));
+    expect(qb.where).toHaveBeenCalledWith(expect.stringContaining('client_id IS NOT NULL AND used_at IS NOT NULL'), { ids: [4, 5] });
+  });
+
+  it("releaseCodes never extends a code on the client's own cancellation", async () => {
+    await service.releaseCodes([4]);
+    expect(qb.set).toHaveBeenCalledWith({ used_at: null });
+  });
+
+  it('releaseCodes extends a code that expired when the salon cancelled', async () => {
+    await service.releaseCodes([4], { extendIfExpired: true });
+    const { expires_at } = qb.set.mock.calls[0][0];
+    expect(expires_at()).toContain('now() + interval');
+  });
+
+  it('reclaimCodes spends again only personal, unspent codes', async () => {
+    await service.reclaimCodes([4]);
+    expect(qb.where).toHaveBeenCalledWith(expect.stringContaining('client_id IS NOT NULL AND used_at IS NULL'), { ids: [4] });
+  });
+
+  it('release/reclaim do nothing without ids', async () => {
+    await service.releaseCodes([]);
+    await service.reclaimCodes([]);
+    expect(repo.createQueryBuilder).not.toHaveBeenCalled();
   });
 
   it('findSelectable only returns active, non-code promotions', async () => {

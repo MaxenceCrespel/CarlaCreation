@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
+import { getDataSourceToken, getRepositoryToken } from '@nestjs/typeorm';
 import { PaymentsService } from './payments.service';
 import { StripeService } from './stripe.service';
 import { Payment } from '../../database/entities/payment.entity';
@@ -7,17 +7,33 @@ import { Payment } from '../../database/entities/payment.entity';
 describe('PaymentsService', () => {
   let service: PaymentsService;
   let repo: { create: jest.Mock; save: jest.Mock; findOne: jest.Mock };
-  let stripeService: { createRefund: jest.Mock; capturePaymentIntent: jest.Mock; cancelPaymentIntent: jest.Mock };
+  let stripeService: {
+    createRefund: jest.Mock;
+    capturePaymentIntent: jest.Mock;
+    cancelPaymentIntent: jest.Mock;
+    retrieveCheckoutSession: jest.Mock;
+    expireCheckoutSession: jest.Mock;
+  };
+  let dataSource: { query: jest.Mock };
 
   beforeEach(async () => {
     repo = { create: jest.fn((v) => v), save: jest.fn((v) => Promise.resolve(v)), findOne: jest.fn() };
-    stripeService = { createRefund: jest.fn(), capturePaymentIntent: jest.fn(), cancelPaymentIntent: jest.fn() };
+    stripeService = {
+      createRefund: jest.fn(),
+      capturePaymentIntent: jest.fn(),
+      cancelPaymentIntent: jest.fn(),
+      retrieveCheckoutSession: jest.fn(),
+      expireCheckoutSession: jest.fn(),
+    };
+    // A live booking by default: markAuthorized has no reason to release.
+    dataSource = { query: jest.fn().mockResolvedValue([{ status: 'pending' }]) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PaymentsService,
         { provide: getRepositoryToken(Payment), useValue: repo },
         { provide: StripeService, useValue: stripeService },
+        { provide: getDataSourceToken(), useValue: dataSource },
       ],
     }).compile();
 
@@ -174,6 +190,122 @@ describe('PaymentsService', () => {
 
       await expect(service.refund('group-1')).rejects.toThrow('Stripe is down');
       expect(repo.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('markAuthorized — booking already gone', () => {
+    it('releases the hold at once when the booking was cancelled before the client finished paying', async () => {
+      const payment = { id: 1, group_id: 'g1', status: 'pending', stripe_checkout_session_id: 'cs_1' };
+      repo.findOne.mockResolvedValue(payment);
+      dataSource.query.mockResolvedValue([{ status: 'cancelled' }]);
+      stripeService.cancelPaymentIntent.mockResolvedValue({});
+
+      await service.markAuthorized('cs_1', 'pi_1');
+
+      expect(stripeService.cancelPaymentIntent).toHaveBeenCalledWith('pi_1');
+      expect(payment.status).toBe('canceled');
+    });
+
+    it('also releases it when the booking was deleted', async () => {
+      repo.findOne.mockResolvedValue({ id: 1, group_id: 'g1', status: 'pending', stripe_checkout_session_id: 'cs_1' });
+      dataSource.query.mockResolvedValue([]);
+
+      await service.markAuthorized('cs_1', 'pi_1');
+
+      expect(stripeService.cancelPaymentIntent).toHaveBeenCalledWith('pi_1');
+    });
+
+    it('keeps the hold for a live booking', async () => {
+      repo.findOne.mockResolvedValue({ id: 1, group_id: 'g1', status: 'pending', stripe_checkout_session_id: 'cs_1' });
+      dataSource.query.mockResolvedValue([{ status: 'pending' }]);
+
+      await service.markAuthorized('cs_1', 'pi_1');
+
+      expect(stripeService.cancelPaymentIntent).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('syncPending — missed webhook', () => {
+    it('authorizes a payment whose checkout Stripe says was completed', async () => {
+      const payment = { id: 1, group_id: 'g1', status: 'pending', stripe_checkout_session_id: 'cs_1' };
+      repo.findOne.mockResolvedValue(payment);
+      stripeService.retrieveCheckoutSession.mockResolvedValue({ id: 'cs_1', status: 'complete', payment_intent: 'pi_1' });
+
+      await service.syncPending('g1');
+
+      expect(payment.status).toBe('authorized');
+    });
+
+    it('leaves it pending when the client never finished checkout', async () => {
+      const payment = { id: 1, group_id: 'g1', status: 'pending', stripe_checkout_session_id: 'cs_1' };
+      repo.findOne.mockResolvedValue(payment);
+      stripeService.retrieveCheckoutSession.mockResolvedValue({ id: 'cs_1', status: 'open', payment_intent: null });
+
+      await service.syncPending('g1');
+
+      expect(payment.status).toBe('pending');
+    });
+
+    it('never throws when Stripe is unreachable', async () => {
+      repo.findOne.mockResolvedValue({ id: 1, group_id: 'g1', status: 'pending', stripe_checkout_session_id: 'cs_1' });
+      stripeService.retrieveCheckoutSession.mockRejectedValue(new Error('down'));
+
+      await expect(service.syncPending('g1')).resolves.toBeUndefined();
+    });
+  });
+
+  describe('capture — outcome', () => {
+    it("reports 'unpaid' when checkout was never completed (after checking Stripe)", async () => {
+      repo.findOne.mockResolvedValue({ id: 1, group_id: 'g1', status: 'pending', stripe_checkout_session_id: 'cs_1' });
+      stripeService.retrieveCheckoutSession.mockResolvedValue({ id: 'cs_1', status: 'open', payment_intent: null });
+
+      await expect(service.capture('g1')).resolves.toBe('unpaid');
+      expect(stripeService.capturePaymentIntent).not.toHaveBeenCalled();
+    });
+
+    it('captures a payment whose webhook was missed but Stripe knows it was authorized', async () => {
+      const payment = { id: 1, group_id: 'g1', status: 'pending', stripe_checkout_session_id: 'cs_1', stripe_payment_intent_id: null as string | null };
+      repo.findOne.mockResolvedValue(payment);
+      stripeService.retrieveCheckoutSession.mockResolvedValue({ id: 'cs_1', status: 'complete', payment_intent: 'pi_1' });
+
+      await expect(service.capture('g1')).resolves.toBe('captured');
+      expect(stripeService.capturePaymentIntent).toHaveBeenCalledWith('pi_1');
+    });
+
+    it("reports 'captured' on success and 'skipped' when there is no online payment", async () => {
+      repo.findOne.mockResolvedValue({ id: 1, group_id: 'g1', status: 'authorized', stripe_payment_intent_id: 'pi_1' });
+      await expect(service.capture('g1')).resolves.toBe('captured');
+      repo.findOne.mockResolvedValue(null);
+      await expect(service.capture('g1')).resolves.toBe('skipped');
+    });
+  });
+
+  describe('markAbandoned', () => {
+    it('closes the Stripe session and marks the payment canceled', async () => {
+      const payment = { id: 1, group_id: 'g1', status: 'pending', stripe_checkout_session_id: 'cs_1' };
+      repo.findOne.mockResolvedValue(payment);
+
+      await service.markAbandoned('g1');
+
+      expect(stripeService.expireCheckoutSession).toHaveBeenCalledWith('cs_1');
+      expect(payment.status).toBe('canceled');
+    });
+
+    it('does not touch a payment that is no longer pending', async () => {
+      repo.findOne.mockResolvedValue({ id: 1, group_id: 'g1', status: 'authorized', stripe_checkout_session_id: 'cs_1' });
+
+      await service.markAbandoned('g1');
+
+      expect(stripeService.expireCheckoutSession).not.toHaveBeenCalled();
+    });
+
+    it('cancelAuthorization closes a checkout that was never paid', async () => {
+      const payment = { id: 1, group_id: 'g1', status: 'pending', stripe_checkout_session_id: 'cs_1' };
+      repo.findOne.mockResolvedValue(payment);
+
+      await service.cancelAuthorization('g1');
+
+      expect(payment.status).toBe('canceled');
     });
   });
 });

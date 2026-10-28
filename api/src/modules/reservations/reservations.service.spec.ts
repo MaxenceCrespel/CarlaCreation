@@ -5,6 +5,8 @@ import { ReservationsService } from './reservations.service';
 import { Reservation } from '../../database/entities/reservation.entity';
 import { Service } from '../../database/entities/service.entity';
 import { ServiceAddon } from '../../database/entities/service-addon.entity';
+import { DailyHours } from '../../database/entities/daily-hours.entity';
+import { DailyHoursRange } from '../../database/entities/daily-hours-range.entity';
 import { MailService } from '../mail/mail.service';
 import { SettingsService } from '../settings/settings.service';
 import { DistanceService } from '../distance/distance.service';
@@ -34,9 +36,17 @@ describe('ReservationsService', () => {
   };
   let distanceService: { estimate: jest.Mock };
   let pushService: { notifyAdmins: jest.Mock };
-  let promotionsService: { findSelectable: jest.Mock; findByCode: jest.Mock; findAll: jest.Mock };
+  let promotionsService: { findSelectable: jest.Mock; findByCode: jest.Mock; findAll: jest.Mock; releaseCodes: jest.Mock; reclaimCodes: jest.Mock };
   let stripeService: { isEnabled: jest.Mock; createCheckoutSession: jest.Mock };
-  let paymentsService: { findByGroupId: jest.Mock; createPending: jest.Mock; refund: jest.Mock; capture: jest.Mock; cancelAuthorization: jest.Mock };
+  let paymentsService: {
+    findByGroupId: jest.Mock;
+    createPending: jest.Mock;
+    refund: jest.Mock;
+    capture: jest.Mock;
+    cancelAuthorization: jest.Mock;
+    markAbandoned: jest.Mock;
+    syncPending: jest.Mock;
+  };
   let rewardsService: { onReservationsCompleted: jest.Mock };
 
   const HAIRCUT = { id: 1, name: 'Coupe Femme', duration_minutes: 45, active: true };
@@ -50,6 +60,7 @@ describe('ReservationsService', () => {
           insert: jest.fn(async () => ({ identifiers: [{ id: nextId++ }] })),
           update: jest.fn(),
           delete: jest.fn(),
+          query: jest.fn(),
         };
         return fn(manager);
       }),
@@ -90,6 +101,8 @@ describe('ReservationsService', () => {
       findSelectable: jest.fn().mockResolvedValue([]),
       findByCode: jest.fn().mockRejectedValue(new NotFoundException('Code promo invalide ou expiré.')),
       findAll: jest.fn().mockResolvedValue([]),
+      releaseCodes: jest.fn(),
+      reclaimCodes: jest.fn(),
     };
     // Stripe disabled by default, same as a deployment with no keys set —
     // tests that care about the payment path enable it explicitly.
@@ -103,6 +116,8 @@ describe('ReservationsService', () => {
       refund: jest.fn(),
       capture: jest.fn(),
       cancelAuthorization: jest.fn(),
+      markAbandoned: jest.fn(),
+      syncPending: jest.fn(),
     };
     rewardsService = { onReservationsCompleted: jest.fn() };
 
@@ -181,7 +196,7 @@ describe('ReservationsService', () => {
       throw new Error('should not query for overlaps when allowOverlap is true');
     });
     dataSource.transaction.mockImplementationOnce(async (fn) => {
-      const manager = { insert: jest.fn(async () => ({ identifiers: [{ id: 300 }] })) };
+      const manager = { query: jest.fn(), insert: jest.fn(async () => ({ identifiers: [{ id: 300 }] })) };
       return fn(manager);
     });
 
@@ -239,7 +254,7 @@ describe('ReservationsService', () => {
       getMany: jest.fn().mockResolvedValue([{ start_time: '09:00', end_time: '09:30', at_client_home: true, travel_duration_minutes: null }]),
     });
     dataSource.transaction.mockImplementationOnce(async (fn) => {
-      const manager = { insert: jest.fn(async () => ({ identifiers: [{ id: 400 }] })) };
+      const manager = { query: jest.fn(), insert: jest.fn(async () => ({ identifiers: [{ id: 400 }] })) };
       return fn(manager);
     });
 
@@ -265,6 +280,7 @@ describe('ReservationsService', () => {
     const insertCalls: Record<string, unknown>[] = [];
     dataSource.transaction.mockImplementationOnce(async (fn) => {
       const manager = {
+          query: jest.fn(),
         insert: jest.fn(async (_entity: unknown, payload: Record<string, unknown>) => {
           insertCalls.push(payload);
           return { identifiers: [{ id: 100 + insertCalls.length }] };
@@ -296,7 +312,7 @@ describe('ReservationsService', () => {
 
     const insertCalls: Record<string, unknown>[] = [];
     dataSource.transaction.mockImplementationOnce(async (fn) => {
-      const manager = { insert: jest.fn(async (_entity: unknown, payload: Record<string, unknown>) => (insertCalls.push(payload), { identifiers: [{ id: 200 }] })) };
+      const manager = { query: jest.fn(), insert: jest.fn(async (_entity: unknown, payload: Record<string, unknown>) => (insertCalls.push(payload), { identifiers: [{ id: 200 }] })) };
       return fn(manager);
     });
 
@@ -322,7 +338,7 @@ describe('ReservationsService', () => {
 
     const insertCalls: Record<string, unknown>[] = [];
     dataSource.transaction.mockImplementationOnce(async (fn) => {
-      const manager = { insert: jest.fn(async (_entity: unknown, payload: Record<string, unknown>) => (insertCalls.push(payload), { identifiers: [{ id: 201 }] })) };
+      const manager = { query: jest.fn(), insert: jest.fn(async (_entity: unknown, payload: Record<string, unknown>) => (insertCalls.push(payload), { identifiers: [{ id: 201 }] })) };
       return fn(manager);
     });
 
@@ -350,7 +366,7 @@ describe('ReservationsService', () => {
 
     const insertCalls: Record<string, unknown>[] = [];
     dataSource.transaction.mockImplementationOnce(async (fn) => {
-      const manager = { insert: jest.fn(async (_entity: unknown, payload: Record<string, unknown>) => (insertCalls.push(payload), { identifiers: [{ id: 203 }] })) };
+      const manager = { query: jest.fn(), insert: jest.fn(async (_entity: unknown, payload: Record<string, unknown>) => (insertCalls.push(payload), { identifiers: [{ id: 203 }] })) };
       return fn(manager);
     });
 
@@ -375,7 +391,7 @@ describe('ReservationsService', () => {
 
     const insertCalls: Record<string, unknown>[] = [];
     dataSource.transaction.mockImplementationOnce(async (fn) => {
-      const manager = { insert: jest.fn(async (_entity: unknown, payload: Record<string, unknown>) => (insertCalls.push(payload), { identifiers: [{ id: 202 }] })) };
+      const manager = { query: jest.fn(), insert: jest.fn(async (_entity: unknown, payload: Record<string, unknown>) => (insertCalls.push(payload), { identifiers: [{ id: 202 }] })) };
       return fn(manager);
     });
 
@@ -426,6 +442,7 @@ describe('ReservationsService', () => {
       const inserts: { entity: unknown; payload: unknown }[] = [];
       dataSource.transaction.mockImplementationOnce(async (fn) => {
         const manager = {
+          query: jest.fn(),
           insert: jest.fn(async (entity: unknown, payload: unknown) => {
             inserts.push({ entity, payload });
             return { identifiers: [{ id: 200 }] };
@@ -466,7 +483,7 @@ describe('ReservationsService', () => {
       noOverlap();
 
       dataSource.transaction.mockImplementationOnce(async (fn) => {
-        const manager = { insert: jest.fn(async () => ({ identifiers: [{ id: 201 }] })) };
+        const manager = { query: jest.fn(), insert: jest.fn(async () => ({ identifiers: [{ id: 201 }] })) };
         return fn(manager);
       });
 
@@ -837,11 +854,10 @@ describe('ReservationsService', () => {
 
     await service.cancelByGroupId('some-group', 'Empêchement de dernière minute');
 
-    expect(reservationRepo.update).toHaveBeenCalledWith({ group_id: 'some-group' }, { status: 'cancelled' });
-    // Stored on every row in the group, same as the status change above.
+    // One atomic write: status + reason on every live row of the group.
     expect(reservationRepo.update).toHaveBeenCalledWith(
-      { group_id: 'some-group' },
-      { cancellation_reason: 'Empêchement de dernière minute' },
+      { group_id: 'some-group', status: expect.anything() },
+      { status: 'cancelled', cancellation_reason: 'Empêchement de dernière minute' },
     );
     expect(mailService.sendStatusUpdate).toHaveBeenCalledWith(expect.objectContaining({ status: 'cancelled' }));
     expect(pushService.notifyAdmins).toHaveBeenCalledWith(
@@ -919,7 +935,7 @@ describe('ReservationsService', () => {
 
       await service.cancelByGroupId('some-group', 'Empêchement');
 
-      expect(reservationRepo.update).toHaveBeenCalledWith({ group_id: 'some-group' }, { status: 'cancelled' });
+      expect(reservationRepo.update).toHaveBeenCalledWith({ group_id: 'some-group', status: expect.anything() }, expect.objectContaining({ status: 'cancelled' }));
       expect(mailService.sendAdminCancellationNotification).toHaveBeenCalledWith(expect.objectContaining({ paymentRefunded: false }));
     });
 
@@ -1163,6 +1179,7 @@ describe('ReservationsService', () => {
       const inserts: any[] = [];
       dataSource.transaction.mockImplementationOnce(async (fn) => {
         const manager = {
+          query: jest.fn(),
           insert: jest.fn(async (entity: unknown, payload: unknown) => {
             inserts.push({ entity, payload });
             return { identifiers: [{ id: 300 }] };
@@ -1192,6 +1209,7 @@ describe('ReservationsService', () => {
       const inserts: any[] = [];
       dataSource.transaction.mockImplementationOnce(async (fn) => {
         const manager = {
+          query: jest.fn(),
           insert: jest.fn(async (entity: unknown, payload: unknown) => {
             inserts.push({ entity, payload });
             return { identifiers: [{ id: 301 }] };
@@ -1223,6 +1241,7 @@ describe('ReservationsService', () => {
       const inserts: any[] = [];
       dataSource.transaction.mockImplementationOnce(async (fn) => {
         const manager = {
+          query: jest.fn(),
           insert: jest.fn(async (_entity: unknown, payload: unknown) => {
             inserts.push(payload);
             return { identifiers: [{ id: inserts.length + 400 }] };
@@ -1297,6 +1316,59 @@ describe('ReservationsService', () => {
       expect(dataSource.transaction).toHaveBeenCalled();
     });
 
+    describe('online payment already made', () => {
+      const existing = {
+        id: 1,
+        group_id: 'group-1',
+        service_id: 1,
+        client_name: 'Alice',
+        client_email: 'a@example.com',
+        client_phone: '0600000000',
+        reservation_date: '2099-01-01',
+        start_time: '10:00',
+        end_time: '10:45',
+        notes: '',
+        at_client_home: false,
+        client_address: null,
+        promotion_id: null,
+        discount_percent: 0,
+        discount_cents: 0,
+      };
+
+      beforeEach(() => {
+        reservationRepo.findOne.mockResolvedValue(existing);
+        dataSource.query.mockResolvedValue([]);
+        noOverlap();
+        paymentsService.findByGroupId.mockResolvedValue({ status: 'paid', amount_cents: 4500 });
+      });
+
+      it('warns that the amount charged does not follow a change of prestation', async () => {
+        serviceRepo.findOne.mockResolvedValue(MANICURE);
+
+        const result = await service.updateReservation(1, { serviceId: 7 });
+
+        expect(result.paymentWarning).toContain('45');
+        expect(result.paymentWarning).toContain('Stripe');
+      });
+
+      it('stays silent for an edit that does not change the price', async () => {
+        serviceRepo.findOne.mockResolvedValue(HAIRCUT);
+
+        const result = await service.updateReservation(1, { notes: 'Rappeler', clientPhone: '0611111111' });
+
+        expect(result.paymentWarning).toBeNull();
+      });
+
+      it('stays silent when nothing was paid online', async () => {
+        paymentsService.findByGroupId.mockResolvedValue(null);
+        serviceRepo.findOne.mockResolvedValue(MANICURE);
+
+        const result = await service.updateReservation(1, { serviceId: 7 });
+
+        expect(result.paymentWarning).toBeNull();
+      });
+    });
+
     it('applies a new promotion when promotionId is provided', async () => {
       reservationRepo.findOne.mockResolvedValue({
         id: 1,
@@ -1320,7 +1392,7 @@ describe('ReservationsService', () => {
 
       let updatePayload: any = null;
       dataSource.transaction.mockImplementationOnce(async (fn) => {
-        const manager = { update: jest.fn((_entity, _id, payload) => (updatePayload = payload)), delete: jest.fn(), insert: jest.fn() };
+        const manager = { query: jest.fn(), update: jest.fn((_entity, _id, payload) => (updatePayload = payload)), delete: jest.fn(), insert: jest.fn() };
         return fn(manager);
       });
 
@@ -1351,7 +1423,7 @@ describe('ReservationsService', () => {
 
       let updatePayload: any = null;
       dataSource.transaction.mockImplementationOnce(async (fn) => {
-        const manager = { update: jest.fn((_entity, _id, payload) => (updatePayload = payload)), delete: jest.fn(), insert: jest.fn() };
+        const manager = { query: jest.fn(), update: jest.fn((_entity, _id, payload) => (updatePayload = payload)), delete: jest.fn(), insert: jest.fn() };
         return fn(manager);
       });
 
@@ -1382,7 +1454,7 @@ describe('ReservationsService', () => {
 
       let updatePayload: any = null;
       dataSource.transaction.mockImplementationOnce(async (fn) => {
-        const manager = { update: jest.fn((_entity, _id, payload) => (updatePayload = payload)), delete: jest.fn(), insert: jest.fn() };
+        const manager = { query: jest.fn(), update: jest.fn((_entity, _id, payload) => (updatePayload = payload)), delete: jest.fn(), insert: jest.fn() };
         return fn(manager);
       });
 
@@ -1412,7 +1484,7 @@ describe('ReservationsService', () => {
       // returning no OTHER rows, same as noOverlap().
       noOverlap();
 
-      await expect(service.updateReservation(1, {})).resolves.toBeUndefined();
+      await expect(service.updateReservation(1, {})).resolves.toEqual({ paymentWarning: null });
     });
 
     it('throws ConflictException when the edited slot overlaps a different reservation', async () => {
@@ -1463,7 +1535,7 @@ describe('ReservationsService', () => {
         throw new Error('should not query for overlaps when allowOverlap is true');
       });
 
-      await expect(service.updateReservation(1, { startTime: '10:30', allowOverlap: true })).resolves.toBeUndefined();
+      await expect(service.updateReservation(1, { startTime: '10:30', allowOverlap: true })).resolves.toEqual({ paymentWarning: null });
     });
 
     it('replaces reservation_addons when addonIds is provided', async () => {
@@ -1488,6 +1560,7 @@ describe('ReservationsService', () => {
       let insertCall: unknown;
       dataSource.transaction.mockImplementationOnce(async (fn) => {
         const manager = {
+          query: jest.fn(),
           update: jest.fn(),
           delete: jest.fn((...args) => {
             deleteCall = args;
@@ -1526,6 +1599,7 @@ describe('ReservationsService', () => {
       let deleteCalled = false;
       dataSource.transaction.mockImplementationOnce(async (fn) => {
         const manager = {
+          query: jest.fn(),
           update: jest.fn(),
           delete: jest.fn(() => {
             deleteCalled = true;
@@ -1756,6 +1830,282 @@ describe('ReservationsService', () => {
         expect.objectContaining({ name: 'Daughter' }),
       ]) }));
       expect(reservationRepo.update).toHaveBeenCalledWith([10, 11], { reminder_sent: true });
+    });
+  });
+
+  describe('create — personal reward code', () => {
+    it("remembers the code a booking spent, even when the guest also has their own tarif", async () => {
+      const repos: Record<string, unknown> = {
+        [DailyHours.name]: { findOne: jest.fn().mockResolvedValue({ date: '2099-01-01', is_closed: false }) },
+        [DailyHoursRange.name]: { find: jest.fn().mockResolvedValue([{ open_time: '10:00', close_time: '12:00' }]) },
+        [Reservation.name]: { createQueryBuilder: () => ({ select: jest.fn().mockReturnThis(), where: jest.fn().mockReturnThis(), andWhere: jest.fn().mockReturnThis(), getMany: jest.fn().mockResolvedValue([]) }) },
+      };
+      (dataSource as any).getRepository = (entity: { name: string }) => repos[entity.name];
+      serviceRepo.findOne.mockResolvedValue({ ...HAIRCUT, price_cents: 3000 });
+      promotionsService.findSelectable.mockResolvedValue([{ id: 9, discount_percent: 10 }]);
+      promotionsService.findByCode.mockResolvedValue({ id: 42, discount_percent: 0, discount_cents: 500, client_id: 5 });
+      (promotionsService as any).markUsed = jest.fn().mockResolvedValue(true);
+      const inserts: Record<string, unknown>[] = [];
+      dataSource.transaction.mockImplementationOnce(async (fn) =>
+        fn({ query: jest.fn(), insert: jest.fn(async (_e: unknown, payload: Record<string, unknown>) => (inserts.push(payload), { identifiers: [{ id: 1 }] })) }),
+      );
+
+      await service.create(
+        { serviceId: 1, clientName: 'Alice', clientEmail: 'a@e.com', clientPhone: '0600000000', date: '2099-01-01', startTime: '10:00', promotionId: 9, promoCode: 'ABCD2345' } as any,
+        5,
+      );
+
+      expect(inserts[0]).toEqual(expect.objectContaining({ promotion_id: 9, reward_code_id: 42 }));
+    });
+  });
+
+  describe('cancelByGroupId — guards', () => {
+    function mockFirstRow(row: Record<string, unknown>) {
+      dataSource.query.mockImplementation(async (sql: string) => {
+        if (sql.includes('SELECT status')) return [{ client_name: 'Mother', reservation_date: '2099-01-01', start_time: '10:00', ...row }];
+        return [{ client_name: 'Mother', client_email: 'm@e.com', client_phone: '06', start_time: '10:00', end_time: '10:45', service_name: 'Coupe' }];
+      });
+    }
+
+    it('refuses to cancel a booking the admin already refused', async () => {
+      mockFirstRow({ status: 'refused' });
+      await expect(service.cancelByGroupId('g', 'x')).rejects.toBeInstanceOf(BadRequestException);
+      expect(reservationRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('refuses to cancel (and so to refund) once the appointment has started', async () => {
+      mockFirstRow({ status: 'confirmed', reservation_date: '2020-01-01' });
+      paymentsService.findByGroupId.mockResolvedValue({ status: 'paid' });
+
+      await expect(service.cancelByGroupId('g', 'x')).rejects.toBeInstanceOf(BadRequestException);
+      expect(reservationRepo.update).not.toHaveBeenCalled();
+      expect(paymentsService.refund).not.toHaveBeenCalled();
+    });
+
+    it('a second simultaneous cancel does not refund twice', async () => {
+      mockFirstRow({ status: 'confirmed' });
+      reservationRepo.update.mockResolvedValue({ affected: 0 });
+      paymentsService.findByGroupId.mockResolvedValue({ status: 'paid' });
+
+      await expect(service.cancelByGroupId('g', 'x')).rejects.toBeInstanceOf(BadRequestException);
+      expect(paymentsService.refund).not.toHaveBeenCalled();
+      expect(pushService.notifyAdmins).not.toHaveBeenCalled();
+    });
+
+    it('closes the checkout when the client cancels before ever paying', async () => {
+      mockFirstRow({ status: 'pending' });
+      reservationRepo.update.mockResolvedValue({ affected: 1 });
+      paymentsService.findByGroupId.mockResolvedValue({ status: 'pending' });
+
+      await service.cancelByGroupId('g', 'x');
+
+      expect(paymentsService.markAbandoned).toHaveBeenCalledWith('g');
+      expect(paymentsService.refund).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('admin cancellation / deletion — online payment follows', () => {
+    function mockQueries(opts: { current?: string; distinct?: string[]; promotionId?: number; live?: boolean }) {
+      dataSource.query.mockImplementation(async (sql: string) => {
+        if (sql.includes('SELECT DISTINCT status')) return (opts.distinct ?? []).map((status) => ({ status }));
+        if (sql.startsWith('SELECT status')) return [{ status: opts.current }];
+        if (sql.includes('unnest(ARRAY[reward_code_id, promotion_id])')) return opts.promotionId ? [{ promotion_id: opts.promotionId }] : [];
+        if (sql.includes("status NOT IN ('cancelled', 'refused')")) return opts.live ? [{ '?column?': 1 }] : [];
+        if (sql.includes('SELECT id FROM reservations')) return [{ id: 1 }];
+        return [
+          {
+            group_id: 'group-1',
+            client_name: 'Client',
+            client_email: 'c@e.com',
+            reservation_date: '2099-01-01',
+            start_time: '10:00',
+            end_time: '10:45',
+            status: opts.current,
+            promotion_id: opts.promotionId ?? null,
+            at_client_home: false,
+            client_address: null,
+            service_name: 'Coupe',
+          },
+        ];
+      });
+      reservationRepo.update.mockResolvedValue({ affected: 1 });
+      reservationRepo.delete.mockResolvedValue({ affected: 1 });
+    }
+
+    it('updateStatus cancelled releases the hold / refunds, like refused does', async () => {
+      mockQueries({ current: 'confirmed', distinct: ['cancelled'] });
+
+      await expect(service.updateStatus(1, 'cancelled')).resolves.toEqual({ paymentWarning: null });
+
+      expect(paymentsService.cancelAuthorization).toHaveBeenCalledWith('group-1');
+    });
+
+    it('updateGroupStatus cancelled settles the payment too', async () => {
+      mockQueries({ current: 'pending', distinct: ['cancelled'] });
+
+      await service.updateGroupStatus('group-1', 'cancelled');
+
+      expect(paymentsService.cancelAuthorization).toHaveBeenCalledWith('group-1');
+    });
+
+    it('tells the admin when confirming a booking whose checkout was never completed', async () => {
+      mockQueries({ current: 'pending', distinct: ['confirmed'] });
+      paymentsService.capture.mockResolvedValue('unpaid');
+
+      const result = await service.updateStatus(1, 'confirmed');
+
+      expect(result.paymentWarning).toContain('pas finalisé');
+    });
+
+    it('tells the admin when the capture fails', async () => {
+      mockQueries({ current: 'pending', distinct: ['confirmed'] });
+      paymentsService.capture.mockRejectedValue(new Error('expired'));
+
+      const result = await service.updateStatus(1, 'confirmed');
+
+      expect(result.paymentWarning).toContain('Stripe');
+      expect(reservationRepo.update).toHaveBeenCalled();
+    });
+
+    it('tells the admin when the refund fails', async () => {
+      mockQueries({ current: 'confirmed', distinct: ['cancelled'] });
+      paymentsService.cancelAuthorization.mockRejectedValue(new Error('down'));
+
+      const result = await service.updateStatus(1, 'cancelled');
+
+      expect(result.paymentWarning).toContain('Stripe');
+    });
+
+    it('a finished appointment can no longer change status', async () => {
+      mockQueries({ current: 'completed' });
+      await expect(service.updateStatus(1, 'cancelled')).rejects.toBeInstanceOf(BadRequestException);
+      expect(reservationRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('a cancelled or refused appointment cannot be marked completed', async () => {
+      mockQueries({ current: 'cancelled' });
+      await expect(service.updateStatus(1, 'completed')).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('a group containing a finished appointment cannot be cancelled', async () => {
+      mockQueries({ distinct: ['completed'] });
+      await expect(service.updateGroupStatus('group-1', 'cancelled')).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('a cancelled booking gives its personal reward code back', async () => {
+      mockQueries({ current: 'confirmed', distinct: ['cancelled'], promotionId: 42 });
+      await service.updateStatus(1, 'cancelled');
+      expect(promotionsService.releaseCodes).toHaveBeenCalledWith([42], { extendIfExpired: true });
+    });
+
+    it("the client's own cancellation gives the code back without extending it", async () => {
+      dataSource.query.mockImplementation(async (sql: string) => {
+        if (sql.includes('SELECT status')) return [{ status: 'confirmed', client_name: 'A', reservation_date: '2099-01-01', start_time: '10:00' }];
+        if (sql.includes('unnest(ARRAY[reward_code_id, promotion_id])')) return [{ promotion_id: 42 }];
+        return [{ id: 1, client_name: 'A', client_email: 'a@e.com', client_phone: '06', start_time: '10:00', end_time: '10:45', service_name: 'Coupe', reservation_date: '2099-01-01' }];
+      });
+      reservationRepo.update.mockResolvedValue({ affected: 1 });
+
+      await service.cancelByGroupId('g', 'x');
+
+      expect(promotionsService.releaseCodes).toHaveBeenCalledWith([42], { extendIfExpired: false });
+    });
+
+    it('a revived booking spends its reward code again', async () => {
+      mockQueries({ current: 'cancelled', distinct: ['confirmed'], promotionId: 42 });
+      await service.updateStatus(1, 'confirmed');
+      expect(promotionsService.reclaimCodes).toHaveBeenCalledWith([42]);
+    });
+
+    it('deleting an upcoming booking releases the hold once no live booking is left in the group', async () => {
+      mockQueries({ current: 'confirmed', live: false, promotionId: 42 });
+
+      await service.remove(1);
+
+      expect(paymentsService.cancelAuthorization).toHaveBeenCalledWith('group-1');
+      expect(promotionsService.releaseCodes).toHaveBeenCalledWith([42], { extendIfExpired: true });
+    });
+
+    it('deleting one guest leaves the group payment alone while others are still live', async () => {
+      mockQueries({ current: 'confirmed', live: true });
+
+      await service.remove(1);
+
+      expect(paymentsService.cancelAuthorization).not.toHaveBeenCalled();
+    });
+
+    it('deleting a finished booking never touches the payment', async () => {
+      mockQueries({ current: 'completed', live: false });
+
+      await service.remove(1);
+
+      expect(paymentsService.cancelAuthorization).not.toHaveBeenCalled();
+      expect(paymentsService.refund).not.toHaveBeenCalled();
+    });
+
+    it('removeGroup releases the payment of an upcoming group', async () => {
+      mockQueries({ current: 'pending', live: false });
+
+      await service.removeGroup('group-1');
+
+      expect(paymentsService.cancelAuthorization).toHaveBeenCalledWith('group-1');
+    });
+
+    it('surfaces a failed release when deleting', async () => {
+      mockQueries({ current: 'confirmed', live: false });
+      paymentsService.cancelAuthorization.mockRejectedValue(new Error('down'));
+
+      const result = await service.remove(1);
+
+      expect(result.paymentWarning).toContain('Stripe');
+    });
+  });
+
+  describe('findByGroupId — canCancel', () => {
+    function mockGroup(status: string, date: string) {
+      dataSource.query.mockResolvedValue([{ client_name: 'A', client_email: 'a@e.com', reservation_date: date, start_time: '10:00', end_time: '10:45', status, service_name: 'Coupe', at_client_home: false, client_address: null, paid_on_site: false }]);
+    }
+
+    it('is true for an upcoming live booking', async () => {
+      mockGroup('confirmed', '2099-01-01');
+      expect((await service.findByGroupId('g')).canCancel).toBe(true);
+    });
+
+    it('is false once the appointment is past, or when not live', async () => {
+      mockGroup('confirmed', '2020-01-01');
+      expect((await service.findByGroupId('g')).canCancel).toBe(false);
+      mockGroup('refused', '2099-01-01');
+      expect((await service.findByGroupId('g')).canCancel).toBe(false);
+    });
+  });
+
+  describe('dispatchAbandonedCheckouts', () => {
+    beforeEach(() => {
+      dataSource.query.mockImplementation(async (sql: string) => {
+        if (sql.includes('JOIN payments')) return [{ group_id: 'group-1' }];
+        return [{ client_name: 'A', client_email: 'a@e.com', reservation_date: '2099-01-01', start_time: '10:00', end_time: '10:45', at_client_home: false, client_address: null, service_name: 'Coupe', id: 1 }];
+      });
+      reservationRepo.update.mockResolvedValue({ affected: 1 });
+    });
+
+    it('releases a booking whose checkout is still unpaid, and tells the client', async () => {
+      paymentsService.findByGroupId.mockResolvedValue({ status: 'pending' });
+
+      await service.dispatchAbandonedCheckouts();
+
+      expect(paymentsService.markAbandoned).toHaveBeenCalledWith('group-1');
+      expect(reservationRepo.update).toHaveBeenCalledWith({ group_id: 'group-1', status: 'pending' }, expect.objectContaining({ status: 'cancelled' }));
+      expect(mailService.sendStatusUpdate).toHaveBeenCalledWith(expect.objectContaining({ status: 'cancelled' }));
+    });
+
+    it('keeps a booking that was in fact paid (missed webhook found by the sync)', async () => {
+      paymentsService.findByGroupId.mockResolvedValue({ status: 'authorized' });
+
+      await service.dispatchAbandonedCheckouts();
+
+      expect(paymentsService.syncPending).toHaveBeenCalledWith('group-1');
+      expect(paymentsService.markAbandoned).not.toHaveBeenCalled();
+      expect(reservationRepo.update).not.toHaveBeenCalled();
     });
   });
 });

@@ -249,13 +249,13 @@ export default function ManageReservation() {
               ))}
             </ul>
 
-            {(reservation.status === 'pending' || reservation.status === 'confirmed') && !showCancelForm && (
+            {reservation.canCancel && !showCancelForm && (
               <button type="button" className="btn btn-outline-danger" onClick={() => setShowCancelForm(true)}>
                 Annuler mon rendez-vous
               </button>
             )}
 
-            {(reservation.status === 'pending' || reservation.status === 'confirmed') && showCancelForm && (
+            {reservation.canCancel && showCancelForm && (
               <div className="modal-overlay is-sheet" onClick={closeCancelForm}>
                 <form
                   className="modal-card modal-sheet"
