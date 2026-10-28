@@ -1013,7 +1013,9 @@ export class ReservationsService {
 
   // Single-use reward codes follow the booking that used them: cancelled,
   // refused or deleted → back to their owner; revived → spent again.
-  private async syncPromotionCodes(reservationIds: number[], status: ReservationStatus): Promise<void> {
+  // byClient: the client's own doing (they cancelled, or never finished
+  // paying) — see PromotionsService.releaseCodes for why that matters.
+  private async syncPromotionCodes(reservationIds: number[], status: ReservationStatus, opts: { byClient?: boolean } = {}): Promise<void> {
     try {
       const ids = reservationIds.filter((id) => typeof id === 'number');
       if (ids.length === 0) return;
@@ -1024,7 +1026,7 @@ export class ReservationsService {
         [ids],
       );
       const promotionIds = rows.map((r) => r.promotion_id).filter((id): id is number => typeof id === 'number');
-      if (status === 'cancelled' || status === 'refused') await this.promotionsService.releaseCodes(promotionIds);
+      if (status === 'cancelled' || status === 'refused') await this.promotionsService.releaseCodes(promotionIds, { extendIfExpired: !opts.byClient });
       else await this.promotionsService.reclaimCodes(promotionIds);
     } catch (err) {
       this.logger.error(`Promotion code sync failed: ${(err as Error).message}`);
@@ -1080,7 +1082,7 @@ export class ReservationsService {
 
     let paymentWarning: string | null = null;
     if (row && (row.status === 'pending' || row.status === 'confirmed')) {
-      await this.promotionsService.releaseCodes([row.promotion_id, row.reward_code_id].filter((id): id is number => typeof id === 'number'));
+      await this.promotionsService.releaseCodes([row.promotion_id, row.reward_code_id].filter((id): id is number => typeof id === 'number'), { extendIfExpired: true });
       if (row.group_id) paymentWarning = await this.settlePaymentAfterDelete(row.group_id);
       await this.mailService.sendStatusUpdate({
         clientName: row.client_name,
@@ -1113,7 +1115,7 @@ export class ReservationsService {
   // `status`: the online payment, the reward codes, loyalty points and the
   // email to the client. settlePayment is off when the caller handles the
   // payment itself (client cancellation reports the outcome to the admin).
-  private async afterGroupStatusChange(groupId: string, status: ReservationStatus, opts: { settlePayment: boolean }): Promise<string | null> {
+  private async afterGroupStatusChange(groupId: string, status: ReservationStatus, opts: { settlePayment: boolean; byClient?: boolean }): Promise<string | null> {
     const paymentWarning = opts.settlePayment ? await this.settlePaymentForGroupStatus(groupId, status) : null;
 
     const rows: {
@@ -1133,7 +1135,7 @@ export class ReservationsService {
     );
 
     const ids: { id: number }[] = await this.dataSource.query(`SELECT id FROM reservations WHERE group_id = $1`, [groupId]);
-    await this.syncPromotionCodes(ids.map((r) => r.id), status);
+    await this.syncPromotionCodes(ids.map((r) => r.id), status, { byClient: opts.byClient });
     if (status === 'completed') {
       await this.rewardsService.onReservationsCompleted(ids.map((r) => r.id));
     }
@@ -1183,7 +1185,7 @@ export class ReservationsService {
     const [primary] = rows;
     if (primary && (primary.status === 'pending' || primary.status === 'confirmed')) {
       const promotionIds = rows.filter((r) => r.status === 'pending' || r.status === 'confirmed').flatMap((r) => [r.promotion_id, r.reward_code_id]).filter((id): id is number => typeof id === 'number');
-      await this.promotionsService.releaseCodes([...new Set(promotionIds)]);
+      await this.promotionsService.releaseCodes([...new Set(promotionIds)], { extendIfExpired: true });
       paymentWarning = await this.settlePaymentAfterDelete(groupId);
       await this.mailService.sendStatusUpdate({
         clientName: primary.client_name,
@@ -1310,7 +1312,7 @@ export class ReservationsService {
     if (!claimed.affected) {
       throw new BadRequestException('Ce rendez-vous est déjà annulé.');
     }
-    await this.afterGroupStatusChange(groupId, 'cancelled', { settlePayment: false });
+    await this.afterGroupStatusChange(groupId, 'cancelled', { settlePayment: false, byClient: true });
 
     // null = there was never an online payment to refund (Stripe disabled,
     // the client chose "payer sur place", or abandoned checkout without
@@ -1398,7 +1400,7 @@ export class ReservationsService {
 
         await this.paymentsService.markAbandoned(groupId);
         const released = await this.reservationRepo.update({ group_id: groupId, status: 'pending' }, { status: 'cancelled', cancellation_reason: 'Paiement en ligne non finalisé' });
-        if (released.affected) await this.afterGroupStatusChange(groupId, 'cancelled', { settlePayment: false });
+        if (released.affected) await this.afterGroupStatusChange(groupId, 'cancelled', { settlePayment: false, byClient: true });
       } catch (err) {
         this.logger.error(`Abandoned checkout release failed for group ${groupId}: ${(err as Error).message}`);
       }

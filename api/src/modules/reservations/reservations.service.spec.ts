@@ -1995,7 +1995,20 @@ describe('ReservationsService', () => {
     it('a cancelled booking gives its personal reward code back', async () => {
       mockQueries({ current: 'confirmed', distinct: ['cancelled'], promotionId: 42 });
       await service.updateStatus(1, 'cancelled');
-      expect(promotionsService.releaseCodes).toHaveBeenCalledWith([42]);
+      expect(promotionsService.releaseCodes).toHaveBeenCalledWith([42], { extendIfExpired: true });
+    });
+
+    it("the client's own cancellation gives the code back without extending it", async () => {
+      dataSource.query.mockImplementation(async (sql: string) => {
+        if (sql.includes('SELECT status')) return [{ status: 'confirmed', client_name: 'A', reservation_date: '2099-01-01', start_time: '10:00' }];
+        if (sql.includes('unnest(ARRAY[reward_code_id, promotion_id])')) return [{ promotion_id: 42 }];
+        return [{ id: 1, client_name: 'A', client_email: 'a@e.com', client_phone: '06', start_time: '10:00', end_time: '10:45', service_name: 'Coupe', reservation_date: '2099-01-01' }];
+      });
+      reservationRepo.update.mockResolvedValue({ affected: 1 });
+
+      await service.cancelByGroupId('g', 'x');
+
+      expect(promotionsService.releaseCodes).toHaveBeenCalledWith([42], { extendIfExpired: false });
     });
 
     it('a revived booking spends its reward code again', async () => {
@@ -2010,7 +2023,7 @@ describe('ReservationsService', () => {
       await service.remove(1);
 
       expect(paymentsService.cancelAuthorization).toHaveBeenCalledWith('group-1');
-      expect(promotionsService.releaseCodes).toHaveBeenCalledWith([42]);
+      expect(promotionsService.releaseCodes).toHaveBeenCalledWith([42], { extendIfExpired: true });
     });
 
     it('deleting one guest leaves the group payment alone while others are still live', async () => {

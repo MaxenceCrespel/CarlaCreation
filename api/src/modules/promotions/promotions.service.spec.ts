@@ -33,8 +33,13 @@ describe('PromotionsService', () => {
     expect(qb.where).toHaveBeenCalledWith(expect.stringContaining('client_id IS NOT NULL AND used_at IS NOT NULL'), { ids: [4, 5] });
   });
 
-  it('releaseCodes extends a code that expired while the booking was pending', async () => {
+  it("releaseCodes never extends a code on the client's own cancellation", async () => {
     await service.releaseCodes([4]);
+    expect(qb.set).toHaveBeenCalledWith({ used_at: null });
+  });
+
+  it('releaseCodes extends a code that expired when the salon cancelled', async () => {
+    await service.releaseCodes([4], { extendIfExpired: true });
     const { expires_at } = qb.set.mock.calls[0][0];
     expect(expires_at()).toContain('now() + interval');
   });
