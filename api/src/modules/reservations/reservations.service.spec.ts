@@ -5,6 +5,8 @@ import { ReservationsService } from './reservations.service';
 import { Reservation } from '../../database/entities/reservation.entity';
 import { Service } from '../../database/entities/service.entity';
 import { ServiceAddon } from '../../database/entities/service-addon.entity';
+import { DailyHours } from '../../database/entities/daily-hours.entity';
+import { DailyHoursRange } from '../../database/entities/daily-hours-range.entity';
 import { MailService } from '../mail/mail.service';
 import { SettingsService } from '../settings/settings.service';
 import { DistanceService } from '../distance/distance.service';
@@ -1831,6 +1833,32 @@ describe('ReservationsService', () => {
     });
   });
 
+  describe('create — personal reward code', () => {
+    it("remembers the code a booking spent, even when the guest also has their own tarif", async () => {
+      const repos: Record<string, unknown> = {
+        [DailyHours.name]: { findOne: jest.fn().mockResolvedValue({ date: '2099-01-01', is_closed: false }) },
+        [DailyHoursRange.name]: { find: jest.fn().mockResolvedValue([{ open_time: '10:00', close_time: '12:00' }]) },
+        [Reservation.name]: { createQueryBuilder: () => ({ select: jest.fn().mockReturnThis(), where: jest.fn().mockReturnThis(), andWhere: jest.fn().mockReturnThis(), getMany: jest.fn().mockResolvedValue([]) }) },
+      };
+      (dataSource as any).getRepository = (entity: { name: string }) => repos[entity.name];
+      serviceRepo.findOne.mockResolvedValue({ ...HAIRCUT, price_cents: 3000 });
+      promotionsService.findSelectable.mockResolvedValue([{ id: 9, discount_percent: 10 }]);
+      promotionsService.findByCode.mockResolvedValue({ id: 42, discount_percent: 0, discount_cents: 500, client_id: 5 });
+      (promotionsService as any).markUsed = jest.fn().mockResolvedValue(true);
+      const inserts: Record<string, unknown>[] = [];
+      dataSource.transaction.mockImplementationOnce(async (fn) =>
+        fn({ query: jest.fn(), insert: jest.fn(async (_e: unknown, payload: Record<string, unknown>) => (inserts.push(payload), { identifiers: [{ id: 1 }] })) }),
+      );
+
+      await service.create(
+        { serviceId: 1, clientName: 'Alice', clientEmail: 'a@e.com', clientPhone: '0600000000', date: '2099-01-01', startTime: '10:00', promotionId: 9, promoCode: 'ABCD2345' } as any,
+        5,
+      );
+
+      expect(inserts[0]).toEqual(expect.objectContaining({ promotion_id: 9, reward_code_id: 42 }));
+    });
+  });
+
   describe('cancelByGroupId — guards', () => {
     function mockFirstRow(row: Record<string, unknown>) {
       dataSource.query.mockImplementation(async (sql: string) => {
@@ -1881,7 +1909,7 @@ describe('ReservationsService', () => {
       dataSource.query.mockImplementation(async (sql: string) => {
         if (sql.includes('SELECT DISTINCT status')) return (opts.distinct ?? []).map((status) => ({ status }));
         if (sql.startsWith('SELECT status')) return [{ status: opts.current }];
-        if (sql.includes('SELECT DISTINCT promotion_id')) return opts.promotionId ? [{ promotion_id: opts.promotionId }] : [];
+        if (sql.includes('unnest(ARRAY[reward_code_id, promotion_id])')) return opts.promotionId ? [{ promotion_id: opts.promotionId }] : [];
         if (sql.includes("status NOT IN ('cancelled', 'refused')")) return opts.live ? [{ '?column?': 1 }] : [];
         if (sql.includes('SELECT id FROM reservations')) return [{ id: 1 }];
         return [

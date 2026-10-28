@@ -333,13 +333,17 @@ export class ReservationsService {
     // took the code (not the ones with their own rate), in order, never
     // below zero for any one prestation.
     let remainingFixedCents = codePromotion?.discount_cents ?? 0;
+    // Remembered on each row that took a personal code, so cancelling the
+    // booking can give exactly that code back.
+    const personalCodeId = codePromotion?.client_id != null ? codePromotion.id : null;
     const guestDiscounts = discounts.map((d, i) => {
-      if (remainingFixedCents <= 0 || !d.codeApplied) return { ...d, discountCents: 0 };
+      const rewardCodeId = d.codeApplied ? personalCodeId : null;
+      if (remainingFixedCents <= 0 || !d.codeApplied) return { ...d, rewardCodeId, discountCents: 0 };
       const addonsCents = addonsPerGuest[i].reduce((a, addon) => a + addon.extra_price_cents, 0);
       const net = Math.round((services[i].price_cents + addonsCents) * (1 - d.discountPercent / 100));
       const applied = Math.min(remainingFixedCents, net);
       remainingFixedCents -= applied;
-      return { ...d, discountCents: applied };
+      return { ...d, rewardCodeId, discountCents: applied };
     });
 
     // A personal reward code is consumed by the booking that uses it —
@@ -597,7 +601,7 @@ export class ReservationsService {
     // Aligned with `guests` by index — each guest's own resolved discount,
     // see resolveGuestDiscounts (never a single value blanket-applied to
     // the whole group).
-    guestDiscounts: { promotionId: number | null; discountPercent: number; discountCents?: number }[],
+    guestDiscounts: { promotionId: number | null; discountPercent: number; discountCents?: number; rewardCodeId?: number | null }[],
     common: {
       date: string;
       startTime: string;
@@ -656,6 +660,7 @@ export class ReservationsService {
           travel_duration_minutes: common.travelDurationMinutes,
           travel_fee_cents: common.travelFeeCents,
           promotion_id: guestDiscounts[i].promotionId,
+          reward_code_id: guestDiscounts[i].rewardCodeId ?? null,
           discount_percent: guestDiscounts[i].discountPercent,
           discount_cents: guestDiscounts[i].discountCents ?? 0,
           client_id: i === 0 ? common.primaryClientId : null,
@@ -1012,8 +1017,10 @@ export class ReservationsService {
     try {
       const ids = reservationIds.filter((id) => typeof id === 'number');
       if (ids.length === 0) return;
+      // promotion_id covers bookings made before reward_code_id existed;
+      // rates (no owner) are ignored by releaseCodes/reclaimCodes anyway.
       const rows: { promotion_id?: number | null }[] = await this.dataSource.query(
-        `SELECT DISTINCT promotion_id FROM reservations WHERE id = ANY($1) AND promotion_id IS NOT NULL`,
+        `SELECT DISTINCT unnest(ARRAY[reward_code_id, promotion_id]) AS promotion_id FROM reservations WHERE id = ANY($1)`,
         [ids],
       );
       const promotionIds = rows.map((r) => r.promotion_id).filter((id): id is number => typeof id === 'number');
@@ -1054,11 +1061,12 @@ export class ReservationsService {
       end_time: string;
       status: ReservationStatus;
       promotion_id?: number | null;
+      reward_code_id?: number | null;
       service_name: string;
       at_client_home: boolean;
       client_address: string | null;
     }[] = await this.dataSource.query(
-      `SELECT r.group_id, r.client_name, r.client_email, r.reservation_date, r.start_time, r.end_time, r.status, r.promotion_id,
+      `SELECT r.group_id, r.client_name, r.client_email, r.reservation_date, r.start_time, r.end_time, r.status, r.promotion_id, r.reward_code_id,
               r.at_client_home, r.client_address, s.name AS service_name
        FROM reservations r JOIN services s ON s.id = r.service_id WHERE r.id = $1`,
       [id],
@@ -1072,7 +1080,7 @@ export class ReservationsService {
 
     let paymentWarning: string | null = null;
     if (row && (row.status === 'pending' || row.status === 'confirmed')) {
-      if (typeof row.promotion_id === 'number') await this.promotionsService.releaseCodes([row.promotion_id]);
+      await this.promotionsService.releaseCodes([row.promotion_id, row.reward_code_id].filter((id): id is number => typeof id === 'number'));
       if (row.group_id) paymentWarning = await this.settlePaymentAfterDelete(row.group_id);
       await this.mailService.sendStatusUpdate({
         clientName: row.client_name,
@@ -1155,11 +1163,12 @@ export class ReservationsService {
       end_time: string;
       status: ReservationStatus;
       promotion_id?: number | null;
+      reward_code_id?: number | null;
       service_name: string;
       at_client_home: boolean;
       client_address: string | null;
     }[] = await this.dataSource.query(
-      `SELECT r.client_name, r.client_email, r.reservation_date, r.start_time, r.end_time, r.status, r.promotion_id,
+      `SELECT r.client_name, r.client_email, r.reservation_date, r.start_time, r.end_time, r.status, r.promotion_id, r.reward_code_id,
               r.at_client_home, r.client_address, s.name AS service_name
        FROM reservations r JOIN services s ON s.id = r.service_id WHERE r.group_id = $1 ORDER BY r.start_time ASC`,
       [groupId],
@@ -1173,8 +1182,8 @@ export class ReservationsService {
     let paymentWarning: string | null = null;
     const [primary] = rows;
     if (primary && (primary.status === 'pending' || primary.status === 'confirmed')) {
-      const promotionIds = rows.filter((r) => r.status === 'pending' || r.status === 'confirmed').map((r) => r.promotion_id).filter((id): id is number => typeof id === 'number');
-      await this.promotionsService.releaseCodes(promotionIds);
+      const promotionIds = rows.filter((r) => r.status === 'pending' || r.status === 'confirmed').flatMap((r) => [r.promotion_id, r.reward_code_id]).filter((id): id is number => typeof id === 'number');
+      await this.promotionsService.releaseCodes([...new Set(promotionIds)]);
       paymentWarning = await this.settlePaymentAfterDelete(groupId);
       await this.mailService.sendStatusUpdate({
         clientName: primary.client_name,

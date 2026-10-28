@@ -212,6 +212,7 @@ CREATE TABLE
         travel_fee_cents INTEGER,
         client_id INTEGER REFERENCES clients (id) ON DELETE SET NULL,
         promotion_id INTEGER REFERENCES promotions (id) ON DELETE SET NULL,
+        reward_code_id INTEGER REFERENCES promotions (id) ON DELETE SET NULL,
         discount_percent INTEGER NOT NULL DEFAULT 0,
         discount_cents INTEGER NOT NULL DEFAULT 0,
         cancellation_reason TEXT,
@@ -422,7 +423,8 @@ VALUES
     (1786800000000, 'AddPromotionOwnerAndUsage1786800000000'),
     (1786900000000, 'AddPointsLoyaltyAndReferral1786900000000'),
     (1787000000000, 'AddAccountLifecycle1787000000000'),
-    (1787100000000, 'AddClientFirstAndLastName1787100000000');
+    (1787100000000, 'AddClientFirstAndLastName1787100000000'),
+    (1787300000000, 'AddReservationRewardCode1787300000000');
 
 -- Admin account — username "carla", password "Carla0303!" (bcrypt, cost 12).
 -- Change this password after first login in a real deployment.

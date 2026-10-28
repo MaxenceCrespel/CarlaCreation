@@ -67,7 +67,9 @@ export class PromotionsService {
     await this.promotionRepo
       .createQueryBuilder()
       .update(Promotion)
-      .set({ used_at: null })
+      // A code that ran out while the booking was pending would come back
+      // already dead: the client must not lose their reward to our cancellation.
+      .set({ used_at: null, expires_at: () => `CASE WHEN expires_at IS NOT NULL AND expires_at < now() THEN now() + interval '1 month' ELSE expires_at END` })
       .where('id IN (:...ids) AND client_id IS NOT NULL AND used_at IS NOT NULL', { ids: promotionIds })
       .execute();
   }

@@ -29,8 +29,14 @@ describe('PromotionsService', () => {
 
   it('releaseCodes gives back only personal, spent codes', async () => {
     await service.releaseCodes([4, 5]);
-    expect(qb.set).toHaveBeenCalledWith({ used_at: null });
+    expect(qb.set).toHaveBeenCalledWith(expect.objectContaining({ used_at: null }));
     expect(qb.where).toHaveBeenCalledWith(expect.stringContaining('client_id IS NOT NULL AND used_at IS NOT NULL'), { ids: [4, 5] });
+  });
+
+  it('releaseCodes extends a code that expired while the booking was pending', async () => {
+    await service.releaseCodes([4]);
+    const { expires_at } = qb.set.mock.calls[0][0];
+    expect(expires_at()).toContain('now() + interval');
   });
 
   it('reclaimCodes spends again only personal, unspent codes', async () => {
