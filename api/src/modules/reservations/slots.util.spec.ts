@@ -64,6 +64,12 @@ describe('isValidDateString', () => {
 describe('getAvailableSlots', () => {
   const FUTURE_DATE = '2099-01-01'; // always "in the future" so past-time exclusion never kicks in
 
+  it('returns no slots for a past day even if its opening hours are still set', async () => {
+    const dataSource = fakeDataSource({ isClosed: false, ranges: [{ open_time: '10:00', close_time: '12:00' }] });
+    const { slots } = await getAvailableSlots(dataSource, '2020-01-01', 30);
+    expect(slots).toEqual([]);
+  });
+
   it('returns no slots when the day is closed', async () => {
     const dataSource = fakeDataSource({ isClosed: true, ranges: [] });
     const { slots } = await getAvailableSlots(dataSource, FUTURE_DATE, 30);

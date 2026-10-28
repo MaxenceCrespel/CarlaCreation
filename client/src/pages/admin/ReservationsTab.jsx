@@ -533,7 +533,7 @@ function EditReservationModal({ reservation, onClose, onSaved }) {
 
     setSaving(true);
     try {
-      await apiFetch(`/reservations/${reservation.id}`, {
+      const saved = await apiFetch(`/reservations/${reservation.id}`, {
         method: 'PATCH',
         body: {
           serviceId: Number(form.serviceId),
@@ -550,7 +550,8 @@ function EditReservationModal({ reservation, onClose, onSaved }) {
           promotionId: form.promotionId ? Number(form.promotionId) : null,
         },
       });
-      showToast('Réservation modifiée.', 'success');
+      // A payment warning stays on screen: it asks her to act on Stripe.
+      showToast(saved?.paymentWarning || 'Réservation modifiée.', saved?.paymentWarning ? 'error' : 'success');
       onSaved();
     } catch (err) {
       setFeedback(err.message);
@@ -1063,9 +1064,9 @@ export default function ReservationsTab() {
 
   async function updateStatus(id, status) {
     try {
-      await apiFetch(`/reservations/${id}/status`, { method: 'PATCH', body: { status } });
+      const res = await apiFetch(`/reservations/${id}/status`, { method: 'PATCH', body: { status } });
       setReservations((rows) => rows.map((r) => (r.id === id ? { ...r, status } : r)));
-      showToast('Statut mis à jour.', 'success');
+      showToast(res?.paymentWarning || 'Statut mis à jour.', res?.paymentWarning ? 'error' : 'success');
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -1089,13 +1090,13 @@ export default function ReservationsTab() {
     setDeleting(true);
     try {
       if (deleteTarget.kind === 'single') {
-        await apiFetch(`/reservations/${deleteTarget.id}`, { method: 'DELETE' });
+        const res = await apiFetch(`/reservations/${deleteTarget.id}`, { method: 'DELETE' });
         setReservations((rows) => rows.filter((r) => r.id !== deleteTarget.id));
-        showToast('Réservation supprimée.', 'success');
+        showToast(res?.paymentWarning || 'Réservation supprimée.', res?.paymentWarning ? 'error' : 'success');
       } else {
-        await apiFetch(`/reservations/group/${deleteTarget.groupId}`, { method: 'DELETE' });
+        const res = await apiFetch(`/reservations/group/${deleteTarget.groupId}`, { method: 'DELETE' });
         setReservations((rows) => rows.filter((r) => r.group_id !== deleteTarget.groupId));
-        showToast('Groupe supprimé.', 'success');
+        showToast(res?.paymentWarning || 'Groupe supprimé.', res?.paymentWarning ? 'error' : 'success');
       }
       setDeleteTarget(null);
     } catch (err) {
@@ -1132,9 +1133,9 @@ export default function ReservationsTab() {
       return;
     }
     try {
-      await apiFetch(`/reservations/group/${groupId}/status`, { method: 'PATCH', body: { status: 'refused' } });
+      const res = await apiFetch(`/reservations/group/${groupId}/status`, { method: 'PATCH', body: { status: 'refused' } });
       setReservations((rows) => rows.map((r) => (r.group_id === groupId ? { ...r, status: 'refused' } : r)));
-      showToast('Groupe refusé.', 'success');
+      showToast(res?.paymentWarning || 'Groupe refusé.', res?.paymentWarning ? 'error' : 'success');
     } catch (err) {
       showToast(err.message, 'error');
     }

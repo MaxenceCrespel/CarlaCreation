@@ -82,6 +82,8 @@ export async function getAvailableSlots(
   defaultBufferMinutes = candidateBufferMinutes,
 ): Promise<AvailableSlotsResult> {
   if (!isValidDateString(dateStr)) return { slots: [], tooFarForAnyOpenRange: false };
+  // A past day keeps its opening hours in daily_hours: never bookable.
+  if (dateStr < localDateString(new Date())) return { slots: [], tooFarForAnyOpenRange: false };
 
   const hours = await getEffectiveHoursForDate(dataSource, dateStr);
   if (hours.isClosed || hours.ranges.length === 0) return { slots: [], tooFarForAnyOpenRange: false };

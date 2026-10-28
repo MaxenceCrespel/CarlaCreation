@@ -74,6 +74,12 @@ interface ReservationWithServiceRow {
   payment_amount_cents: number | null;
 }
 
+// Stripe closes the checkout after this long, and a booking whose online
+// payment was never completed is released shortly after (see
+// releaseAbandonedCheckouts) — otherwise it would block its slot forever.
+const CHECKOUT_LIFETIME_MINUTES = 60;
+const ABANDONED_GRACE_MINUTES = 15;
+
 interface ReminderCandidateRow {
   id: number;
   group_id: string | null;
@@ -369,6 +375,13 @@ export class ReservationsService {
         travelDurationMinutes: travel.durationMinutes,
         travelFeeCents: travel.feeCents,
         primaryClientId: loggedInClientId,
+      }, async () => {
+        // Re-checked under the per-day lock (see insertGroup): two clients
+        // validating the same slot at the same instant can't both pass it.
+        const { slots } = await getAvailableSlots(this.dataSource, dto.date, totalDuration, atClientHome, candidateBufferMinutes, defaultBufferMinutes);
+        if (!slots.includes(dto.startTime)) {
+          throw new ConflictException("Ce créneau n'est plus disponible. Merci d'en choisir un autre.");
+        }
       });
     } catch (err) {
       if (consumedPersonalCodeId !== null) await this.promotionsService.releaseUse(consumedPersonalCodeId);
@@ -388,6 +401,7 @@ export class ReservationsService {
           amountCents: totalCents,
           description: `Réservation — ${siteConfig.siteName}`,
           customerEmail: dto.clientEmail,
+          expiresAt: Math.floor(Date.now() / 1000) + CHECKOUT_LIFETIME_MINUTES * 60,
           successUrl: `${config.PUBLIC_ORIGIN}/mon-rendez-vous/${result.groupId}?paiement=reussi`,
           cancelUrl: `${config.PUBLIC_ORIGIN}/mon-rendez-vous/${result.groupId}?paiement=annule`,
         });
@@ -463,26 +477,6 @@ export class ReservationsService {
     const endMin = startMin + totalDuration;
     const candidate = effectiveInterval(startMin, endMin, atClientHome, candidateBufferMinutes);
 
-    // allowOverlap is the admin's deliberate call (e.g. booking a haircut
-    // during a colour's processing time) — skip the check entirely rather
-    // than trying to guess which overlaps are "safe".
-    if (!dto.allowOverlap) {
-      const existing = await this.reservationRepo
-        .createQueryBuilder('r')
-        .select(['r.start_time', 'r.end_time', 'r.at_client_home', 'r.travel_duration_minutes'])
-        .where('r.reservation_date = :date', { date: dto.date })
-        .andWhere('r.status NOT IN (:...excluded)', { excluded: ['cancelled', 'refused'] })
-        .getMany();
-
-      const overlaps = existing.some((r) => {
-        const busy = effectiveInterval(toMinutes(r.start_time), toMinutes(r.end_time), r.at_client_home, r.travel_duration_minutes ?? defaultBufferMinutes);
-        return intervalsOverlap(candidate, busy);
-      });
-      if (overlaps) {
-        throw new ConflictException('Ce créneau chevauche une réservation existante (ou son temps de trajet).');
-      }
-    }
-
     const status = dto.status || 'confirmed';
     const guestDiscounts = await this.resolveAdminGuestDiscounts(guests);
 
@@ -499,7 +493,12 @@ export class ReservationsService {
       travelDurationMinutes: travel.durationMinutes,
       travelFeeCents: travel.feeCents,
       primaryClientId: null,
-    });
+    },
+      // allowOverlap is the admin's deliberate call (e.g. booking a haircut
+      // during a colour's processing time) — skip the check entirely rather
+      // than trying to guess which overlaps are "safe".
+      dto.allowOverlap ? undefined : () => this.assertNoOverlap(dto.date, candidate, defaultBufferMinutes),
+    );
 
     // A manual booking is usually entered as already-confirmed, so send the
     // matching email directly instead of a "request received" one.
@@ -527,6 +526,26 @@ export class ReservationsService {
     }
 
     return result;
+  }
+
+  // Throws when `candidate` collides with any live reservation that day
+  // (or its travel time) — excludeId lets an edit ignore its own row.
+  private async assertNoOverlap(date: string, candidate: { start: number; end: number }, defaultBufferMinutes: number, excludeId?: number): Promise<void> {
+    const query = this.reservationRepo
+      .createQueryBuilder('r')
+      .select(['r.start_time', 'r.end_time', 'r.at_client_home', 'r.travel_duration_minutes'])
+      .where('r.reservation_date = :date', { date })
+      .andWhere('r.status NOT IN (:...excluded)', { excluded: ['cancelled', 'refused'] });
+    if (excludeId !== undefined) query.andWhere('r.id != :id', { id: excludeId });
+    const others = await query.getMany();
+
+    const overlaps = others.some((r) => {
+      const busy = effectiveInterval(toMinutes(r.start_time), toMinutes(r.end_time), r.at_client_home, r.travel_duration_minutes ?? defaultBufferMinutes);
+      return intervalsOverlap(candidate, busy);
+    });
+    if (overlaps) {
+      throw new ConflictException('Ce créneau chevauche une réservation existante (ou son temps de trajet).');
+    }
   }
 
   private async resolveServices(serviceIds: number[], opts: { activeOnly: boolean }): Promise<Service[]> {
@@ -597,12 +616,20 @@ export class ReservationsService {
       // "fiche" matching stays a deliberate, per-person decision.
       primaryClientId: number | null;
     },
+    // Runs inside the transaction, once the day is locked: the last word on
+    // whether the slot is still free.
+    guard?: () => Promise<void>,
   ): Promise<{ groupId: string; date: string; startTime: string; endTime: string; guests: BookedGuest[]; atClientHome: boolean; clientAddress: string | null }> {
     const groupId = crypto.randomUUID();
     const bookedGuests: BookedGuest[] = [];
     let cursor = toMinutes(common.startTime);
 
     await this.dataSource.transaction(async (manager) => {
+      // One booking at a time per day: the lock is released at commit, so the
+      // next request re-reads a schedule that already contains this one.
+      await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`reservations:${common.date}`]);
+      if (guard) await guard();
+
       for (let i = 0; i < guests.length; i += 1) {
         const guest = guests[i];
         const service = services[i];
@@ -727,7 +754,7 @@ export class ReservationsService {
   // travel buffer, overlap against every OTHER reservation that day) the
   // same way createManual does, excluding this row's own id so saving it
   // unchanged never self-conflicts.
-  async updateReservation(id: number, dto: UpdateReservationDto): Promise<void> {
+  async updateReservation(id: number, dto: UpdateReservationDto): Promise<{ paymentWarning: string | null }> {
     const existing = await this.reservationRepo.findOne({ where: { id } });
     if (!existing) {
       throw new NotFoundException('Réservation introuvable.');
@@ -780,21 +807,7 @@ export class ReservationsService {
     // See createManual for the rationale — the admin's deliberate call,
     // not persisted, so an unrelated later edit still gets the normal check.
     if (!dto.allowOverlap) {
-      const others = await this.reservationRepo
-        .createQueryBuilder('r')
-        .select(['r.start_time', 'r.end_time', 'r.at_client_home', 'r.travel_duration_minutes'])
-        .where('r.reservation_date = :date', { date })
-        .andWhere('r.id != :id', { id })
-        .andWhere('r.status NOT IN (:...excluded)', { excluded: ['cancelled', 'refused'] })
-        .getMany();
-
-      const overlaps = others.some((r) => {
-        const busy = effectiveInterval(toMinutes(r.start_time), toMinutes(r.end_time), r.at_client_home, r.travel_duration_minutes ?? defaultBufferMinutes);
-        return intervalsOverlap(candidate, busy);
-      });
-      if (overlaps) {
-        throw new ConflictException('Ce créneau chevauche une réservation existante (ou son temps de trajet).');
-      }
+      await this.assertNoOverlap(date, candidate, defaultBufferMinutes, id);
     }
 
     let promotionId = existing.promotion_id;
@@ -807,6 +820,27 @@ export class ReservationsService {
       // A fixed-euro reward belongs to the code it came from: changing the
       // promotion drops it.
       discountCents = 0;
+    }
+
+    // The online payment (held or captured) was computed from the booking as
+    // it was: changing what is being sold doesn't move that amount.
+    let paymentWarning: string | null = null;
+    const payment = existing.group_id ? await this.paymentsService.findByGroupId(existing.group_id) : null;
+    if (payment && (payment.status === 'authorized' || payment.status === 'paid')) {
+      const previousAddons: { name: string; extra_price_cents: number }[] = await this.dataSource.query(
+        `SELECT name, extra_price_cents FROM reservation_addons WHERE reservation_id = $1`,
+        [id],
+      );
+      const signature = (rows: { name: string; extra_price_cents: number }[]) => JSON.stringify(rows.map((a) => [a.name, a.extra_price_cents]).sort());
+      const priceChanged =
+        serviceId !== existing.service_id ||
+        promotionId !== existing.promotion_id ||
+        discountPercent !== existing.discount_percent ||
+        locationChanged ||
+        (dto.addonIds !== undefined && signature(addonRows) !== signature(previousAddons ?? []));
+      if (priceChanged) {
+        paymentWarning = `Cette réservation est déjà payée en ligne (${(payment.amount_cents / 100).toLocaleString('fr-FR')} €) : le montant débité ne suit pas cette modification. Ajustez-le depuis Stripe si besoin.`;
+      }
     }
 
     await this.dataSource.transaction(async (manager) => {
@@ -873,9 +907,28 @@ export class ReservationsService {
         });
       }
     }
+
+    return { paymentWarning };
   }
 
-  async updateStatus(id: number, status: ReservationStatus): Promise<void> {
+  // A finished appointment has already paid out its loyalty points and
+  // belongs to the books: it never goes back. And an appointment that was
+  // cancelled or refused can't have "taken place".
+  private assertStatusChange(current: (ReservationStatus | undefined)[], next: ReservationStatus, opts: { strict: boolean }): void {
+    if (current.includes('completed') && next !== 'completed') {
+      throw new BadRequestException('Un rendez-vous terminé ne peut plus changer de statut.');
+    }
+    if (opts.strict && next === 'completed' && current.some((s) => s === 'cancelled' || s === 'refused')) {
+      throw new BadRequestException("Un rendez-vous annulé ou refusé ne peut pas être marqué terminé : remettez-le d'abord en confirmé.");
+    }
+  }
+
+  // Returns a sentence for the admin when the online payment could not follow
+  // the status change (see settlePaymentForGroupStatus) — null when all good.
+  async updateStatus(id: number, status: ReservationStatus): Promise<{ paymentWarning: string | null }> {
+    const [current]: { status?: ReservationStatus }[] = await this.dataSource.query(`SELECT status FROM reservations WHERE id = $1`, [id]);
+    this.assertStatusChange([current?.status], status, { strict: true });
+
     const result = await this.reservationRepo.update(id, { status });
     if (result.affected === 0) {
       throw new NotFoundException('Réservation introuvable.');
@@ -898,9 +951,8 @@ export class ReservationsService {
       [id],
     );
     const row = rows[0];
-    if (row?.group_id) {
-      await this.settlePaymentForGroupStatus(row.group_id, status);
-    }
+    const paymentWarning = row?.group_id ? await this.settlePaymentForGroupStatus(row.group_id, status) : null;
+    await this.syncPromotionCodes([id], status);
     if (status === 'completed') {
       await this.rewardsService.onReservationsCompleted([id]);
     }
@@ -916,34 +968,73 @@ export class ReservationsService {
         guests: [{ name: row.client_name, serviceName: row.service_name, startTime: row.start_time, endTime: row.end_time }],
       });
     }
+    return { paymentWarning };
   }
 
-  // Captures (on 'confirmed') or releases (on 'refused') the payment hold
-  // placed at booking — see StripeService.createCheckoutSession's
-  // capture_method: 'manual'. Only acts once every row in the group shares
-  // the new status: a single guest in a multi-person booking changing
-  // status shouldn't move money for the whole group's shared payment (see
-  // Payment.group_id) while the others are still pending/confirmed.
-  // updateGroupStatus always satisfies this trivially since it updates the
-  // whole group atomically; updateStatus (single row) only triggers once
-  // the last guest catches up.
-  private async settlePaymentForGroupStatus(groupId: string, status: ReservationStatus): Promise<void> {
-    if (status !== 'confirmed' && status !== 'refused') return;
+  // Captures (on 'confirmed') or releases/refunds (on 'refused' and
+  // 'cancelled') the payment hold placed at booking — see
+  // StripeService.createCheckoutSession's capture_method: 'manual'. Only acts
+  // once every row in the group shares the new status: a single guest in a
+  // multi-person booking changing status shouldn't move money for the whole
+  // group's shared payment (see Payment.group_id) while the others are still
+  // pending/confirmed. updateGroupStatus always satisfies this trivially
+  // since it updates the whole group atomically; updateStatus (single row)
+  // only triggers once the last guest catches up.
+  // Never throws (the status change itself must go through): returns a
+  // sentence telling the admin what to do by hand instead.
+  private async settlePaymentForGroupStatus(groupId: string, status: ReservationStatus): Promise<string | null> {
+    if (status !== 'confirmed' && status !== 'refused' && status !== 'cancelled') return null;
 
     const rows: { status: ReservationStatus }[] = await this.dataSource.query(`SELECT DISTINCT status FROM reservations WHERE group_id = $1`, [groupId]);
-    if (rows.length !== 1 || rows[0].status !== status) return;
+    if (rows.length !== 1 || rows[0].status !== status) return null;
 
     try {
       if (status === 'confirmed') {
-        await this.paymentsService.capture(groupId);
+        const outcome = await this.paymentsService.capture(groupId);
+        if (outcome === 'unpaid') {
+          return "La cliente n'a pas finalisé son paiement en ligne : rien n'a été débité. Encaissez sur place ou demandez-lui de payer.";
+        }
       } else {
         await this.paymentsService.cancelAuthorization(groupId);
       }
     } catch {
-      // Already logged by PaymentsService — must never block the status
-      // change itself (she'll see the stale payment status in the admin
-      // list and can retry or handle it by hand via the Stripe dashboard).
+      // Already logged by PaymentsService.
+      return status === 'confirmed'
+        ? "Le paiement en ligne n'a pas pu être débité (autorisation expirée ?). À régler depuis le tableau de bord Stripe."
+        : "Le paiement en ligne n'a pas pu être remboursé ou libéré automatiquement. À faire depuis le tableau de bord Stripe.";
     }
+    return null;
+  }
+
+  // Single-use reward codes follow the booking that used them: cancelled,
+  // refused or deleted → back to their owner; revived → spent again.
+  private async syncPromotionCodes(reservationIds: number[], status: ReservationStatus): Promise<void> {
+    try {
+      const ids = reservationIds.filter((id) => typeof id === 'number');
+      if (ids.length === 0) return;
+      const rows: { promotion_id?: number | null }[] = await this.dataSource.query(
+        `SELECT DISTINCT promotion_id FROM reservations WHERE id = ANY($1) AND promotion_id IS NOT NULL`,
+        [ids],
+      );
+      const promotionIds = rows.map((r) => r.promotion_id).filter((id): id is number => typeof id === 'number');
+      if (status === 'cancelled' || status === 'refused') await this.promotionsService.releaseCodes(promotionIds);
+      else await this.promotionsService.reclaimCodes(promotionIds);
+    } catch (err) {
+      this.logger.error(`Promotion code sync failed: ${(err as Error).message}`);
+    }
+  }
+
+  // Once a deleted booking leaves no live reservation in its group, its online
+  // payment would be orphaned: release the hold / refund the charge.
+  private async settlePaymentAfterDelete(groupId: string): Promise<string | null> {
+    const live: unknown[] = await this.dataSource.query(`SELECT 1 FROM reservations WHERE group_id = $1 AND status NOT IN ('cancelled', 'refused') LIMIT 1`, [groupId]);
+    if (live.length > 0) return null;
+    try {
+      await this.paymentsService.cancelAuthorization(groupId);
+    } catch {
+      return "Le paiement en ligne n'a pas pu être remboursé ou libéré automatiquement. À faire depuis le tableau de bord Stripe.";
+    }
+    return null;
   }
 
   // Deleting is meant for cleaning up a mistake/spam entry, unlike
@@ -951,8 +1042,9 @@ export class ReservationsService {
   // the row being deleted was still pending/confirmed (i.e. not yet past,
   // not already refused/cancelled), the client had a real upcoming
   // appointment and silently erasing it without a word would be worse than
-  // sending the same "annulé" email refuse/cancel already sends.
-  async remove(id: number): Promise<void> {
+  // sending the same "annulé" email refuse/cancel already sends. Same logic
+  // for their money: an upcoming booking's online payment is released.
+  async remove(id: number): Promise<{ paymentWarning: string | null }> {
     const rows: {
       group_id: string | null;
       client_name: string;
@@ -961,11 +1053,12 @@ export class ReservationsService {
       start_time: string;
       end_time: string;
       status: ReservationStatus;
+      promotion_id?: number | null;
       service_name: string;
       at_client_home: boolean;
       client_address: string | null;
     }[] = await this.dataSource.query(
-      `SELECT r.group_id, r.client_name, r.client_email, r.reservation_date, r.start_time, r.end_time, r.status,
+      `SELECT r.group_id, r.client_name, r.client_email, r.reservation_date, r.start_time, r.end_time, r.status, r.promotion_id,
               r.at_client_home, r.client_address, s.name AS service_name
        FROM reservations r JOIN services s ON s.id = r.service_id WHERE r.id = $1`,
       [id],
@@ -977,7 +1070,10 @@ export class ReservationsService {
       throw new NotFoundException('Réservation introuvable.');
     }
 
+    let paymentWarning: string | null = null;
     if (row && (row.status === 'pending' || row.status === 'confirmed')) {
+      if (typeof row.promotion_id === 'number') await this.promotionsService.releaseCodes([row.promotion_id]);
+      if (row.group_id) paymentWarning = await this.settlePaymentAfterDelete(row.group_id);
       await this.mailService.sendStatusUpdate({
         clientName: row.client_name,
         clientEmail: row.client_email,
@@ -989,17 +1085,28 @@ export class ReservationsService {
         guests: [{ name: row.client_name, serviceName: row.service_name, startTime: row.start_time, endTime: row.end_time }],
       });
     }
+    return { paymentWarning };
   }
 
   // Bulk actions on every reservation in a group (e.g. refuse the whole
   // family's booking at once instead of one row at a time).
-  async updateGroupStatus(groupId: string, status: ReservationStatus): Promise<void> {
+  async updateGroupStatus(groupId: string, status: ReservationStatus): Promise<{ paymentWarning: string | null }> {
+    const current: { status: ReservationStatus }[] = await this.dataSource.query(`SELECT DISTINCT status FROM reservations WHERE group_id = $1`, [groupId]);
+    this.assertStatusChange(current.map((r) => r.status), status, { strict: false });
+
     const result = await this.reservationRepo.update({ group_id: groupId }, { status });
     if (result.affected === 0) {
       throw new NotFoundException('Groupe de réservations introuvable.');
     }
+    return { paymentWarning: await this.afterGroupStatusChange(groupId, status, { settlePayment: true }) };
+  }
 
-    await this.settlePaymentForGroupStatus(groupId, status);
+  // Everything that follows a group's rows having just been switched to
+  // `status`: the online payment, the reward codes, loyalty points and the
+  // email to the client. settlePayment is off when the caller handles the
+  // payment itself (client cancellation reports the outcome to the admin).
+  private async afterGroupStatusChange(groupId: string, status: ReservationStatus, opts: { settlePayment: boolean }): Promise<string | null> {
+    const paymentWarning = opts.settlePayment ? await this.settlePaymentForGroupStatus(groupId, status) : null;
 
     const rows: {
       client_name: string;
@@ -1017,8 +1124,9 @@ export class ReservationsService {
       [groupId],
     );
 
+    const ids: { id: number }[] = await this.dataSource.query(`SELECT id FROM reservations WHERE group_id = $1`, [groupId]);
+    await this.syncPromotionCodes(ids.map((r) => r.id), status);
     if (status === 'completed') {
-      const ids: { id: number }[] = await this.dataSource.query(`SELECT id FROM reservations WHERE group_id = $1`, [groupId]);
       await this.rewardsService.onReservationsCompleted(ids.map((r) => r.id));
     }
 
@@ -1035,9 +1143,10 @@ export class ReservationsService {
         guests: rows.map((r) => ({ name: r.client_name, serviceName: r.service_name, startTime: r.start_time, endTime: r.end_time })),
       });
     }
+    return paymentWarning;
   }
 
-  async removeGroup(groupId: string): Promise<void> {
+  async removeGroup(groupId: string): Promise<{ paymentWarning: string | null }> {
     const rows: {
       client_name: string;
       client_email: string;
@@ -1045,11 +1154,12 @@ export class ReservationsService {
       start_time: string;
       end_time: string;
       status: ReservationStatus;
+      promotion_id?: number | null;
       service_name: string;
       at_client_home: boolean;
       client_address: string | null;
     }[] = await this.dataSource.query(
-      `SELECT r.client_name, r.client_email, r.reservation_date, r.start_time, r.end_time, r.status,
+      `SELECT r.client_name, r.client_email, r.reservation_date, r.start_time, r.end_time, r.status, r.promotion_id,
               r.at_client_home, r.client_address, s.name AS service_name
        FROM reservations r JOIN services s ON s.id = r.service_id WHERE r.group_id = $1 ORDER BY r.start_time ASC`,
       [groupId],
@@ -1060,8 +1170,12 @@ export class ReservationsService {
       throw new NotFoundException('Groupe de réservations introuvable.');
     }
 
+    let paymentWarning: string | null = null;
     const [primary] = rows;
     if (primary && (primary.status === 'pending' || primary.status === 'confirmed')) {
+      const promotionIds = rows.filter((r) => r.status === 'pending' || r.status === 'confirmed').map((r) => r.promotion_id).filter((id): id is number => typeof id === 'number');
+      await this.promotionsService.releaseCodes(promotionIds);
+      paymentWarning = await this.settlePaymentAfterDelete(groupId);
       await this.mailService.sendStatusUpdate({
         clientName: primary.client_name,
         clientEmail: primary.client_email,
@@ -1073,6 +1187,7 @@ export class ReservationsService {
         guests: rows.map((r) => ({ name: r.client_name, serviceName: r.service_name, startTime: r.start_time, endTime: r.end_time })),
       });
     }
+    return { paymentWarning };
   }
 
   // Public "manage my booking" lookup — group_id is a crypto.randomUUID(),
@@ -1116,7 +1231,13 @@ export class ReservationsService {
         ? { status: payment.status, amountCents: payment.amount_cents, cancelOutcome: this.cancelOutcomeFor(payment.status) }
         : null,
       paidOnSite: payment ? null : primary.paid_on_site,
+      // Cancelling only makes sense for a live booking that hasn't started.
+      canCancel: (primary.status === 'pending' || primary.status === 'confirmed') && !this.hasStarted(primary.reservation_date, primary.start_time),
     };
+  }
+
+  private hasStarted(date: string, startTime: string): boolean {
+    return new Date(`${date}T${startTime}:00`).getTime() <= Date.now();
   }
 
   // What cancelling now would do to the online payment — same rules as
@@ -1154,11 +1275,18 @@ export class ReservationsService {
     if (rows[0].status === 'completed') {
       throw new BadRequestException('Ce rendez-vous est déjà passé, il ne peut plus être annulé.');
     }
+    if (rows[0].status === 'refused') {
+      throw new BadRequestException("Ce rendez-vous a été refusé : il n'y a rien à annuler.");
+    }
+    // Without this a client could "cancel" after the appointment (until the
+    // admin marks it completed) and be refunded for a service they received.
+    if (this.hasStarted(rows[0].reservation_date, rows[0].start_time)) {
+      throw new BadRequestException('Ce rendez-vous a déjà commencé ou est passé : il ne peut plus être annulé en ligne. Contactez-nous directement.');
+    }
 
-    // Fetched before updateGroupStatus flips the status, so the mail/push
-    // below still reflects "this just got cancelled" rather than needing a
-    // second query — same guest shape as updateGroupStatus's own mail to
-    // the client, for the admin's cancellation notice.
+    // Fetched before the status flips, so the mail/push below still reflects
+    // "this just got cancelled" rather than needing a second query — same
+    // guest shape as the status mail to the client, for the admin's notice.
     const guestRows: { client_name: string; client_email: string; client_phone: string; start_time: string; end_time: string; service_name: string }[] =
       await this.dataSource.query(
         `SELECT r.client_name, r.client_email, r.client_phone, r.start_time, r.end_time, s.name AS service_name
@@ -1166,17 +1294,24 @@ export class ReservationsService {
         [groupId],
       );
 
-    await this.updateGroupStatus(groupId, 'cancelled');
-    // Stored on every row in the group, same as the status change above —
-    // required by CancelReservationDto, so always a real, non-empty string.
-    await this.reservationRepo.update({ group_id: groupId }, { cancellation_reason: reason });
+    // The status filter makes the claim atomic: of two simultaneous cancels
+    // (double click, two tabs) only one gets here, so the refund below runs
+    // once. The reason is stored on every row of the group, in the same write.
+    const claimed = await this.reservationRepo.update({ group_id: groupId, status: In(['pending', 'confirmed']) }, { status: 'cancelled', cancellation_reason: reason });
+    if (!claimed.affected) {
+      throw new BadRequestException('Ce rendez-vous est déjà annulé.');
+    }
+    await this.afterGroupStatusChange(groupId, 'cancelled', { settlePayment: false });
 
     // null = there was never an online payment to refund (Stripe disabled,
     // the client chose "payer sur place", or abandoned checkout without
     // paying) — distinct from true/false, which both mean a payment existed.
     let paymentRefunded: boolean | null = null;
     const payment = await this.paymentsService.findByGroupId(groupId);
-    if (payment && payment.status === 'authorized') {
+    if (payment && payment.status === 'pending') {
+      // Checkout still open: close it so it can't be paid for a dead booking.
+      await this.paymentsService.markAbandoned(groupId);
+    } else if (payment && payment.status === 'authorized') {
       // Still just a hold, never actually charged (the appointment hadn't
       // been confirmed yet) — always release it, the refund-deadline
       // policy below only makes sense once real money has moved.
@@ -1221,6 +1356,43 @@ export class ReservationsService {
         cancellationReason: reason,
         paymentRefunded,
       });
+    }
+  }
+
+  // A client who chose "payer en ligne" and never finished checkout would
+  // otherwise block their slot until the admin notices: once Stripe has closed
+  // the session (and a missed webhook has been ruled out), the booking is
+  // released and the client told.
+  @Cron(CronExpression.EVERY_10_MINUTES)
+  async releaseAbandonedCheckouts(): Promise<void> {
+    try {
+      await this.dispatchAbandonedCheckouts();
+    } catch (err) {
+      this.logger.error(`Abandoned checkout job failed: ${(err as Error).message}`);
+    }
+  }
+
+  async dispatchAbandonedCheckouts(): Promise<void> {
+    const rows: { group_id: string }[] = await this.dataSource.query(
+      `SELECT DISTINCT r.group_id FROM reservations r
+       JOIN payments p ON p.group_id = r.group_id
+       WHERE r.status = 'pending' AND p.status = 'pending'
+         AND r.created_at < now() - ($1 * interval '1 minute')`,
+      [CHECKOUT_LIFETIME_MINUTES + ABANDONED_GRACE_MINUTES],
+    );
+
+    for (const { group_id: groupId } of rows) {
+      try {
+        await this.paymentsService.syncPending(groupId);
+        const payment = await this.paymentsService.findByGroupId(groupId);
+        if (!payment || payment.status !== 'pending') continue;
+
+        await this.paymentsService.markAbandoned(groupId);
+        const released = await this.reservationRepo.update({ group_id: groupId, status: 'pending' }, { status: 'cancelled', cancellation_reason: 'Paiement en ligne non finalisé' });
+        if (released.affected) await this.afterGroupStatusChange(groupId, 'cancelled', { settlePayment: false });
+      } catch (err) {
+        this.logger.error(`Abandoned checkout release failed for group ${groupId}: ${(err as Error).message}`);
+      }
     }
   }
 

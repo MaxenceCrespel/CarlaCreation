@@ -58,6 +58,30 @@ export class PromotionsService {
     return (result.affected ?? 0) > 0;
   }
 
+  // A personal code is spent by the booking that uses it: when that booking
+  // is cancelled/refused/deleted the code goes back to its owner, and is spent
+  // again if the booking is revived. Shared admin codes (no client_id) have no
+  // single-use state, so they are never touched.
+  async releaseCodes(promotionIds: number[]): Promise<void> {
+    if (promotionIds.length === 0) return;
+    await this.promotionRepo
+      .createQueryBuilder()
+      .update(Promotion)
+      .set({ used_at: null })
+      .where('id IN (:...ids) AND client_id IS NOT NULL AND used_at IS NOT NULL', { ids: promotionIds })
+      .execute();
+  }
+
+  async reclaimCodes(promotionIds: number[]): Promise<void> {
+    if (promotionIds.length === 0) return;
+    await this.promotionRepo
+      .createQueryBuilder()
+      .update(Promotion)
+      .set({ used_at: () => 'now()' })
+      .where('id IN (:...ids) AND client_id IS NOT NULL AND used_at IS NULL', { ids: promotionIds })
+      .execute();
+  }
+
   async releaseUse(id: number): Promise<void> {
     await this.promotionRepo.update(id, { used_at: null });
   }

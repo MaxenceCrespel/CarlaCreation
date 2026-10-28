@@ -27,15 +27,13 @@ export class AdminReservationsController {
   @UseGuards(CsrfGuard)
   @Patch('group/:groupId/status')
   async updateGroupStatus(@Param('groupId') groupId: string, @Body() dto: UpdateReservationStatusDto) {
-    await this.reservationsService.updateGroupStatus(groupId, dto.status);
-    return { success: true };
+    return { success: true, ...(await this.reservationsService.updateGroupStatus(groupId, dto.status)) };
   }
 
   @UseGuards(CsrfGuard)
   @Delete('group/:groupId')
   async removeGroup(@Param('groupId') groupId: string) {
-    await this.reservationsService.removeGroup(groupId);
-    return { success: true };
+    return { success: true, ...(await this.reservationsService.removeGroup(groupId)) };
   }
 
   // Purely a bookkeeping toggle for "payer sur place" bookings — no Stripe
@@ -52,21 +50,18 @@ export class AdminReservationsController {
   @UseGuards(CsrfGuard)
   @Patch(':id')
   async update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateReservationDto) {
-    await this.reservationsService.updateReservation(id, dto);
-    return { success: true };
+    return { success: true, ...(await this.reservationsService.updateReservation(id, dto)) };
   }
 
   @UseGuards(CsrfGuard)
   @Patch(':id/status')
   async updateStatus(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateReservationStatusDto) {
-    await this.reservationsService.updateStatus(id, dto.status);
-    return { success: true };
+    return { success: true, ...(await this.reservationsService.updateStatus(id, dto.status)) };
   }
 
   @UseGuards(CsrfGuard)
   @Delete(':id')
   async remove(@Param('id', ParseIntPipe) id: number) {
-    await this.reservationsService.remove(id);
-    return { success: true };
+    return { success: true, ...(await this.reservationsService.remove(id)) };
   }
 }
