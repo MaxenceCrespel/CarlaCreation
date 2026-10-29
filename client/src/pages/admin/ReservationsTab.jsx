@@ -4,32 +4,8 @@ import { apiFetch } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import ReservationsCalendar from './ReservationsCalendar';
 import { formatPrice } from '../../utils/format';
+import { mapsUrl, PAYMENT_STATUS_LABELS, reservationTotalCents, STATUS_LABELS, wazeUrl } from './reservationUtils';
 
-// Service price + addons, minus any promotion discount — the actual total
-// the client is paying for this reservation (travel fee shown separately
-// elsewhere, since it depends on distance and isn't part of the "formule").
-function reservationTotalCents(r) {
-  const addonsSum = (r.addons ?? []).reduce((sum, a) => sum + a.extra_price_cents, 0);
-  const fullPrice = r.price_cents + addonsSum;
-  return Math.max(0, Math.round(fullPrice * (1 - (r.discount_percent ?? 0) / 100)) - (r.discount_cents ?? 0));
-}
-
-const STATUS_LABELS = {
-  pending: 'En attente',
-  confirmed: 'Confirmée',
-  completed: 'Terminée',
-  cancelled: 'Annulée',
-  refused: 'Refusée',
-};
-
-const PAYMENT_STATUS_LABELS = {
-  pending: 'En attente',
-  authorized: 'Autorisé (à encaisser)',
-  paid: 'Réglé',
-  refunded: 'Remboursé',
-  partially_refunded: 'Partiellement remboursé',
-  canceled: 'Annulé',
-};
 const PAYMENT_STATUS_BADGE_CLASS = {
   pending: 'status-pending',
   authorized: 'status-pending',
@@ -172,10 +148,12 @@ function ClientNameAutocomplete({ id, value, onChange, onPick }) {
   );
 }
 
-function AddReservationForm({ onCreated, onCancel }) {
+// `initial` pre-fills the form (e.g. the date/time tapped in the mobile
+// agenda, or a client picked from her fiche).
+export function AddReservationForm({ onCreated, onCancel, initial }) {
   const showToast = useToast();
   const [services, setServices] = useState([]);
-  const [form, setForm] = useState(EMPTY_MANUAL_FORM);
+  const [form, setForm] = useState(() => ({ ...EMPTY_MANUAL_FORM, ...initial }));
   const [addonIds, setAddonIds] = useState([]);
   const [categories, setCategories] = useState([]);
   const [guests, setGuests] = useState([]);
@@ -454,7 +432,7 @@ function AddReservationForm({ onCreated, onCancel }) {
 // Edits a single reservation row (service, date/time, client details,
 // location, notes) — not the guest list of a group, and not its addons
 // (leaving those untouched if this modal doesn't send addonIds at all).
-function EditReservationModal({ reservation, onClose, onSaved }) {
+export function EditReservationModal({ reservation, onClose, onSaved }) {
   const showToast = useToast();
   const [services, setServices] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -682,7 +660,7 @@ function EditReservationModal({ reservation, onClose, onSaved }) {
 // name (normalized match only — never auto-linked, see ClientsService).
 // The admin always makes the final call, since two different people can
 // share a name (e.g. a mother booking for herself, then later her child).
-function ClientMatchModal({ reservation, onClose, onLinked }) {
+export function ClientMatchModal({ reservation, onClose, onLinked }) {
   const showToast = useToast();
   const [candidates, setCandidates] = useState(null);
   const [error, setError] = useState(null);
@@ -1023,13 +1001,6 @@ function formatDayHeading(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
   const date = new Date(y, m - 1, d);
   return `${DAY_NAMES[date.getDay()]} ${date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}`;
-}
-
-function mapsUrl(address) {
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
-}
-function wazeUrl(address) {
-  return `https://waze.com/ul?q=${encodeURIComponent(address)}&navigate=yes`;
 }
 
 export default function ReservationsTab() {

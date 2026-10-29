@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { apiFetch } from '../../api/client';
 import LoginForm from './LoginForm';
 import DashboardTab from './DashboardTab';
@@ -15,6 +15,23 @@ import ClientsTab from './ClientsTab';
 import PromotionsTab from './PromotionsTab';
 import MessagesTab from './MessagesTab';
 import VisitorsTab from './VisitorsTab';
+
+// Phone-sized screens get a separate admin built for one-handed use (bottom
+// tab bar, agenda like the iPhone Calendar…) — loaded on demand, so the
+// desktop admin doesn't download it.
+const MobileAdmin = lazy(() => import('./mobile/MobileAdmin'));
+const PHONE_QUERY = '(max-width: 760px)';
+
+function useIsPhone() {
+  const [isPhone, setIsPhone] = useState(() => window.matchMedia(PHONE_QUERY).matches);
+  useEffect(() => {
+    const media = window.matchMedia(PHONE_QUERY);
+    const onChange = () => setIsPhone(media.matches);
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
+  }, []);
+  return isPhone;
+}
 
 // "Mon compte" isn't in this list — it's not a work section like the
 // others, so it lives behind the avatar badge in the header instead (see
@@ -42,6 +59,7 @@ export default function AdminApp() {
   // drawer toggled by the burger button, and this same flag controls it.
   const [navOpen, setNavOpen] = useState(false);
   const [showAccountModal, setShowAccountModal] = useState(false);
+  const isPhone = useIsPhone();
 
   useEffect(() => {
     apiFetch('/auth/me')
@@ -76,6 +94,18 @@ export default function AdminApp() {
       <div className="admin-body">
         <LoginForm onLoggedIn={(username) => setSession({ username })} />
       </div>
+    );
+  }
+
+  if (isPhone) {
+    return (
+      <Suspense fallback={<div className="admin-body" />}>
+        <MobileAdmin
+          username={session.username}
+          onLogout={handleLogout}
+          onCredentialsUpdated={(newUsername) => setSession({ username: newUsername })}
+        />
+      </Suspense>
     );
   }
 
