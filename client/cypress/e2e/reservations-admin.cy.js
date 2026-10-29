@@ -6,7 +6,8 @@ describe('Admin — Réservations (création manuelle)', () => {
     cy.contains('button.admin-nav-link', 'Réservations').click();
     cy.contains('button', '+ Ajouter une réservation').click();
 
-    cy.get('#manual-service').select(1);
+    cy.get('#manual-service').click();
+    cy.get('.service-picker-item').first().click();
     cy.get('#manual-date').type('2099-06-15');
     cy.get('#manual-time').type('10:00');
     cy.get('#manual-name').type(clientName);
