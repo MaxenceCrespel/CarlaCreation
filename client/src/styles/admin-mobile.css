@@ -477,3 +477,12 @@ div.m-list-item, label.m-list-item { cursor: default; }
 .m-loyalty-legend span { position: absolute; transform: translateX(-100%); text-align: right; line-height: 1.25; }
 .m-loyalty-legend span.is-reached { color: var(--color-accent-strong); font-weight: 700; }
 .m-movements { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--m-line); padding-top: 10px; }
+
+/* ---------- Conversations avec les clientes ---------- */
+.m-conv-head { display: flex; align-items: center; gap: 10px; }
+.m-conv-who { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; }
+.m-has-composer { padding-bottom: 150px; }
+.m-composer-bar {
+  position: fixed; left: 0; right: 0; bottom: calc(var(--m-tabbar-h) + env(safe-area-inset-bottom)); z-index: 60;
+  background: var(--m-surface); border-top: 1px solid var(--color-border); padding: 8px var(--m-gutter);
+}

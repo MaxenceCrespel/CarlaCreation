@@ -151,6 +151,10 @@ export class AccountLifecycleService {
       `SELECT code, label, discount_percent, discount_cents, expires_at, used_at, created_at FROM promotions WHERE client_id = $1`,
       [clientId],
     );
+    const messages = await this.dataSource.query(
+      `SELECT sender, body, (photo IS NOT NULL) AS with_photo, created_at FROM client_messages WHERE client_id = $1 ORDER BY created_at`,
+      [clientId],
+    );
     return {
       exportedAt: new Date().toISOString(),
       profile: {
@@ -166,6 +170,7 @@ export class AccountLifecycleService {
       reservations,
       loyaltyPoints: points,
       promotionCodes: codes,
+      messages,
     };
   }
 

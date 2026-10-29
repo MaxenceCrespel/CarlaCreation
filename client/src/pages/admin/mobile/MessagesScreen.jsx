@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { apiFetch } from '../../../api/client';
 import { useConfirm } from '../../../context/ConfirmContext';
 import { useToast } from '../../../context/ToastContext';
-import { Chips, Empty, ErrorText, Icon, Loading, TopBar } from './ui';
+import { Chips, Empty, ErrorText, Icon, Loading, Segmented, TopBar } from './ui';
+import { ConversationList, ConversationThread } from './ConversationScreens';
 import { initials, relativeDay, smsHref, telHref, toDateStr } from './helpers';
 
 function sentAt(message) {
@@ -13,7 +14,7 @@ function sentAt(message) {
 
 // Messages du formulaire de contact : boîte de réception, puis lecture en
 // plein écran avec Appeler / SMS / créer un rendez-vous.
-export default function MessagesScreen({ onBack, refreshCounts, onCreateRdv }) {
+function ContactInbox({ onBack, refreshCounts, onCreateRdv, tabs }) {
   const confirm = useConfirm();
   const showToast = useToast();
   const [messages, setMessages] = useState(null);
@@ -102,6 +103,7 @@ export default function MessagesScreen({ onBack, refreshCounts, onCreateRdv }) {
   return (
     <div className="m-screen">
       <TopBar title="Messages" back={{ label: 'Plus', onClick: onBack }}>
+        {tabs}
         <Chips
           label="Filtrer les messages"
           value={filter}
@@ -131,6 +133,41 @@ export default function MessagesScreen({ onBack, refreshCounts, onCreateRdv }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// Deux boîtes : les conversations avec les clientes qui ont un compte, et
+// les messages du formulaire de contact du site.
+export default function MessagesScreen({ clientId, go, onBack, refreshCounts, onCreateRdv }) {
+  const [tab, setTab] = useState('clients');
+
+  if (clientId) {
+    return <ConversationThread clientId={clientId} onBack={onBack} go={go} refreshCounts={refreshCounts} />;
+  }
+
+  const tabs = (
+    <Segmented
+      label="Type de messages"
+      value={tab}
+      onChange={setTab}
+      options={[
+        { value: 'clients', label: 'Clientes' },
+        { value: 'form', label: 'Formulaire du site' },
+      ]}
+    />
+  );
+
+  if (tab === 'form') {
+    return <ContactInbox onBack={onBack} refreshCounts={refreshCounts} onCreateRdv={onCreateRdv} tabs={tabs} />;
+  }
+
+  return (
+    <div className="m-screen">
+      <TopBar title="Messages" back={{ label: 'Plus', onClick: onBack }}>
+        {tabs}
+      </TopBar>
+      <ConversationList go={go} />
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { useSeo } from '../hooks/useSeo';
 import { formatPrice } from '../utils/format';
 import AccountAuthForms from '../components/AccountAuthForms';
 import ReferralCodeForm from '../components/ReferralCodeForm';
+import ClientMessages from '../components/ClientMessages';
 
 const STATUS_LABELS = {
   pending: 'En attente',
@@ -39,6 +40,7 @@ function AccountDashboard({ profile, onUpdated }) {
   const [redeemTier, setRedeemTier] = useState(null);
   const [showDelete, setShowDelete] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
+  const [askAbout, setAskAbout] = useState(null); // history row the next message is about
 
   async function saveProfile(e) {
     e.preventDefault();
@@ -236,6 +238,8 @@ function AccountDashboard({ profile, onUpdated }) {
         )}
       </div>
 
+      <ClientMessages askAbout={askAbout} onClearAsk={() => setAskAbout(null)} />
+
       <div className="card loyalty-card" style={{ marginTop: 16 }}>
         <div className="loyalty-hero">
           <div>
@@ -348,6 +352,9 @@ function AccountDashboard({ profile, onUpdated }) {
                 <div>
                   <strong>{formatDateFr(h.reservation_date)}</strong>
                   <span>{h.service_name} · {h.start_time}</span>
+                  {h.status !== 'cancelled' && h.status !== 'refused' && (
+                    <button type="button" className="history-ask" onClick={() => setAskAbout(h)}>Poser une question</button>
+                  )}
                 </div>
                 <span className={`status-badge status-${h.status}`}>{STATUS_LABELS[h.status] || h.status}</span>
               </li>

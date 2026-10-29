@@ -291,6 +291,32 @@ export class MailService {
     `;
   }
 
+  // New message from Carla in the client's conversation (« Mon compte »).
+  // Only the first message of a burst triggers it — see MessagingService.
+  async sendClientNewMessage(input: { clientName: string; clientEmail: string; preview: string }): Promise<void> {
+    const html = this.accountEmailHtml(
+      input.clientName,
+      `<p>Vous avez un nouveau message de ${escapeHtml(siteConfig.siteName)} :</p>
+       <blockquote style="margin:12px 0;padding:10px 14px;border-left:3px solid #9A5F4B;background:#F8F4EF;color:#3A2E27;">${escapeHtml(input.preview)}</blockquote>
+       <p>Pour lire la suite et répondre, connectez-vous à votre espace.</p>`,
+      { href: `${config.PUBLIC_ORIGIN}/mon-compte#messages`, label: 'Lire et répondre' },
+    );
+    await this.send(input.clientEmail, `Nouveau message de ${siteConfig.siteName}`, html);
+  }
+
+  // Same reliable fallback as the booking notifications: push can be missed.
+  async sendAdminNewClientMessage(input: { clientName: string; preview: string; clientId: number }): Promise<void> {
+    if (!this.transporter || !config.SMTP_USER) return;
+    const html = `
+      <div style="font-family: Segoe UI, Arial, sans-serif; color:#3A2E27; max-width:560px; margin:0 auto;">
+        <h2 style="color:#9A5F4B;">Nouveau message de ${escapeHtml(input.clientName)}</h2>
+        <blockquote style="margin:12px 0;padding:10px 14px;border-left:3px solid #9A5F4B;background:#F8F4EF;">${escapeHtml(input.preview)}</blockquote>
+        <p style="margin-top:24px;"><a href="${config.PUBLIC_ORIGIN}/admin#/plus/messages/${input.clientId}" style="color:#9A5F4B;">Répondre dans l'espace admin</a></p>
+      </div>
+    `;
+    await this.send(config.SMTP_USER, `Nouveau message — ${input.clientName}`, html);
+  }
+
   // Sent at signup — the account only works once this link is clicked.
   async sendEmailVerification(input: { clientName: string; clientEmail: string; link: string }): Promise<void> {
     const html = this.accountEmailHtml(
