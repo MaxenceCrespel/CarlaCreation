@@ -30,6 +30,7 @@ import { ClientsModule } from './modules/clients/clients.module';
 import { PromotionsModule } from './modules/promotions/promotions.module';
 import { ClientAuthModule } from './modules/client-auth/client-auth.module';
 import { RewardsModule } from './modules/rewards/rewards.module';
+import { MessagingModule } from './modules/messaging/messaging.module';
 
 // Rate limiting (global + the tighter per-route @Throttle overrides on
 // login/booking/contact/reviews) would make the integration test suite
@@ -94,6 +95,7 @@ class NoopThrottlerGuard implements CanActivate {
     PromotionsModule,
     ClientAuthModule,
     RewardsModule,
+    MessagingModule,
     AnalyticsModule,
     StripeModule,
     ImagesModule,

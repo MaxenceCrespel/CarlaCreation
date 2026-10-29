@@ -137,6 +137,7 @@ export default function RdvSheet({ reservation: r, reservations, onClose, action
             {r.client_id ? (
               <span className="m-inline-actions">
                 <button type="button" className="m-link m-link-sm" onClick={() => actions.openClient(r.client_id)}>Ouvrir la fiche ›</button>
+                <button type="button" className="m-link m-link-sm" onClick={() => actions.writeTo(r.client_id)}>Écrire ›</button>
                 <button type="button" className="m-link m-link-sm m-link-muted" onClick={() => actions.unlinkClient(r.id)}>Délier</button>
               </span>
             ) : (

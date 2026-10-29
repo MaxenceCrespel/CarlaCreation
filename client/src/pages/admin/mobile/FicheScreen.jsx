@@ -86,7 +86,7 @@ function toForm(data) {
 
 // Fiche cliente : boutons de contact, infos modifiables sur place,
 // historique des rendez-vous et factures émises au même nom.
-export default function FicheScreen({ clientId, onBack, rdv }) {
+export default function FicheScreen({ clientId, onBack, rdv, go }) {
   const confirm = useConfirm();
   const showToast = useToast();
   const [detail, setDetail] = useState(null);
@@ -169,7 +169,11 @@ export default function FicheScreen({ clientId, onBack, rdv }) {
             <div className="m-actions-row">
               {detail.phone && <a className="m-action" href={telHref(detail.phone)}><Icon name="phone" />Appeler</a>}
               {detail.phone && <a className="m-action" href={smsHref(detail.phone)}><Icon name="sms" />SMS</a>}
-              {detail.email && <a className="m-action" href={`mailto:${detail.email}`}><Icon name="mail" />Email</a>}
+              {detail.hasAccount ? (
+                <button type="button" className="m-action" onClick={() => go(`plus/messages/${clientId}`)}><Icon name="sms" />Message</button>
+              ) : (
+                detail.email && <a className="m-action" href={`mailto:${detail.email}`}><Icon name="mail" />Email</a>
+              )}
               <button
                 type="button"
                 className="m-action"

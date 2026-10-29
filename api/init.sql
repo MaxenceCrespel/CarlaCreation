@@ -10,6 +10,7 @@
 -- one-command bootstrap path for a brand new database (Docker, or a local
 -- Postgres you're setting up by hand).
 
+DROP TABLE IF EXISTS client_messages;
 DROP TABLE IF EXISTS client_tokens;
 DROP TABLE IF EXISTS loyalty_points;
 DROP TABLE IF EXISTS payments;
@@ -364,6 +365,20 @@ CREATE INDEX IF NOT EXISTS "IDX_page_views_created_at" ON page_views (created_at
 CREATE INDEX IF NOT EXISTS "IDX_page_views_visitor_id_created_at" ON page_views (visitor_id, created_at);
 
 CREATE TABLE
+    IF NOT EXISTS client_messages (
+        id SERIAL PRIMARY KEY,
+        client_id INTEGER NOT NULL REFERENCES clients (id) ON DELETE CASCADE,
+        sender TEXT NOT NULL CHECK (sender IN ('client', 'admin')),
+        body TEXT NOT NULL DEFAULT '',
+        photo TEXT,
+        reservation_id INTEGER REFERENCES reservations (id) ON DELETE SET NULL,
+        read_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+CREATE INDEX IF NOT EXISTS "IDX_client_messages_client_created" ON client_messages (client_id, created_at);
+
+CREATE TABLE
     IF NOT EXISTS payments (
         id SERIAL PRIMARY KEY,
         group_id TEXT NOT NULL,
@@ -424,7 +439,8 @@ VALUES
     (1786900000000, 'AddPointsLoyaltyAndReferral1786900000000'),
     (1787000000000, 'AddAccountLifecycle1787000000000'),
     (1787100000000, 'AddClientFirstAndLastName1787100000000'),
-    (1787300000000, 'AddReservationRewardCode1787300000000');
+    (1787300000000, 'AddReservationRewardCode1787300000000'),
+    (1787400000000, 'AddClientMessages1787400000000');
 
 -- Admin account — username "carla", password "Carla0303!" (bcrypt, cost 12).
 -- Change this password after first login in a real deployment.
