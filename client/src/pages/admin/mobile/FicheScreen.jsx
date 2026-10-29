@@ -8,6 +8,78 @@ import { ClientForm } from './ClientsScreen';
 import { Badge, Empty, ErrorText, Icon, Loading, Segmented, TopBar } from './ui';
 import { formatDayShort, initials, smsHref, STATUS_TONE, telHref } from './helpers';
 
+const MOVEMENT_LABELS = {
+  purchase: 'Rendez-vous terminé',
+  referral_sponsor: 'Parrainage (marraine)',
+  referral_referee: 'Parrainage (filleule)',
+  redeem: 'Échange contre un bon',
+};
+
+// Solde de points, progression vers le prochain palier et derniers
+// mouvements (gains et échanges) — les mêmes règles que l'espace cliente.
+function LoyaltyCard({ loyalty, hasAccount, referralCode }) {
+  const [showAll, setShowAll] = useState(false);
+  const { points, tiers, movements } = loyalty;
+  const next = tiers.find((t) => t.points > points);
+  const reached = tiers.filter((t) => t.points <= points);
+  const best = reached[reached.length - 1];
+  const max = tiers[tiers.length - 1].points;
+  const shown = showAll ? movements : movements.slice(0, 3);
+
+  return (
+    <section className="m-card m-card-pad m-loyalty" aria-label="Fidélité">
+      <div className="m-line">
+        <span className="m-eyebrow m-eyebrow-flat">Fidélité</span>
+        {referralCode && <span className="m-muted m-small">Parrainage : <strong className="m-mono">{referralCode}</strong></span>}
+      </div>
+      <div className="m-hero-value">
+        <strong>{points} pts</strong>
+        <span className="m-muted m-small">{next ? `encore ${next.points - points} pts pour ${formatPrice(next.amountCents)} offerts` : 'palier maximum atteint'}</span>
+      </div>
+      <div className="m-loyalty-track" role="img" aria-label={`${points} points sur ${max}`}>
+        <span className="m-loyalty-fill" style={{ width: `${Math.min(100, (points / max) * 100)}%` }} />
+        {tiers.map((t) => (
+          <span key={t.points} className={`m-loyalty-tick ${t.points <= points ? 'is-reached' : ''}`} style={{ left: `${(t.points / max) * 100}%` }} />
+        ))}
+      </div>
+      <div className="m-loyalty-legend">
+        {tiers.map((t) => (
+          <span key={t.points} className={t.points <= points ? 'is-reached' : ''} style={{ left: `${(t.points / max) * 100}%` }}>
+            {t.points}<br />{formatPrice(t.amountCents).replace(',00', '')}
+          </span>
+        ))}
+      </div>
+      {best && (
+        <p className="m-recap m-small">
+          {hasAccount
+            ? `Elle peut échanger ${best.points} pts contre ${formatPrice(best.amountCents)} depuis son espace cliente.`
+            : `${best.points} pts échangeables contre ${formatPrice(best.amountCents)} — il lui faut un compte en ligne pour faire l'échange.`}
+        </p>
+      )}
+      {movements.length > 0 ? (
+        <div className="m-movements">
+          {shown.map((m, i) => (
+            <div key={`${m.created_at}-${i}`} className="m-line">
+              <span>
+                {MOVEMENT_LABELS[m.reason] || m.reason}
+                <span className="m-muted m-small m-block">{new Date(m.created_at).toLocaleDateString('fr-FR')}</span>
+              </span>
+              <strong className={m.points >= 0 ? 'is-ok' : 'is-ko'}>{m.points > 0 ? '+' : ''}{m.points} pts</strong>
+            </div>
+          ))}
+          {movements.length > 3 && (
+            <button type="button" className="m-link m-link-sm" onClick={() => setShowAll((v) => !v)}>
+              {showAll ? 'Voir moins' : `Voir les ${movements.length} mouvements`}
+            </button>
+          )}
+        </div>
+      ) : (
+        <p className="m-muted m-small">Aucun point pour l'instant : 1 point par tranche de 4 € quand un rendez-vous passe en « terminé ».</p>
+      )}
+    </section>
+  );
+}
+
 function toForm(data) {
   return { name: data.name, phone: data.phone || '', birthdate: data.birthdate || '', notes: data.notes || '' };
 }
@@ -92,7 +164,7 @@ export default function FicheScreen({ clientId, onBack, rdv }) {
             <span className="m-avatar m-avatar-lg" aria-hidden="true">{initials(detail.name)}</span>
             <h1 className="m-title">{detail.name}</h1>
             <p className="m-muted">
-              {detail.history.length} rendez-vous · {detail.hasAccount ? 'compte en ligne créé' : 'pas de compte en ligne'}
+              {detail.history.length} rendez-vous{detail.loyalty ? ` · ${detail.loyalty.points} pts` : ''} · {detail.hasAccount ? 'compte en ligne' : 'pas de compte en ligne'}
             </p>
             <div className="m-actions-row">
               {detail.phone && <a className="m-action" href={telHref(detail.phone)}><Icon name="phone" />Appeler</a>}
@@ -121,10 +193,10 @@ export default function FicheScreen({ clientId, onBack, rdv }) {
 
           {tab === 'infos' && (
             <section className="m-section">
+              {detail.loyalty && <LoyaltyCard loyalty={detail.loyalty} hasAccount={detail.hasAccount} referralCode={detail.referral_code} />}
               <div className="m-card m-card-pad">
                 <ClientForm form={form} setForm={setForm} idPrefix="m-fiche" />
                 {detail.email && <p className="m-muted">Email : {detail.email}</p>}
-                {detail.referral_code && <p className="m-muted">Code de parrainage : <strong>{detail.referral_code}</strong></p>}
                 {dirty && (
                   <button type="button" className="m-btn m-btn-primary m-btn-block" onClick={save} disabled={saving}>
                     {saving ? 'Enregistrement…' : 'Enregistrer les modifications'}

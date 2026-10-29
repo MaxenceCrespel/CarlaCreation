@@ -185,6 +185,27 @@ describe('ClientsService', () => {
     expect(reservationRepo.update).toHaveBeenCalledWith({ id: 5 }, { client_id: null });
   });
 
+  it('findOne returns the loyalty balance (earnings minus redemptions) and the reward tiers', async () => {
+    clientRepo.findOne.mockResolvedValue({ id: 1, name: 'Alice', password_hash: 'bcrypt-hash' });
+    dataSource.query.mockImplementation(async (sql: string) => {
+      if (sql.includes('FROM loyalty_points')) {
+        return [
+          { points: -50, reason: 'redeem', created_at: new Date('2026-10-02') },
+          { points: 60, reason: 'purchase', created_at: new Date('2026-09-01') },
+          { points: 20, reason: 'referral_sponsor', created_at: new Date('2026-08-01') },
+        ];
+      }
+      return [];
+    });
+
+    const result = await service.findOne(1);
+
+    expect(result.loyalty.points).toBe(30);
+    expect(result.loyalty.movements).toHaveLength(3);
+    expect(result.loyalty.tiers[0]).toEqual({ points: 50, amountCents: 500 });
+    expect(result).not.toHaveProperty('password_hash');
+  });
+
   it('unlink throws NotFoundException for a missing reservation', async () => {
     reservationRepo.update.mockResolvedValue({ affected: 0 });
     await expect(service.unlink(999)).rejects.toBeInstanceOf(NotFoundException);

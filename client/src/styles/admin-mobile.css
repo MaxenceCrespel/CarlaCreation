@@ -465,3 +465,15 @@ div.m-list-item, label.m-list-item { cursor: default; }
 .m-cumul-legend { display: flex; gap: 18px; }
 .m-cumul-legend strong { font-family: var(--font-display); font-size: 20px; font-weight: 500; }
 .m-explain { font-size: 16px; line-height: 1.5; }
+
+/* ---------- Fidélité (fiche cliente) ---------- */
+.m-loyalty { background: #FBF5EF; }
+.m-eyebrow-flat { margin: 0; }
+.m-loyalty-track { position: relative; height: 10px; border-radius: 999px; background: var(--m-line); margin: 4px 0; }
+.m-loyalty-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: var(--color-accent); }
+.m-loyalty-tick { position: absolute; top: -3px; width: 4px; height: 16px; margin-left: -2px; border-radius: 2px; background: #D9CCBE; }
+.m-loyalty-tick.is-reached { background: var(--color-accent-strong); }
+.m-loyalty-legend { position: relative; height: 32px; font-size: 11px; color: var(--color-text-subtle); }
+.m-loyalty-legend span { position: absolute; transform: translateX(-100%); text-align: right; line-height: 1.25; }
+.m-loyalty-legend span.is-reached { color: var(--color-accent-strong); font-weight: 700; }
+.m-movements { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--m-line); padding-top: 10px; }
