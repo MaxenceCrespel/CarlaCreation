@@ -148,6 +148,82 @@ function ClientNameAutocomplete({ id, value, onChange, onPick }) {
   );
 }
 
+// Searchable service picker, grouped by category — a plain <select> gets
+// unwieldy once the catalogue has dozens of services.
+function ServicePicker({ id, services, categories, value, onChange, showInactive }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const selected = services.find((s) => s.id === Number(value)) || null;
+  const categoryName = (cid) => categories.find((c) => c.id === cid)?.name ?? 'Autres';
+
+  const q = query.trim().toLowerCase();
+  const groups = [];
+  services
+    .filter((s) => (showInactive || s.active) && (!q || s.name.toLowerCase().includes(q) || categoryName(s.category_id).toLowerCase().includes(q)))
+    .forEach((s) => {
+      const name = categoryName(s.category_id);
+      let g = groups.find((x) => x.name === name);
+      if (!g) {
+        g = { name, items: [] };
+        groups.push(g);
+      }
+      g.items.push(s);
+    });
+
+  function pick(service) {
+    onChange(String(service.id));
+    setOpen(false);
+    setQuery('');
+  }
+
+  return (
+    <div className="service-picker">
+      <button type="button" id={id} className="service-picker-trigger" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        {selected ? (
+          <span>
+            {selected.name}
+            {!selected.active ? ' (inactive)' : ''}
+            <span className="service-picker-cat"> · {categoryName(selected.category_id)}</span>
+          </span>
+        ) : (
+          <span className="service-picker-placeholder">Choisissez une prestation</span>
+        )}
+        <span aria-hidden="true">▾</span>
+      </button>
+      {open && (
+        <div className="service-picker-panel">
+          <input
+            type="search"
+            autoFocus
+            placeholder="Rechercher une prestation…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          <div className="service-picker-list">
+            {groups.length === 0 && <p className="form-hint">Aucune prestation trouvée.</p>}
+            {groups.map((g) => (
+              <div key={g.name}>
+                <div className="service-picker-group">{g.name}</div>
+                {g.items.map((s) => (
+                  <button
+                    type="button"
+                    key={s.id}
+                    className={`service-picker-item${selected?.id === s.id ? ' is-selected' : ''}`}
+                    onClick={() => pick(s)}
+                  >
+                    {s.name}
+                    {!s.active ? ' (inactive)' : ''}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // `initial` pre-fills the form (e.g. the date/time tapped in the mobile
 // agenda, or a client picked from her fiche).
 export function AddReservationForm({ onCreated, onCancel, initial }) {
@@ -168,7 +244,6 @@ export function AddReservationForm({ onCreated, onCancel, initial }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const categoryName = (id) => categories.find((c) => c.id === id)?.name ?? '';
   const selectedService = services.find((s) => s.id === Number(form.serviceId)) || null;
 
   function update(field) {
@@ -226,6 +301,10 @@ export function AddReservationForm({ onCreated, onCancel, initial }) {
       e.target.reportValidity();
       return;
     }
+    if (!form.serviceId) {
+      setFeedback('Choisissez une prestation.');
+      return;
+    }
     if (guests.some((g) => !g.name.trim() || !g.serviceId)) {
       setFeedback('Complétez le nom et la prestation de chaque personne ajoutée, ou retirez-la.');
       return;
@@ -264,158 +343,163 @@ export function AddReservationForm({ onCreated, onCancel, initial }) {
       <p className="section-lead">
         Pour enregistrer un rendez-vous pris par téléphone ou en personne. Le créneau est vérifié pour éviter
         tout chevauchement, mais les horaires du jour ne sont pas imposés (utile pour un ajout rétroactif).
-        Ajoutez d'autres personnes ci-dessous pour un rendez-vous groupé (ex : une mère et sa fille) — elles
-        seront enchaînées à la suite dans le même créneau.
       </p>
 
-      <div className="form-row">
-        <label htmlFor="manual-service">Prestation (personne 1)</label>
-        <select id="manual-service" required value={form.serviceId} onChange={update('serviceId')}>
-          <option value="" disabled>Choisissez une prestation</option>
-          {services.map((s) => (
-            <option key={s.id} value={s.id}>
-              [{categoryName(s.category_id)}] {s.name}
-              {!s.active ? ' (inactive)' : ''}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <AddonCheckboxes service={selectedService} selectedIds={addonIds} onToggle={toggleAddon} />
-
-      <div className="form-row two-col">
-        <div>
-          <label htmlFor="manual-date">Date</label>
-          <input type="date" id="manual-date" required value={form.date} onChange={update('date')} />
-        </div>
-        <div>
-          <label htmlFor="manual-time">Heure de début</label>
-          <input type="time" id="manual-time" required value={form.startTime} onChange={update('startTime')} />
-        </div>
-      </div>
-
-      <div className="form-row">
-        <label htmlFor="manual-name">Prénom et nom (personne 1)</label>
-        <ClientNameAutocomplete id="manual-name" value={form.clientName} onChange={update('clientName')} onPick={pickSuggestedClient} />
-      </div>
-
-      {guests.map((guest, i) => (
-        <div className="guest-block" key={guest.key}>
-          <div className="guest-block-header">
-            <label htmlFor={`manual-guest-name-${guest.key}`}>Personne {i + 2}</label>
-            <button type="button" className="guest-remove-btn" onClick={() => removeGuest(guest.key)}>Retirer</button>
+      <fieldset className="mrf-section">
+        <legend>Quand</legend>
+        <div className="form-row two-col">
+          <div>
+            <label htmlFor="manual-date">Date</label>
+            <input type="date" id="manual-date" required value={form.date} onChange={update('date')} />
           </div>
-          <input
-            type="text"
-            id={`manual-guest-name-${guest.key}`}
-            required
-            minLength={2}
-            maxLength={100}
-            placeholder="Nom complet"
-            value={guest.name}
-            onChange={(e) => updateGuest(guest.key, { name: e.target.value })}
-          />
-          <select required value={guest.serviceId} onChange={(e) => updateGuest(guest.key, { serviceId: e.target.value })}>
-            <option value="" disabled>Choisissez une prestation</option>
-            {services.map((s) => (
-              <option key={s.id} value={s.id}>
-                [{categoryName(s.category_id)}] {s.name}
-              </option>
-            ))}
-          </select>
-          <AddonCheckboxes
-            service={services.find((s) => s.id === Number(guest.serviceId)) || null}
-            selectedIds={guest.addonIds}
-            onToggle={(addonId, checked) => toggleGuestAddon(guest.key, addonId, checked)}
-          />
+          <div>
+            <label htmlFor="manual-time">Heure de début</label>
+            <input type="time" id="manual-time" required value={form.startTime} onChange={update('startTime')} />
+          </div>
         </div>
-      ))}
+      </fieldset>
 
-      <button type="button" className="btn btn-outline add-guest-btn" onClick={addGuest}>
-        + Ajouter une personne
-      </button>
-
-      <div className="form-row two-col">
-        <div>
-          <label htmlFor="manual-email">Email</label>
-          <input type="email" id="manual-email" required value={form.clientEmail} onChange={update('clientEmail')} />
-        </div>
-        <div>
-          <label htmlFor="manual-phone">Téléphone</label>
-          <input type="tel" id="manual-phone" required placeholder="06 12 34 56 78" value={form.clientPhone} onChange={update('clientPhone')} />
-        </div>
-      </div>
-
-      <div className="form-row checkbox-row">
-        <label htmlFor="manual-at-home">
-          <input
-            type="checkbox"
-            id="manual-at-home"
-            checked={form.atClientHome}
-            onChange={(e) => setForm((f) => ({ ...f, atClientHome: e.target.checked }))}
-          />
-          Rendez-vous à domicile (Carla se déplace)
-        </label>
-      </div>
-
-      {form.atClientHome && (
+      <fieldset className="mrf-section">
+        <legend>Cliente</legend>
         <div className="form-row">
-          <label htmlFor="manual-address">Adresse du client·e</label>
-          <input
-            type="text"
-            id="manual-address"
-            required
-            minLength={5}
-            maxLength={300}
-            value={form.clientAddress}
-            onChange={update('clientAddress')}
+          <label htmlFor="manual-name">Prénom et nom</label>
+          <ClientNameAutocomplete id="manual-name" value={form.clientName} onChange={update('clientName')} onPick={pickSuggestedClient} />
+        </div>
+        <div className="form-row two-col">
+          <div>
+            <label htmlFor="manual-phone">Téléphone</label>
+            <input type="tel" id="manual-phone" required inputMode="tel" autoComplete="off" placeholder="06 12 34 56 78" value={form.clientPhone} onChange={update('clientPhone')} />
+          </div>
+          <div>
+            <label htmlFor="manual-email">Email</label>
+            <input type="email" id="manual-email" required inputMode="email" autoComplete="off" value={form.clientEmail} onChange={update('clientEmail')} />
+          </div>
+        </div>
+        <div className="form-row checkbox-row">
+          <label htmlFor="manual-at-home">
+            <input
+              type="checkbox"
+              id="manual-at-home"
+              checked={form.atClientHome}
+              onChange={(e) => setForm((f) => ({ ...f, atClientHome: e.target.checked }))}
+            />
+            Rendez-vous à domicile (Carla se déplace)
+          </label>
+        </div>
+        {form.atClientHome && (
+          <div className="form-row">
+            <label htmlFor="manual-address">Adresse du client·e</label>
+            <input
+              type="text"
+              id="manual-address"
+              required
+              minLength={5}
+              maxLength={300}
+              value={form.clientAddress}
+              onChange={update('clientAddress')}
+            />
+          </div>
+        )}
+      </fieldset>
+
+      <fieldset className="mrf-section">
+        <legend>Prestation{guests.length > 0 ? ' — personne 1' : ''}</legend>
+        <div className="form-row">
+          <label htmlFor="manual-service">Prestation</label>
+          <ServicePicker
+            id="manual-service"
+            services={services}
+            categories={categories}
+            value={form.serviceId}
+            showInactive
+            onChange={(v) => {
+              setForm((f) => ({ ...f, serviceId: v }));
+              setAddonIds([]);
+            }}
           />
         </div>
-      )}
+        <AddonCheckboxes service={selectedService} selectedIds={addonIds} onToggle={toggleAddon} />
 
-      <div className="form-row checkbox-row">
-        <label htmlFor="manual-allow-overlap">
-          <input
-            type="checkbox"
-            id="manual-allow-overlap"
-            checked={form.allowOverlap}
-            onChange={(e) => setForm((f) => ({ ...f, allowOverlap: e.target.checked }))}
-          />
-          Autoriser le chevauchement avec un autre rendez-vous
-        </label>
-        <p className="form-hint">
-          Utile par exemple pour caser une coupe pendant le temps de pose d'une couleur.
-        </p>
-      </div>
+        {guests.map((guest, i) => (
+          <div className="guest-block" key={guest.key}>
+            <div className="guest-block-header">
+              <label htmlFor={`manual-guest-name-${guest.key}`}>Personne {i + 2}</label>
+              <button type="button" className="guest-remove-btn" onClick={() => removeGuest(guest.key)}>Retirer</button>
+            </div>
+            <input
+              type="text"
+              id={`manual-guest-name-${guest.key}`}
+              required
+              minLength={2}
+              maxLength={100}
+              placeholder="Nom complet"
+              value={guest.name}
+              onChange={(e) => updateGuest(guest.key, { name: e.target.value })}
+            />
+            <ServicePicker
+              services={services}
+              categories={categories}
+              value={guest.serviceId}
+              onChange={(v) => updateGuest(guest.key, { serviceId: v })}
+            />
+            <AddonCheckboxes
+              service={services.find((s) => s.id === Number(guest.serviceId)) || null}
+              selectedIds={guest.addonIds}
+              onToggle={(addonId, checked) => toggleGuestAddon(guest.key, addonId, checked)}
+            />
+          </div>
+        ))}
 
-      <div className="form-row two-col">
-        <div>
-          <label htmlFor="manual-status">Statut</label>
-          <select id="manual-status" value={form.status} onChange={update('status')}>
-            <option value="confirmed">Confirmée</option>
-            <option value="pending">En attente</option>
-            <option value="completed">Terminée</option>
-          </select>
+        <button type="button" className="btn btn-outline add-guest-btn" onClick={addGuest}>
+          + Ajouter une personne
+        </button>
+        {guests.length === 0 && (
+          <p className="form-hint">Rendez-vous groupé (ex : mère et fille) : les personnes sont enchaînées à la suite.</p>
+        )}
+      </fieldset>
+
+      <details className="mrf-more">
+        <summary>Options (statut, promotion, note, chevauchement)</summary>
+        <div className="form-row two-col">
+          <div>
+            <label htmlFor="manual-status">Statut</label>
+            <select id="manual-status" value={form.status} onChange={update('status')}>
+              <option value="confirmed">Confirmée</option>
+              <option value="pending">En attente</option>
+              <option value="completed">Terminée</option>
+            </select>
+          </div>
+          {promotions.length > 0 && (
+            <div>
+              <label htmlFor="manual-promotion">Promotion</label>
+              <select id="manual-promotion" value={form.promotionId} onChange={update('promotionId')}>
+                <option value="">Aucune</option>
+                {promotions.filter((p) => p.active).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label} (-{p.discount_percent}%){p.requires_code ? ` — code ${p.code}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
-        <div>
+        <div className="form-row">
           <label htmlFor="manual-notes">Note (optionnel)</label>
           <input type="text" id="manual-notes" maxLength={500} value={form.notes} onChange={update('notes')} />
         </div>
-      </div>
-
-      {promotions.length > 0 && (
-        <div className="form-row">
-          <label htmlFor="manual-promotion">Promotion (optionnel)</label>
-          <select id="manual-promotion" value={form.promotionId} onChange={update('promotionId')}>
-            <option value="">Aucune</option>
-            {promotions.filter((p) => p.active).map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label} (-{p.discount_percent}%){p.requires_code ? ` — code ${p.code}` : ''}
-              </option>
-            ))}
-          </select>
+        <div className="form-row checkbox-row">
+          <label htmlFor="manual-allow-overlap">
+            <input
+              type="checkbox"
+              id="manual-allow-overlap"
+              checked={form.allowOverlap}
+              onChange={(e) => setForm((f) => ({ ...f, allowOverlap: e.target.checked }))}
+            />
+            Autoriser le chevauchement avec un autre rendez-vous
+          </label>
+          <p className="form-hint">Utile par exemple pour caser une coupe pendant le temps de pose d'une couleur.</p>
         </div>
-      )}
+      </details>
 
       {feedback && <div className="form-feedback error">{feedback}</div>}
 
