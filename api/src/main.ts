@@ -7,6 +7,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import { seoMetaMiddleware } from './common/seo-meta';
 import cookieParser from 'cookie-parser';
+import type { Request, Response } from 'express';
 import { AppModule } from './app.module';
 import { config } from './config';
 import { issueCsrfToken } from './common/csrf';
@@ -30,7 +31,7 @@ async function bootstrap() {
           defaultSrc: ["'self'"],
           scriptSrc: ["'self'"],
           styleSrc: ["'self'"],
-          imgSrc: ["'self'", 'data:'],
+          imgSrc: ["'self'", 'data:', 'blob:'],
           connectSrc: ["'self'"],
           fontSrc: ["'self'"],
           objectSrc: ["'none'"],
@@ -72,6 +73,11 @@ async function bootstrap() {
   const uploadsDir = path.join(__dirname, '..', 'uploads');
   // Upload file names are unique (timestamp + random), a given URL never changes.
   const staticMaxAge = config.isProd ? '1y' : 0;
+  // Photos sent in client conversations are private: never served as static
+  // files (only through the guarded /api/client-messages and
+  // /api/admin/conversations photo routes). Registered before the static
+  // handler so it wins.
+  app.use('/uploads/messages', (_req: Request, res: Response) => res.status(404).end());
   app.useStaticAssets(uploadsDir, { prefix: '/uploads', maxAge: staticMaxAge, immutable: config.isProd });
 
   await app.listen(config.PORT);

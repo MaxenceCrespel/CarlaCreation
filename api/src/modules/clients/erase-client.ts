@@ -1,4 +1,5 @@
 import { EntityManager } from 'typeorm';
+import { removePhotoFile } from '../messaging/message-photos';
 
 export const ERASED_CLIENT_LABEL = 'Client supprimé';
 
@@ -12,7 +13,8 @@ export const ERASED_CLIENT_LABEL = 'Client supprimé';
 //   law (Code de commerce L123-22), which RGPD art. 17(3)(b) allows.
 // - Personal promo codes are deactivated and scrubbed (past reservations
 //   still point at the row); the client row itself is deleted, which cascades
-//   to the points ledger and any pending tokens.
+//   to the points ledger, any pending tokens and the conversation with the
+//   salon (whose photo files are deleted here).
 export async function eraseClientData(manager: EntityManager, clientId: number): Promise<void> {
   const [client]: { email: string }[] = await manager.query(`SELECT email FROM clients WHERE id = $1`, [clientId]);
   if (!client) return;
@@ -27,5 +29,9 @@ export async function eraseClientData(manager: EntityManager, clientId: number):
     [clientId, ERASED_CLIENT_LABEL, client.email ?? ''],
   );
   await manager.query(`UPDATE promotions SET client_id = NULL, active = false, label = 'Code supprimé' WHERE client_id = $1`, [clientId]);
+  // Conversation rows go with the client (ON DELETE CASCADE); their photo
+  // files have to be removed by hand.
+  const photos: { photo: string }[] = await manager.query(`SELECT photo FROM client_messages WHERE client_id = $1 AND photo IS NOT NULL`, [clientId]);
   await manager.query(`DELETE FROM clients WHERE id = $1`, [clientId]);
+  photos.forEach((p) => removePhotoFile(p.photo));
 }

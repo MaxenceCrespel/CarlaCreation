@@ -91,7 +91,7 @@ export default function MobileAdmin({ username, onLogout, onCredentialsUpdated }
   const [editTarget, setEditTarget] = useState(null);
   const [matchTarget, setMatchTarget] = useState(null);
 
-  const [section, param] = route.split('/');
+  const [section, param, sub] = route.split('/');
   const activeTab = section === 'plus' ? 'plus' : TABS.some((t) => t.key === section) ? section : 'today';
 
   const loadReservations = useCallback(() => {
@@ -106,14 +106,15 @@ export default function MobileAdmin({ username, onLogout, onCredentialsUpdated }
   const loadCounts = useCallback(() => {
     Promise.allSettled([
       apiFetch('/admin/contact-messages'),
+      apiFetch('/admin/conversations'),
       apiFetch('/admin/reviews'),
       apiFetch('/admin/products'),
       apiFetch('/admin/invoices'),
-    ]).then(([messages, reviews, products, invoices]) => {
+    ]).then(([messages, conversations, reviews, products, invoices]) => {
       const list = (r) => (r.status === 'fulfilled' ? r.value : []);
       const unpaid = list(invoices).filter((i) => i.status !== 'paid');
       setCounts({
-        messages: list(messages).filter((m) => !m.is_read).length,
+        messages: list(messages).filter((m) => !m.is_read).length + list(conversations).reduce((sum, c) => sum + c.unread, 0),
         reviews: list(reviews).filter((r) => r.status === 'pending').length,
         lowStock: list(products).filter((p) => p.low_stock_threshold > 0 && p.quantity <= p.low_stock_threshold).length,
         unpaidInvoices: unpaid.length,
@@ -249,7 +250,7 @@ export default function MobileAdmin({ username, onLogout, onCredentialsUpdated }
       const common = { onBack: () => back('plus'), go, refreshCounts: loadCounts };
       switch (param.split('?')[0]) {
         case 'disponibilites': return <DispoScreen {...common} reservations={reservations} />;
-        case 'messages': return <MessagesScreen {...common} onCreateRdv={rdv.create} />;
+        case 'messages': return <MessagesScreen {...common} onBack={() => back(sub ? 'plus/messages' : 'plus')} clientId={sub ? Number(sub) : null} onCreateRdv={rdv.create} />;
         case 'avis': return <AvisScreen {...common} />;
         case 'prestations': return <PrestationsScreen {...common} />;
         case 'galerie': return <GalerieScreen {...common} />;
@@ -331,6 +332,10 @@ export default function MobileAdmin({ username, onLogout, onCredentialsUpdated }
             unlinkClient,
             edit: (r) => setEditTarget(r),
             linkClient: (r) => setMatchTarget(r),
+            writeTo: (clientId) => {
+              setDetailId(null);
+              go(`plus/messages/${clientId}`);
+            },
             openClient: (clientId) => {
               setDetailId(null);
               go(`clients/${clientId}`);
