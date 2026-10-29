@@ -3,8 +3,15 @@ import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { Client, normalizeClientName } from '../../database/entities/client.entity';
 import { Reservation } from '../../database/entities/reservation.entity';
+import { REWARD_TIERS } from '../rewards/loyalty.constants';
 import { eraseClientData } from './erase-client';
 import { CreateAndLinkClientDto, CreateClientDto, UpdateClientDto } from './dto/client.dto';
+
+interface LoyaltySummary {
+  points: number;
+  tiers: { points: number; amountCents: number }[];
+  movements: { points: number; reason: string; created_at: Date }[];
+}
 
 interface ReservationHistoryRow {
   id: number;
@@ -87,7 +94,9 @@ export class ClientsService {
     return new Map(counts.map((c) => [c.client_id, Number(c.count)]));
   }
 
-  async findOne(id: number): Promise<Omit<Client, 'password_hash'> & { hasAccount: boolean; history: ReservationHistoryRow[] }> {
+  async findOne(
+    id: number,
+  ): Promise<Omit<Client, 'password_hash'> & { hasAccount: boolean; history: ReservationHistoryRow[]; loyalty: LoyaltySummary }> {
     const client = await this.clientRepo.findOne({ where: { id } });
     if (!client) throw new NotFoundException('Fiche client introuvable.');
 
@@ -99,7 +108,19 @@ export class ClientsService {
       [id],
     );
 
-    return { ...sanitizeClient(client), history };
+    // Points ledger (see RewardsService): the balance is the sum of every
+    // movement — earnings positive, redemptions negative.
+    const movements: { points: number; reason: string; created_at: Date }[] = await this.dataSource.query(
+      `SELECT points, reason, created_at FROM loyalty_points WHERE client_id = $1 ORDER BY created_at DESC, id DESC`,
+      [id],
+    );
+    const points = movements.reduce((sum, m) => sum + Number(m.points), 0);
+
+    return {
+      ...sanitizeClient(client),
+      history,
+      loyalty: { points, tiers: REWARD_TIERS, movements: movements.slice(0, 20).map((m) => ({ ...m, points: Number(m.points) })) },
+    };
   }
 
   // Suggests existing profiles for the admin to review — an exact match on
