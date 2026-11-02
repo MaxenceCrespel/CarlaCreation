@@ -1,4 +1,4 @@
-import { renderSeoHtml } from './seo-meta';
+import { isUnknownRoute, renderSeoHtml } from './seo-meta';
 
 const TEMPLATE = `<!doctype html><html><head>
 <title>Accueil</title>
@@ -32,5 +32,13 @@ describe('renderSeoHtml', () => {
   it('leaves unknown routes and the admin to the default handling', () => {
     expect(renderSeoHtml(TEMPLATE, '/admin')).toBeNull();
     expect(renderSeoHtml(TEMPLATE, '/une-page-inconnue')).toBeNull();
+  });
+
+  it('flags only genuinely unknown pages as 404', () => {
+    expect(isUnknownRoute('/une-page-inconnue')).toBe(true);
+    expect(isUnknownRoute('/services/truc')).toBe(true);
+    for (const p of ['/', '/services', '/admin', '/cgv', '/mon-rendez-vous/abc', '/api/services', '/uploads/x', '/healthz', '/favicon.svg', '/assets/index-abc.js']) {
+      expect(isUnknownRoute(p)).toBe(false);
+    }
   });
 });
