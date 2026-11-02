@@ -55,6 +55,18 @@ const PUBLIC: Record<string, Meta> = {
 // Pages that must never be indexed (private by nature).
 const PRIVATE_PREFIXES = ['/mon-compte', '/mon-rendez-vous', '/verification-email', '/mot-de-passe-oublie'];
 
+// Other client-side routes that exist but need no custom meta tags.
+const OTHER_ROUTES = ['/admin', '/mentions-legales', '/cgv', '/confidentialite'];
+
+// True for a browser-style path the React app doesn't know: it must answer
+// 404, not 200, or crawlers treat every junk URL as a (duplicate) real page.
+export function isUnknownRoute(urlPath: string): boolean {
+  if (/\.[a-z0-9]+$/i.test(urlPath)) return false; // a file request, not a page
+  if (/^\/(api|uploads|img)(\/|$)|^\/healthz$/.test(urlPath)) return false; // handled by controllers
+  if (PUBLIC[urlPath] || OTHER_ROUTES.includes(urlPath)) return false;
+  return !PRIVATE_PREFIXES.some((p) => urlPath === p || urlPath.startsWith(`${p}/`));
+}
+
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 export function renderSeoHtml(template: string, urlPath: string): string | null {
@@ -84,8 +96,18 @@ export function seoMetaMiddleware(clientDist: string) {
     if (req.method !== 'GET' || !(req.headers.accept ?? '').includes('text/html')) return next();
     try {
       template ??= fs.readFileSync(indexPath, 'utf8');
-      const html = renderSeoHtml(template, req.path.replace(/\/+$/, '') || '/');
-      if (!html) return next();
+      const urlPath = req.path.replace(/\/+$/, '') || '/';
+      const html = renderSeoHtml(template, urlPath);
+      if (!html) {
+        // The SPA's own 404 page is rendered client-side from this same HTML.
+        if (!isUnknownRoute(urlPath)) return next();
+        res.setHeader('Cache-Control', 'no-cache');
+        res
+          .status(404)
+          .type('html')
+          .send(template.replace(/<meta name="robots" content="[^"]*" \/>/, '<meta name="robots" content="noindex, nofollow" />'));
+        return;
+      }
       res.setHeader('Cache-Control', 'no-cache');
       res.type('html').send(html);
     } catch {

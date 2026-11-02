@@ -3,7 +3,7 @@ import { apiFetch } from '../api/client';
 
 const FALLBACK = {
   siteName: 'Carla Création',
-  siteTagline: 'Coiffure & Ongles',
+  siteTagline: 'Coiffure & Ongles — Révéler votre beauté, sublimer votre confiance',
   // Real values (same as api/src/site-config.ts) so the first paint already
   // has its final text — otherwise the page jumps when the config arrives.
   sitePhone: '06 19 64 07 66',
