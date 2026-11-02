@@ -1,0 +1,21 @@
+{
+  "specVersion": "1.0",
+  "host": {
+    "displayName": "Carla Création",
+    "identifier": "carlacreation.fr"
+  },
+  "entries": [
+    {
+      "identifier": "urn:ai:carlacreation.fr:knowledge:llms-txt",
+      "displayName": "Carla Création : prestations, tarifs et réservation (llms.txt)",
+      "mediaType": "text/plain",
+      "type": "text/plain",
+      "url": "https://carlacreation.fr/llms.txt",
+      "description": "Index des pages du site de Carla Création, coiffeuse et prothésiste ongulaire à Loos, près de Lille : prestations, tarifs, zones à domicile et réservation en ligne.",
+      "representativeQueries": [
+        "Quelle coiffeuse à domicile près de Lille propose la réservation en ligne ?",
+        "Quels sont les tarifs de pose d'ongles et de coiffure à Loos ?"
+      ]
+    }
+  ]
+}

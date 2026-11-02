@@ -62,6 +62,8 @@ class NoopThrottlerGuard implements CanActivate {
       rootPath: path.join(__dirname, '..', '..', 'client', 'dist'),
       exclude: ['/api/{*splat}', '/uploads/{*splat}', '/img/{*splat}', '/healthz', '/robots.txt', '/sitemap.xml'],
       serveStaticOptions: {
+        // /.well-known/ (ai-catalog.json) lives in a dot-directory, ignored by default.
+        dotfiles: 'allow',
         // The build's /assets files carry a content hash in their name: cache
         // them for a year. index.html (which points at them) must always be
         // revalidated, or a new deployment would never be picked up.
