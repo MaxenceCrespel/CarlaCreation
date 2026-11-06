@@ -147,6 +147,7 @@ describe('ReservationsService', () => {
       select: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
       andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
       getMany: jest.fn().mockResolvedValue([]),
     });
   }
@@ -172,6 +173,7 @@ describe('ReservationsService', () => {
       select: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
       andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
       getMany: jest.fn().mockResolvedValue([{ start_time: '10:15', end_time: '11:00' }]),
     });
 
@@ -186,6 +188,38 @@ describe('ReservationsService', () => {
         status: 'confirmed',
       } as any),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('createManual reports the colliding bookings in a 409 OVERLAP the admin can confirm', async () => {
+    serviceRepo.findOne.mockResolvedValue(HAIRCUT);
+    reservationRepo.createQueryBuilder.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      getMany: jest.fn().mockResolvedValue([
+        { id: 9, client_name: 'Alice', status: 'confirmed', start_time: '10:15', end_time: '11:00', at_client_home: false, travel_duration_minutes: null },
+      ]),
+    });
+    dataSource.transaction.mockImplementationOnce(async (fn) => fn({ query: jest.fn(), insert: jest.fn() }));
+
+    const err = await service
+      .createManual({
+        serviceId: 1,
+        clientName: 'Bob',
+        clientEmail: 'b@example.com',
+        clientPhone: '0600000000',
+        date: '2099-01-01',
+        startTime: '10:30',
+        status: 'confirmed',
+      } as any)
+      .catch((e) => e);
+
+    expect(err).toBeInstanceOf(ConflictException);
+    expect(err.getResponse()).toMatchObject({
+      code: 'OVERLAP',
+      overlaps: [{ id: 9, clientName: 'Alice', startTime: '10:15', endTime: '11:00' }],
+    });
   });
 
   it('createManual allows a genuinely overlapping slot when allowOverlap is set', async () => {
@@ -222,6 +256,7 @@ describe('ReservationsService', () => {
       select: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
       andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
       getMany: jest.fn().mockResolvedValue([{ start_time: '10:15', end_time: '11:00', at_client_home: true }]),
     });
 
@@ -251,6 +286,7 @@ describe('ReservationsService', () => {
       select: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
       andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
       getMany: jest.fn().mockResolvedValue([{ start_time: '09:00', end_time: '09:30', at_client_home: true, travel_duration_minutes: null }]),
     });
     dataSource.transaction.mockImplementationOnce(async (fn) => {
@@ -1507,6 +1543,7 @@ describe('ReservationsService', () => {
         select: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
         getMany: jest.fn().mockResolvedValue([{ start_time: '10:30', end_time: '11:15', at_client_home: false }]),
       });
 

@@ -449,8 +449,9 @@ export class ReservationsService {
 
   // Admin-only: log a reservation directly (walk-in, phone booking…),
   // bypassing the public "must be a pre-computed available slot" constraint
-  // (so the admin can book outside opened hours or on an unset day) but
-  // still enforcing a hard overlap check so two reservations can't collide.
+  // (so the admin can book outside opened hours or on an unset day). An
+  // overlap is never refused outright: it comes back as a 409 listing the
+  // colliding bookings, and the admin re-submits with allowOverlap to confirm.
   // Also supports additional guests, same as the public flow.
   async createManual(dto: AdminCreateReservationDto) {
     if (!isValidDateString(dto.date)) {
@@ -532,23 +533,39 @@ export class ReservationsService {
     return result;
   }
 
-  // Throws when `candidate` collides with any live reservation that day
-  // (or its travel time) — excludeId lets an edit ignore its own row.
+  // Throws a 409 { code: 'OVERLAP', overlaps } when `candidate` collides with
+  // any live reservation that day (or its travel time) — excludeId lets an
+  // edit ignore its own row.
   private async assertNoOverlap(date: string, candidate: { start: number; end: number }, defaultBufferMinutes: number, excludeId?: number): Promise<void> {
     const query = this.reservationRepo
       .createQueryBuilder('r')
-      .select(['r.start_time', 'r.end_time', 'r.at_client_home', 'r.travel_duration_minutes'])
+      .select(['r.id', 'r.client_name', 'r.status', 'r.start_time', 'r.end_time', 'r.at_client_home', 'r.travel_duration_minutes'])
       .where('r.reservation_date = :date', { date })
-      .andWhere('r.status NOT IN (:...excluded)', { excluded: ['cancelled', 'refused'] });
+      .andWhere('r.status NOT IN (:...excluded)', { excluded: ['cancelled', 'refused'] })
+      .orderBy('r.start_time', 'ASC');
     if (excludeId !== undefined) query.andWhere('r.id != :id', { id: excludeId });
     const others = await query.getMany();
 
-    const overlaps = others.some((r) => {
+    const overlapping = others.filter((r) => {
       const busy = effectiveInterval(toMinutes(r.start_time), toMinutes(r.end_time), r.at_client_home, r.travel_duration_minutes ?? defaultBufferMinutes);
       return intervalsOverlap(candidate, busy);
     });
-    if (overlaps) {
-      throw new ConflictException('Ce créneau chevauche une réservation existante (ou son temps de trajet).');
+    if (overlapping.length > 0) {
+      // Not a refusal: the admin front shows these and lets her confirm
+      // anyway (allowOverlap: true). Only the public booking flow is strict.
+      throw new ConflictException({
+        statusCode: 409,
+        code: 'OVERLAP',
+        message: 'Ce créneau chevauche une réservation existante (ou son temps de trajet).',
+        overlaps: overlapping.map((r) => ({
+          id: r.id,
+          clientName: r.client_name,
+          status: r.status,
+          startTime: r.start_time,
+          endTime: r.end_time,
+          atClientHome: r.at_client_home,
+        })),
+      });
     }
   }
 

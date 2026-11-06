@@ -2390,3 +2390,7 @@ input[aria-invalid="true"] { border: 2px solid #A23B32; }
 .offer-card-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .offer-card-actions .btn { flex: 1 1 140px; justify-content: center; }
 .service-book-link { display: inline-block; margin-top: 12px; font-weight: 600; font-size: 0.9rem; }
+
+.overlap-list { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.overlap-list li { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--color-border, #eee); border-radius: 10px; background: var(--color-bg); }
+.overlap-list li span { color: var(--color-text-soft); font-size: 0.9rem; }
