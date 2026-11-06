@@ -50,7 +50,6 @@ const EMPTY_MANUAL_FORM = {
   notes: '',
   status: 'confirmed',
   atClientHome: false,
-  allowOverlap: false,
   promotionId: '',
 };
 
@@ -224,6 +223,40 @@ function ServicePicker({ id, services, categories, value, onChange, showInactive
   );
 }
 
+// Shown when the server reports that a booking overlaps others (409
+// OVERLAP). The admin is never blocked: she sees what collides and decides.
+function OverlapConfirmModal({ overlaps, busy, onConfirm, onCancel }) {
+  return (
+    <div className="modal-overlay" onClick={(e) => { e.stopPropagation(); if (!busy) onCancel(); }}>
+      <div className="modal-card" role="alertdialog" aria-modal="true" aria-label="Chevauchement de rendez-vous" onClick={(e) => e.stopPropagation()}>
+        <h2>Ce créneau chevauche {overlaps.length > 1 ? 'des rendez-vous' : 'un rendez-vous'}</h2>
+        <p className="section-lead">
+          Le créneau choisi (temps de trajet compris pour un rendez-vous à domicile) empiète sur :
+        </p>
+        <ul className="overlap-list">
+          {overlaps.map((o) => (
+            <li key={o.id}>
+              <strong>{o.clientName}</strong>
+              <span>
+                {o.startTime.slice(0, 5)} – {o.endTime.slice(0, 5)}
+                {o.atClientHome ? ' · à domicile' : ''}
+                {o.status === 'pending' ? ' · en attente' : ''}
+              </span>
+            </li>
+          ))}
+        </ul>
+        <p className="form-hint">Utile par exemple pour caser une coupe pendant le temps de pose d'une couleur.</p>
+        <div className="modal-actions">
+          <button type="button" className="btn btn-outline" onClick={onCancel} disabled={busy}>Modifier le créneau</button>
+          <button type="button" className="btn btn-primary" onClick={onConfirm} disabled={busy}>
+            {busy ? 'Enregistrement…' : 'Confirmer malgré le chevauchement'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // `initial` pre-fills the form (e.g. the date/time tapped in the mobile
 // agenda, or a client picked from her fiche).
 export function AddReservationForm({ onCreated, onCancel, initial }) {
@@ -236,6 +269,7 @@ export function AddReservationForm({ onCreated, onCancel, initial }) {
   const [promotions, setPromotions] = useState([]);
   const [feedback, setFeedback] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [overlaps, setOverlaps] = useState(null);
 
   useEffect(() => {
     apiFetch('/admin/services').then(setServices).catch(() => showToast('Impossible de charger les prestations.', 'error'));
@@ -301,6 +335,10 @@ export function AddReservationForm({ onCreated, onCancel, initial }) {
       e.target.reportValidity();
       return;
     }
+    await submit(false);
+  }
+
+  async function submit(allowOverlap) {
     if (!form.serviceId) {
       setFeedback('Choisissez une prestation.');
       return;
@@ -320,6 +358,7 @@ export function AddReservationForm({ onCreated, onCancel, initial }) {
         method: 'POST',
         body: {
           ...form,
+          allowOverlap,
           serviceId: Number(form.serviceId),
           addonIds,
           clientAddress: form.atClientHome ? form.clientAddress.trim() : undefined,
@@ -330,8 +369,12 @@ export function AddReservationForm({ onCreated, onCancel, initial }) {
       showToast('Réservation ajoutée.', 'success');
       onCreated();
     } catch (err) {
-      setFeedback(err.message);
-      showToast(err.message, 'error');
+      if (err.code === 'OVERLAP') {
+        setOverlaps(err.data.overlaps);
+      } else {
+        setFeedback(err.message);
+        showToast(err.message, 'error');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -459,7 +502,7 @@ export function AddReservationForm({ onCreated, onCancel, initial }) {
       </fieldset>
 
       <details className="mrf-more">
-        <summary>Options (statut, promotion, note, chevauchement)</summary>
+        <summary>Options (statut, promotion, note)</summary>
         <div className="form-row two-col">
           <div>
             <label htmlFor="manual-status">Statut</label>
@@ -487,18 +530,6 @@ export function AddReservationForm({ onCreated, onCancel, initial }) {
           <label htmlFor="manual-notes">Note (optionnel)</label>
           <input type="text" id="manual-notes" maxLength={500} value={form.notes} onChange={update('notes')} />
         </div>
-        <div className="form-row checkbox-row">
-          <label htmlFor="manual-allow-overlap">
-            <input
-              type="checkbox"
-              id="manual-allow-overlap"
-              checked={form.allowOverlap}
-              onChange={(e) => setForm((f) => ({ ...f, allowOverlap: e.target.checked }))}
-            />
-            Autoriser le chevauchement avec un autre rendez-vous
-          </label>
-          <p className="form-hint">Utile par exemple pour caser une coupe pendant le temps de pose d'une couleur.</p>
-        </div>
       </details>
 
       {feedback && <div className="form-feedback error">{feedback}</div>}
@@ -509,6 +540,18 @@ export function AddReservationForm({ onCreated, onCancel, initial }) {
         </button>
         <button type="button" className="btn btn-outline" onClick={onCancel}>Annuler</button>
       </div>
+
+      {overlaps && (
+        <OverlapConfirmModal
+          overlaps={overlaps}
+          busy={submitting}
+          onCancel={() => setOverlaps(null)}
+          onConfirm={async () => {
+            await submit(true);
+            setOverlaps(null);
+          }}
+        />
+      )}
     </form>
   );
 }
@@ -530,11 +573,11 @@ export function EditReservationModal({ reservation, onClose, onSaved }) {
     notes: reservation.notes || '',
     atClientHome: reservation.at_client_home,
     clientAddress: reservation.client_address || '',
-    allowOverlap: false,
     promotionId: reservation.promotion_id ? String(reservation.promotion_id) : '',
   });
   const [feedback, setFeedback] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [overlaps, setOverlaps] = useState(null);
   const [promotions, setPromotions] = useState([]);
 
   // reservation_addons only stores a name/price/duration snapshot, not an
@@ -587,7 +630,10 @@ export function EditReservationModal({ reservation, onClose, onSaved }) {
   async function handleSubmit(e) {
     e.preventDefault();
     setFeedback(null);
+    await save(false);
+  }
 
+  async function save(allowOverlap) {
     if (form.atClientHome && !form.clientAddress.trim()) {
       setFeedback('Indiquez une adresse pour un rendez-vous à domicile.');
       return;
@@ -608,7 +654,7 @@ export function EditReservationModal({ reservation, onClose, onSaved }) {
           atClientHome: form.atClientHome,
           clientAddress: form.atClientHome ? form.clientAddress.trim() : undefined,
           addonIds: addonsDirty ? addonIds : undefined,
-          allowOverlap: form.allowOverlap,
+          allowOverlap,
           promotionId: form.promotionId ? Number(form.promotionId) : null,
         },
       });
@@ -616,8 +662,12 @@ export function EditReservationModal({ reservation, onClose, onSaved }) {
       showToast(saved?.paymentWarning || 'Réservation modifiée.', saved?.paymentWarning ? 'error' : 'success');
       onSaved();
     } catch (err) {
-      setFeedback(err.message);
-      showToast(err.message, 'error');
+      if (err.code === 'OVERLAP') {
+        setOverlaps(err.data.overlaps);
+      } else {
+        setFeedback(err.message);
+        showToast(err.message, 'error');
+      }
     } finally {
       setSaving(false);
     }
@@ -712,21 +762,6 @@ export function EditReservationModal({ reservation, onClose, onSaved }) {
           </div>
         )}
 
-        <div className="form-row checkbox-row">
-          <label htmlFor="edit-allow-overlap">
-            <input
-              type="checkbox"
-              id="edit-allow-overlap"
-              checked={form.allowOverlap}
-              onChange={(e) => setForm((f) => ({ ...f, allowOverlap: e.target.checked }))}
-            />
-            Autoriser le chevauchement avec un autre rendez-vous
-          </label>
-          <p className="form-hint">
-            À cocher si ce créneau chevauche volontairement un autre rendez-vous (ex : temps de pose d'une couleur).
-          </p>
-        </div>
-
         {feedback && <div className="form-feedback error">{feedback}</div>}
 
         <div className="modal-actions">
@@ -736,6 +771,17 @@ export function EditReservationModal({ reservation, onClose, onSaved }) {
           </button>
         </div>
       </form>
+      {overlaps && (
+        <OverlapConfirmModal
+          overlaps={overlaps}
+          busy={saving}
+          onCancel={() => setOverlaps(null)}
+          onConfirm={async () => {
+            await save(true);
+            setOverlaps(null);
+          }}
+        />
+      )}
     </div>
   );
 }
