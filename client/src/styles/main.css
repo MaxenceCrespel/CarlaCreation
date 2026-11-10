@@ -2394,3 +2394,15 @@ input[aria-invalid="true"] { border: 2px solid #A23B32; }
 .overlap-list { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .overlap-list li { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--color-border, #eee); border-radius: 10px; background: var(--color-bg); }
 .overlap-list li span { color: var(--color-text-soft); font-size: 0.9rem; }
+
+/* Alerte hameçonnage : message du formulaire de contact contenant un lien */
+.phishing-warning {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #c0392b;
+  background: #fdecea;
+  color: #7a1f14;
+  font-size: 14px;
+  line-height: 1.45;
+}

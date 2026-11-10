@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ContactMessage } from '../../database/entities/contact-message.entity';
 import { CreateContactDto } from './dto/contact.dto';
+import { containsLink } from './link-detection';
 import { PushService } from '../push/push.service';
 
 @Injectable()
@@ -23,8 +24,11 @@ export class ContactService {
     });
   }
 
-  findAll(): Promise<ContactMessage[]> {
-    return this.contactRepo.find({ order: { created_at: 'DESC' } });
+  // `suspicious` : le message contient une adresse web (hameçonnage probable).
+  // Calculé à la lecture pour aussi repérer les messages reçus avant le filtre.
+  async findAll(): Promise<(ContactMessage & { suspicious: boolean })[]> {
+    const items = await this.contactRepo.find({ order: { created_at: 'DESC' } });
+    return items.map((m) => ({ ...m, suspicious: containsLink(m.message) || containsLink(m.name) }));
   }
 
   async setRead(id: number, isRead: boolean): Promise<ContactMessage> {

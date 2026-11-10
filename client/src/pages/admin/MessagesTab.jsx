@@ -89,6 +89,11 @@ export default function MessagesTab() {
                   {message.is_read ? 'Lu' : 'Non lu'}
                 </span>
               </div>
+              {message.suspicious && (
+                <p className="phishing-warning" role="alert">
+                  <strong>Message suspect : il contient un lien.</strong> Ne cliquez pas dessus, ne saisissez aucun mot de passe et ne rappelez pas le numéro. Supprimez-le.
+                </p>
+              )}
               <p className="admin-review-comment">« {message.message} »</p>
               <p className="admin-review-meta">
                 — {message.name} (<a href={`tel:${message.phone}`}>{message.phone}</a>) · {new Date(message.created_at).toLocaleDateString('fr-FR')}

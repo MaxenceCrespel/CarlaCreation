@@ -92,6 +92,7 @@ export default function Contact() {
             <div className="form-row">
               <label htmlFor="contactMessage">Message</label>
               <textarea id="contactMessage" rows={4} required minLength={5} maxLength={2000} value={form.message} onChange={update('message')} />
+              <small className="form-hint">Les liens (adresses web) ne sont pas acceptés dans ce formulaire.</small>
             </div>
             <div className="honeypot" aria-hidden="true">
               <label htmlFor="contactWebsite">Ne pas remplir ce champ</label>

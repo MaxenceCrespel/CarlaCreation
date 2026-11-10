@@ -11,6 +11,15 @@ describe('Contact messages', () => {
     cy.get('.form-feedback.success').should('be.visible');
   });
 
+  it('refuses a message containing a link (phishing protection)', () => {
+    cy.visit('/contact');
+    cy.get('#contactName').type('Cypress Phishing');
+    cy.get('#contactPhone').type('0601020304');
+    cy.get('#contactMessage').type('Tarifs sur https://gopartage.online/fr/spo/carlacreation');
+    cy.contains('button', 'Envoyer le message').click();
+    cy.get('.form-feedback.error').should('contain', 'liens ne sont pas acceptés');
+  });
+
   it('the message shows up unread in the admin Messages tab, then can be marked read and deleted', () => {
     cy.adminLogin();
     cy.contains('button.admin-nav-link', 'Messages').click();
