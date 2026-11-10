@@ -1,8 +1,10 @@
+import { NoLinks } from '../link-detection';
 import { IsBoolean, IsEmpty, IsString, Length, Matches } from 'class-validator';
 
 export class CreateContactDto {
   @IsString()
   @Length(2, 100)
+  @NoLinks()
   name!: string;
 
   @IsString()
@@ -11,6 +13,7 @@ export class CreateContactDto {
 
   @IsString()
   @Length(5, 2000)
+  @NoLinks()
   message!: string;
 
   // Honeypot: must stay empty. Bots that auto-fill every field trip this.

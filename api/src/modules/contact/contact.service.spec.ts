@@ -47,13 +47,26 @@ describe('ContactService', () => {
   });
 
   it('returns all messages ordered by most recent first', async () => {
-    const messages = [{ id: 2 }, { id: 1 }];
-    repo.find.mockResolvedValue(messages);
+    repo.find.mockResolvedValue([
+      { id: 2, name: 'B', message: 'Bonjour' },
+      { id: 1, name: 'A', message: 'Salut' },
+    ]);
 
     const result = await service.findAll();
 
     expect(repo.find).toHaveBeenCalledWith({ order: { created_at: 'DESC' } });
-    expect(result).toBe(messages);
+    expect(result.map((m) => m.id)).toEqual([2, 1]);
+  });
+
+  it('flags messages containing a web address as suspicious', async () => {
+    repo.find.mockResolvedValue([
+      { id: 2, name: 'Alexis', message: 'Voir https://gopartage.online/fr/spo/carlacreation' },
+      { id: 1, name: 'Camille', message: 'Bonjour, un balayage samedi ?' },
+    ]);
+
+    const result = await service.findAll();
+
+    expect(result.map((m) => m.suspicious)).toEqual([true, false]);
   });
 
   it('marks a message as read', async () => {

@@ -70,6 +70,11 @@ function ContactInbox({ onBack, refreshCounts, onCreateRdv, tabs }) {
           </span>
           <span className="m-muted m-small">{sentAt(current)}</span>
         </div>
+        {current.suspicious && (
+          <p className="phishing-warning" role="alert">
+            <strong>Message suspect : il contient un lien.</strong> Ne cliquez pas dessus, ne saisissez aucun mot de passe et ne rappelez pas le numéro. Supprimez-le.
+          </p>
+        )}
         <div className="m-card m-card-pad m-message-body">{current.message}</div>
         <button
           type="button"
@@ -124,7 +129,7 @@ function ContactInbox({ onBack, refreshCounts, onCreateRdv, tabs }) {
               <span className={m.is_read ? 'm-dot is-none' : 'm-dot'} aria-label={m.is_read ? undefined : 'Non lu'} />
               <span className="m-grow">
                 <span className="m-message-top">
-                  <strong className={m.is_read ? 'm-ellipsis m-normal' : 'm-ellipsis'}>{m.name}</strong>
+                  <strong className={m.is_read ? 'm-ellipsis m-normal' : 'm-ellipsis'}>{m.suspicious ? '⚠ ' : ''}{m.name}</strong>
                   <span className="m-muted m-small">{relativeDay(toDateStr(new Date(m.created_at)))}</span>
                 </span>
                 <span className="m-muted m-clamp">{m.message}</span>
