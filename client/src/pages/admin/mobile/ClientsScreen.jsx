@@ -108,6 +108,7 @@ export default function ClientsScreen({ go }) {
                   <span className="m-muted m-ellipsis">
                     {c.reservationCount ? plural(c.reservationCount, 'rendez-vous', 'rendez-vous') : 'Aucun rendez-vous lié'}
                     {c.phone ? ` · ${c.phone}` : ''}
+                    {c.hasAccount ? ' · compte en ligne' : ''}
                   </span>
                 </span>
                 <Icon name="next" size={18} />

@@ -216,6 +216,7 @@ export default function ClientsTab() {
   const [selected, setSelected] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [addFormPrefill, setAddFormPrefill] = useState(null);
+  const [accountsOnly, setAccountsOnly] = useState(false);
 
   // Settles 300ms after typing stops so a search doesn't fire a request per
   // keystroke — the search now hits the server (it also has to check past
@@ -231,6 +232,9 @@ export default function ClientsTab() {
       .then(setClients)
       .catch((err) => setError(err.message));
   }, [debouncedSearch]);
+
+  const accountCount = (clients ?? []).filter((c) => c.hasFiche && c.hasAccount).length;
+  const visibleClients = accountsOnly ? (clients ?? []).filter((c) => c.hasFiche && c.hasAccount) : clients;
 
   function openAddForm(prefill) {
     setAddFormPrefill(prefill ?? null);
@@ -267,34 +271,47 @@ export default function ClientsTab() {
         />
       </div>
 
+      <div className="admin-filter-row" role="tablist" aria-label="Filtrer les clientes">
+        <button type="button" role="tab" aria-selected={!accountsOnly} className={`admin-filter-btn ${!accountsOnly ? 'is-active' : ''}`} onClick={() => setAccountsOnly(false)}>
+          Toutes
+        </button>
+        <button type="button" role="tab" aria-selected={accountsOnly} className={`admin-filter-btn ${accountsOnly ? 'is-active' : ''}`} onClick={() => setAccountsOnly(true)}>
+          Avec un compte en ligne{clients !== null ? ` (${accountCount})` : ''}
+        </button>
+      </div>
+
       {error && <p className="loading-text">Erreur : {error}</p>}
       {!error && clients === null && <p className="loading-text">Chargement…</p>}
-      {!error && clients !== null && clients.length === 0 && (
+      {!error && clients !== null && visibleClients.length === 0 && (
         <p className="loading-text">
-          {debouncedSearch
+          {accountsOnly
+            ? 'Aucune cliente avec un compte en ligne pour le moment.'
+            : debouncedSearch
             ? 'Aucun résultat pour cette recherche.'
             : 'Aucune fiche client pour le moment — ajoutez-en une ci-dessus, ou liez-en une depuis l\'onglet Réservations.'}
         </p>
       )}
 
-      {!error && clients !== null && clients.length > 0 && (
+      {!error && clients !== null && visibleClients.length > 0 && (
         <div className="table-wrap">
           <table className="admin-table clients-table">
             <thead>
               <tr>
                 <th>Nom</th>
                 <th>Téléphone</th>
+                <th>Compte</th>
                 <th>Rendez-vous</th>
                 <th>Note</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {clients.map((c) =>
+              {visibleClients.map((c) =>
                 c.hasFiche ? (
                   <tr key={c.id}>
                     <td data-label="Nom">{c.name}</td>
                     <td data-label="Téléphone">{c.phone || '—'}</td>
+                    <td data-label="Compte">{c.hasAccount ? <span className="badge-account">Compte créé</span> : '—'}</td>
                     <td data-label="Rendez-vous">{c.reservationCount}</td>
                     <td data-label="Note">{c.notes ? c.notes.slice(0, 60) + (c.notes.length > 60 ? '…' : '') : '—'}</td>
                     <td className="row-actions">
@@ -310,6 +327,7 @@ export default function ClientsTab() {
                       {c.name} <span className="badge-no-fiche">Pas de fiche</span>
                     </td>
                     <td data-label="Téléphone">{c.phone || '—'}</td>
+                    <td data-label="Compte">—</td>
                     <td data-label="Rendez-vous">—</td>
                     <td data-label="Note">—</td>
                     <td className="row-actions">
