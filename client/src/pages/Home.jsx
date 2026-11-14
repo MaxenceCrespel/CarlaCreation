@@ -105,7 +105,7 @@ function ReviewForm() {
 }
 
 export default function Home() {
-  const { siteTagline, travelFreeRadiusKm, googleReviewUrl } = useSiteConfig();
+  const { siteTagline, travelFreeRadiusKm, googleReviewUrl, loyalty } = useSiteConfig();
   useSeo({
     description:
       'Carla Création, coiffeuse à domicile à Loos et Lille : coupe, balayage, couleur, chignon et mariage. Pose d\'ongles, semi-permanent et nail art. Réservez en ligne.',
@@ -242,6 +242,53 @@ export default function Home() {
           </p>
         </div>
       </section>
+
+      {loyalty?.tiers?.length > 0 && (
+        <section className="section section-alt" id="fidelite">
+          <div className="container">
+            <p className="eyebrow center">Programme de fidélité</p>
+            <h2 className="center">Chaque rendez-vous vous rapporte</h2>
+            <p className="section-lead center">
+              Créez un compte gratuit : vos points se cumulent automatiquement à chaque prestation terminée,
+              et se transforment en remises sur vos prochains rendez-vous.
+            </p>
+            <ul className="loyalty-promo-grid">
+              <li className="card loyalty-promo-card">
+                <strong>1 point tous les {Math.round(loyalty.centsPerPoint / 100)} €</strong>
+                <span>Dépensés en prestation, à chaque rendez-vous terminé.</span>
+              </li>
+              <li className="card loyalty-promo-card">
+                <strong>
+                  Jusqu'à {Math.round(loyalty.tiers[loyalty.tiers.length - 1].amountCents / 100)} € offerts
+                </strong>
+                <span>
+                  Échangez vos points contre un code de remise :{' '}
+                  {loyalty.tiers.map((t) => `${t.points} pts = ${Math.round(t.amountCents / 100)} €`).join(', ')}.
+                </span>
+              </li>
+              <li className="card loyalty-promo-card">
+                <strong>Parrainez une amie</strong>
+                <span>
+                  Vous gagnez {loyalty.referralSponsorPoints} points, elle en gagne {loyalty.referralRefereePoints}{' '}
+                  après son premier rendez-vous.
+                </span>
+              </li>
+              {loyalty.birthdayDiscountPercent > 0 && (
+                <li className="card loyalty-promo-card">
+                  <strong>-{loyalty.birthdayDiscountPercent} % pour votre anniversaire</strong>
+                  <span>Un code envoyé par email, valable un mois (indiquez votre date de naissance dans votre compte).</span>
+                </li>
+              )}
+            </ul>
+            <p className="center" style={{ marginTop: 28 }}>
+              <Link to="/mon-compte" className="btn btn-primary">Créer mon compte gratuit</Link>
+            </p>
+            <p className="center loyalty-promo-note">
+              Le compte est facultatif : vous pouvez toujours réserver sans, mais les points ne sont crédités qu'aux comptes connectés.
+            </p>
+          </div>
+        </section>
+      )}
 
       <section className="section" id="testimonials">
         <div className="container">
