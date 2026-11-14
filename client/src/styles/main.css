@@ -2406,3 +2406,10 @@ input[aria-invalid="true"] { border: 2px solid #A23B32; }
   font-size: 14px;
   line-height: 1.45;
 }
+
+/* Accueil : mise en avant du programme de fidélité */
+.loyalty-promo-grid { list-style: none; margin: 28px 0 0; padding: 0; display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+.loyalty-promo-card { display: grid; gap: 6px; align-content: start; }
+.loyalty-promo-card strong { font-family: var(--font-display); font-size: 1.25rem; color: var(--color-accent-ink); }
+.loyalty-promo-card span { color: var(--color-text-soft); font-size: 0.95rem; }
+.loyalty-promo-note { font-size: 0.85rem; color: var(--color-text-soft); margin-top: 8px; }

@@ -6,4 +6,14 @@ describe('Home page', () => {
     cy.get('#testimonials').should('exist');
     cy.get('#testimonials').contains('Avis clients');
   });
+
+  it('promotes the loyalty programme and links to account creation', () => {
+    cy.visit('/');
+    cy.get('#fidelite').should('exist').within(() => {
+      cy.contains('Programme de fidélité');
+      cy.contains('1 point tous les 4 €');
+      cy.contains('Parrainez une amie');
+      cy.contains('a', 'Créer mon compte gratuit').should('have.attr', 'href', '/mon-compte');
+    });
+  });
 });

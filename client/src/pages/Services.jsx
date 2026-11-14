@@ -26,7 +26,7 @@ const FAQ_ITEMS = [
   },
   {
     q: 'Dois-je créer un compte pour réserver ?',
-    a: 'Non, la réservation en ligne ne nécessite aucun compte : renseignez simplement vos coordonnées.',
+    a: 'Non, la réservation en ligne ne nécessite aucun compte : renseignez simplement vos coordonnées. Un compte gratuit reste utile : il fait cumuler des points de fidélité, échangeables contre des remises.',
   },
   {
     q: 'Comment est confirmée ma réservation ?',

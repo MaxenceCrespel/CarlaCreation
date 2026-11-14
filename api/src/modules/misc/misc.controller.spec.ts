@@ -10,6 +10,7 @@ describe('MiscController', () => {
     const settingsService = {
       getTravelFeeTiers: jest.fn().mockResolvedValue([{ minKm: 0, feeCents: 0 }]),
       getTravelFeeFallbackCents: jest.fn().mockResolvedValue(200),
+      getBirthdayDiscountPercent: jest.fn().mockResolvedValue(10),
     };
     const controller = new MiscController(settingsService as any);
 
@@ -25,6 +26,7 @@ describe('MiscController', () => {
       // No tier ever charges a fee — freeRadiusKm resolves to Infinity.
       getTravelFeeTiers: jest.fn().mockResolvedValue([{ minKm: 0, feeCents: 0 }]),
       getTravelFeeFallbackCents: jest.fn().mockResolvedValue(0),
+      getBirthdayDiscountPercent: jest.fn().mockResolvedValue(10),
     };
     const controller = new MiscController(settingsService as any);
 
@@ -37,6 +39,7 @@ describe('MiscController', () => {
     const settingsService = {
       getTravelFeeTiers: jest.fn().mockResolvedValue([{ minKm: 0, feeCents: 0 }]),
       getTravelFeeFallbackCents: jest.fn().mockResolvedValue(200),
+      getBirthdayDiscountPercent: jest.fn().mockResolvedValue(10),
     };
     const controller = new MiscController(settingsService as any);
 
@@ -44,5 +47,22 @@ describe('MiscController', () => {
 
     // No STRIPE_SECRET_KEY/STRIPE_WEBHOOK_SECRET in the test environment.
     expect(result.stripeEnabled).toBe(false);
+  });
+
+  it('getSiteConfig exposes the real loyalty rules for the public pages', async () => {
+    const settingsService = {
+      getTravelFeeTiers: jest.fn().mockResolvedValue([{ minKm: 0, feeCents: 0 }]),
+      getTravelFeeFallbackCents: jest.fn().mockResolvedValue(200),
+      getBirthdayDiscountPercent: jest.fn().mockResolvedValue(15),
+    };
+    const controller = new MiscController(settingsService as any);
+
+    const { loyalty } = await controller.getSiteConfig();
+
+    expect(loyalty.centsPerPoint).toBe(400);
+    expect(loyalty.tiers[0]).toEqual({ points: 50, amountCents: 500 });
+    expect(loyalty.referralSponsorPoints).toBe(20);
+    expect(loyalty.referralRefereePoints).toBe(10);
+    expect(loyalty.birthdayDiscountPercent).toBe(15);
   });
 });
