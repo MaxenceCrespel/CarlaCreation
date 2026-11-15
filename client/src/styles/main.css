@@ -2406,3 +2406,13 @@ input[aria-invalid="true"] { border: 2px solid #A23B32; }
   font-size: 14px;
   line-height: 1.45;
 }
+
+/* Tableau de bord : rendez-vous à traiter */
+.reservation-alerts { margin-bottom: 24px; }
+.reservation-alerts h2 { margin-top: 0; }
+.reservation-alert-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.reservation-alert { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 14px; border-radius: var(--radius-md); border-left: 4px solid; }
+.reservation-alert small { display: block; color: var(--color-text-soft); margin-top: 2px; }
+.reservation-alert.is-danger { background: #fdecea; border-left-color: #c0392b; }
+.reservation-alert.is-warning { background: #fbf3e6; border-left-color: #d9a441; }
+@media (max-width: 640px) { .reservation-alert { flex-direction: column; align-items: stretch; } }
