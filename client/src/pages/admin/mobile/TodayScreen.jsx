@@ -1,5 +1,5 @@
 import { formatPrice } from '../../../utils/format';
-import { mapsUrl, reservationTotalCents, STATUS_LABELS, wazeUrl } from '../reservationUtils';
+import { mapsUrl, reservationAlerts, reservationTotalCents, STATUS_LABELS, wazeUrl } from '../reservationUtils';
 import { Badge, Empty, ErrorText, Icon, Loading } from './ui';
 import { addDays, capitalize, formatDayLong, plural, relativeDay, STATUS_TONE, telHref, todayStr } from './helpers';
 
@@ -10,9 +10,7 @@ export default function TodayScreen({ rdv, counts, go, openAgendaDay }) {
   const tomorrow = addDays(today, 1);
   const list = rdv.list ?? [];
 
-  const pending = list
-    .filter((r) => r.status === 'pending' && r.reservation_date >= today)
-    .sort((a, b) => (a.reservation_date + a.start_time).localeCompare(b.reservation_date + b.start_time));
+  const { toComplete, overdue, toValidate: pending } = reservationAlerts(list);
   const todays = list
     .filter((r) => r.reservation_date === today && ['pending', 'confirmed', 'completed'].includes(r.status))
     .sort((a, b) => a.start_time.localeCompare(b.start_time));
@@ -44,6 +42,34 @@ export default function TodayScreen({ rdv, counts, go, openAgendaDay }) {
 
       {rdv.error && <ErrorText>{rdv.error}</ErrorText>}
       {!rdv.error && !rdv.list && <Loading />}
+
+      {rdv.list && (toComplete.length > 0 || overdue.length > 0) && (
+        <section className="m-section m-alert" aria-labelledby="m-alert-title" role="alert">
+          <h2 id="m-alert-title" className="m-section-title">À régulariser</h2>
+          {toComplete.map((r) => (
+            <div key={r.id} className="m-pending-card">
+              <button type="button" className="m-plain" onClick={() => rdv.open(r.id)}>
+                <strong>{r.client_name}</strong>
+                <span className="m-muted">Passé, pas marqué terminé · {relativeDay(r.reservation_date)} {r.start_time} · {r.service_name}</span>
+              </button>
+              <div className="m-row-actions">
+                <button type="button" className="m-btn m-btn-ok" onClick={() => rdv.complete(r.id)}>Marquer terminé</button>
+              </div>
+            </div>
+          ))}
+          {overdue.map((r) => (
+            <div key={r.id} className="m-pending-card">
+              <button type="button" className="m-plain" onClick={() => rdv.open(r.id)}>
+                <strong>{r.client_name}</strong>
+                <span className="m-muted">Demande jamais confirmée, date passée · {relativeDay(r.reservation_date)} {r.start_time} · {r.service_name}</span>
+              </button>
+              <div className="m-row-actions">
+                <button type="button" className="m-btn" onClick={() => rdv.open(r.id)}>Ouvrir</button>
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
 
       {rdv.list && pending.length > 0 && (
         <section className="m-section m-pending" aria-labelledby="m-pending-title">

@@ -33,3 +33,26 @@ export function mapsUrl(address) {
 export function wazeUrl(address) {
   return `https://waze.com/ul?q=${encodeURIComponent(address)}&navigate=yes`;
 }
+
+// Ce qui demande une action de Carla sur les rendez-vous (écran d'accueil
+// bureau et téléphone) :
+//  - toComplete : confirmés dont l'heure de fin est passée, jamais marqués
+//    « terminés » (les points de fidélité ne sont crédités qu'à ce moment) ;
+//  - overdue    : demandes toujours « en attente » alors que le rendez-vous
+//    a déjà eu lieu (ou aurait dû) : plus rien à confirmer, à classer ;
+//  - toValidate : demandes à venir à confirmer ou refuser.
+// `now` est injectable pour les tests.
+const pad2 = (n) => String(n).padStart(2, '0');
+
+export function reservationAlerts(list, now = new Date()) {
+  const today = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+  const time = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+  const byStart = (a, b) => (a.reservation_date + a.start_time).localeCompare(b.reservation_date + b.start_time);
+  const hasEnded = (r) => r.reservation_date < today || (r.reservation_date === today && r.end_time.slice(0, 5) <= time);
+
+  const rows = list ?? [];
+  const toComplete = rows.filter((r) => r.status === 'confirmed' && hasEnded(r)).sort(byStart);
+  const overdue = rows.filter((r) => r.status === 'pending' && hasEnded(r)).sort(byStart);
+  const toValidate = rows.filter((r) => r.status === 'pending' && !hasEnded(r)).sort(byStart);
+  return { toComplete, overdue, toValidate };
+}

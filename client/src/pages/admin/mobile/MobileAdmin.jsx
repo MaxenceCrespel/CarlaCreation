@@ -231,6 +231,7 @@ export default function MobileAdmin({ username, onLogout, onCredentialsUpdated }
     open: (id) => setDetailId(id),
     accept,
     refuse,
+    complete: (id) => updateStatus(id, 'completed', 'Rendez-vous terminé.'),
     create: (initial = {}) => setNewRdv(initial),
   };
 
