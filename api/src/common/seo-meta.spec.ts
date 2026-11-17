@@ -17,6 +17,22 @@ describe('renderSeoHtml', () => {
     expect(html).toContain('index, follow');
   });
 
+  it('serves the local-business data in the HTML, with the Google profile and Instagram, but no address', () => {
+    const html = renderSeoHtml(TEMPLATE, '/')!;
+    const match = html.match(/<script type="application\/ld\+json" data-seo="local-business">(.*?)<\/script>/s);
+    expect(match).not.toBeNull();
+    const data = JSON.parse(match![1]);
+    expect(data['@type']).toEqual(['HairSalon', 'NailSalon']);
+    expect(data.sameAs).toEqual(expect.arrayContaining(['https://maps.app.goo.gl/HUwixfRkZNx12YRP7', 'https://www.instagram.com/creationbycarla/']));
+    expect(data).not.toHaveProperty('address');
+    expect(data).not.toHaveProperty('geo');
+    expect(match![1]).not.toContain('Clemenceau');
+  });
+
+  it('does not put the local-business data on private pages', () => {
+    expect(renderSeoHtml(TEMPLATE, '/mon-compte')).not.toContain('ld+json');
+  });
+
   it('escapes quotes so a title can never break the markup', () => {
     const html = renderSeoHtml(TEMPLATE, '/services')!;
     expect(html).toContain("pose d'ongles");
