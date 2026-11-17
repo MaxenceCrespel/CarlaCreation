@@ -4,6 +4,7 @@ import { apiFetch } from '../api/client';
 import { useSiteConfig } from '../context/SiteConfigContext';
 import { useToast } from '../context/ToastContext';
 import { useSeo } from '../hooks/useSeo';
+import { takePreload } from '../utils/preload';
 import GalleryGrid from '../components/GalleryGrid';
 import ReviewsCarousel from '../components/ReviewsCarousel';
 
@@ -104,6 +105,18 @@ function ReviewForm() {
   );
 }
 
+// Une carte par catégorie principale, avec son prix « à partir de ».
+function buildOffers(services, categories) {
+  const roots = categories.filter((c) => c.parent_id === null).sort((a, b) => a.sort_order - b.sort_order);
+  const childToRoot = new Map(categories.map((c) => [c.id, c.parent_id ?? c.id]));
+  return roots
+    .map((root) => {
+      const prices = services.filter((s) => childToRoot.get(s.category_id) === root.id).map((s) => s.price_cents);
+      return { id: root.id, name: root.name, fromCents: prices.length ? Math.min(...prices) : null };
+    })
+    .filter((o) => o.fromCents !== null);
+}
+
 export default function Home() {
   const { siteTagline, travelFreeRadiusKm, googleReviewUrl } = useSiteConfig();
   useSeo({
@@ -111,42 +124,42 @@ export default function Home() {
       'Carla Création, coiffeuse à domicile à Loos et Lille : coupe, balayage, couleur, chignon et mariage. Pose d\'ongles, semi-permanent et nail art. Réservez en ligne.',
     path: '/',
   });
-  const [gallery, setGallery] = useState([]);
+  // Données déjà fournies par le serveur (page prérendue) : affichées tout de
+  // suite, sans nouvel appel.
+  const [preloaded] = useState(() => ({
+    gallery: takePreload('/gallery'),
+    services: takePreload('/services'),
+    categories: takePreload('/service-categories'),
+    reviews: takePreload('/reviews'),
+  }));
+  const [gallery, setGallery] = useState(() => preloaded.gallery?.slice(0, 6) ?? []);
   const [galleryError, setGalleryError] = useState(false);
-  const [reviewSummary, setReviewSummary] = useState(null);
+  const [reviewSummary, setReviewSummary] = useState(preloaded.reviews ?? null);
   const [reviewError, setReviewError] = useState(false);
-  const [offers, setOffers] = useState([]); // [{ id, name, fromCents }]
+  const [offers, setOffers] = useState(() => (preloaded.services && preloaded.categories ? buildOffers(preloaded.services, preloaded.categories) : [])); // [{ id, name, fromCents }]
 
   useEffect(() => {
+    if (preloaded.gallery) return;
     apiFetch('/gallery')
       .then((items) => setGallery(items.slice(0, 6)))
       .catch(() => setGalleryError(true));
-  }, []);
+  }, [preloaded]);
 
   useEffect(() => {
+    if (preloaded.services && preloaded.categories) return;
     Promise.all([apiFetch('/services'), apiFetch('/service-categories')])
-      .then(([services, categories]) => {
-        const roots = categories.filter((c) => c.parent_id === null).sort((a, b) => a.sort_order - b.sort_order);
-        const childToRoot = new Map(categories.map((c) => [c.id, c.parent_id ?? c.id]));
-        setOffers(
-          roots
-            .map((root) => {
-              const prices = services.filter((s) => childToRoot.get(s.category_id) === root.id).map((s) => s.price_cents);
-              return { id: root.id, name: root.name, fromCents: prices.length ? Math.min(...prices) : null };
-            })
-            .filter((o) => o.fromCents !== null),
-        );
-      })
+      .then(([services, categories]) => setOffers(buildOffers(services, categories)))
       .catch(() => {
         // Optional section: stays hidden if the catalogue can't load.
       });
-  }, []);
+  }, [preloaded]);
 
   useEffect(() => {
+    if (preloaded.reviews) return;
     apiFetch('/reviews')
       .then(setReviewSummary)
       .catch(() => setReviewError(true));
-  }, []);
+  }, [preloaded]);
 
   return (
     <>

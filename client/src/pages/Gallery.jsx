@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../api/client';
+import { takePreload } from '../utils/preload';
 import { useSeo } from '../hooks/useSeo';
 import GalleryGrid from '../components/GalleryGrid';
 
@@ -10,19 +11,24 @@ export default function Gallery() {
     description: 'Coupes, colorations, balayages, manucures et nail art réalisés dans mon studio à Loos, près de Lille — découvrez mes réalisations en photos.',
     path: '/gallery',
   });
-  const [items, setItems] = useState(null);
-  const [categories, setCategories] = useState([]);
+  const [preloaded] = useState(() => ({ items: takePreload('/gallery'), categories: takePreload('/service-categories') }));
+  const [items, setItems] = useState(preloaded.items ?? null);
+  const [categories, setCategories] = useState(preloaded.categories ?? []);
   const [category, setCategory] = useState(null); // null = "Toutes"
   const [subcategory, setSubcategory] = useState(null); // null = "Toutes" within the selected category
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    apiFetch('/gallery')
-      .then(setItems)
-      .catch(() => setError(true));
-    apiFetch('/service-categories')
-      .then(setCategories)
-      .catch(() => {});
+    if (!preloaded.items) {
+      apiFetch('/gallery')
+        .then(setItems)
+        .catch(() => setError(true));
+    }
+    if (!preloaded.categories) {
+      apiFetch('/service-categories')
+        .then(setCategories)
+        .catch(() => {});
+    }
   }, []);
 
   const topLevelCategories = useMemo(() => categories.filter((c) => !c.parent_id).sort((a, b) => a.sort_order - b.sort_order), [categories]);

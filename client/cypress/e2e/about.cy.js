@@ -5,7 +5,7 @@ describe('Page À propos', () => {
     cy.contains('Ronchin').should('be.visible');
     cy.contains('summary', 'Quels moyens de paiement').click();
     cy.contains('Le paiement par carte en ligne').should('be.visible');
-    cy.get('script[data-seo="faq"]').should('exist');
+    cy.get('[itemtype="https://schema.org/FAQPage"]').should('exist');
     cy.title().should('contain', 'À propos');
   });
 

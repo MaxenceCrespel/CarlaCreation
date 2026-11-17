@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../api/client';
+import { takePreload } from '../utils/preload';
 import { useSeo } from '../hooks/useSeo';
 import { formatDuration, formatPrice } from '../utils/format';
 import { initialCategoryId } from '../utils/categoryParam';
@@ -46,22 +47,30 @@ export default function Services() {
     path: '/services',
   });
   const [searchParams] = useSearchParams();
-  const [services, setServices] = useState(null);
-  const [categories, setCategories] = useState([]);
+  const [preloaded] = useState(() => ({ services: takePreload('/services'), categories: takePreload('/service-categories') }));
+  const [services, setServices] = useState(preloaded.services ?? null);
+  const [categories, setCategories] = useState(preloaded.categories ?? []);
   const [category, setCategory] = useState(null);
   const [subcategory, setSubcategory] = useState(null);
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    apiFetch('/services')
-      .then(setServices)
-      .catch(() => setError(true));
-    apiFetch('/service-categories')
-      .then((cats) => {
-        setCategories(cats);
-        setCategory((current) => current ?? initialCategoryId(cats, searchParams.get('categorie')));
-      })
-      .catch(() => {});
+    if (!preloaded.services) {
+      apiFetch('/services')
+        .then(setServices)
+        .catch(() => setError(true));
+    }
+    const applyCategories = (cats) => setCategory((current) => current ?? initialCategoryId(cats, searchParams.get('categorie')));
+    if (preloaded.categories) {
+      applyCategories(preloaded.categories);
+    } else {
+      apiFetch('/service-categories')
+        .then((cats) => {
+          setCategories(cats);
+          applyCategories(cats);
+        })
+        .catch(() => {});
+    }
   }, []);
 
   const topLevelCategories = useMemo(() => categories.filter((c) => !c.parent_id).sort((a, b) => a.sort_order - b.sort_order), [categories]);
