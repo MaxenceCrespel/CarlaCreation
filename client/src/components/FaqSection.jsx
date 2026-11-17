@@ -1,21 +1,17 @@
-// Visible FAQ (native <details>) + the matching FAQPage structured data,
-// rendered inline so it is also present in the HTML the server prerenders.
+// Visible FAQ (native <details>) with its schema.org FAQPage markup, written
+// directly in the HTML (microdata) so it is already in the page prerendered by
+// the server — no script to inject.
 export default function FaqSection({ faq, title = 'Questions fréquentes', id = 'faq' }) {
-  const jsonLd = JSON.stringify({
-    '@context': 'https://schema.org',
-    '@type': 'FAQPage',
-    mainEntity: faq.map(({ q, a }) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })),
-  }).replace(/</g, '\\u003c');
-
   return (
-    <div className="card" id={id}>
-      <script type="application/ld+json" data-seo="faq" dangerouslySetInnerHTML={{ __html: jsonLd }} />
+    <div className="card" id={id} itemScope itemType="https://schema.org/FAQPage">
       <h2>{title}</h2>
       <div className="faq-list">
         {faq.map(({ q, a }) => (
-          <details key={q} className="faq-item">
-            <summary>{q}</summary>
-            <p>{a}</p>
+          <details key={q} className="faq-item" itemProp="mainEntity" itemScope itemType="https://schema.org/Question">
+            <summary itemProp="name">{q}</summary>
+            <div itemProp="acceptedAnswer" itemScope itemType="https://schema.org/Answer">
+              <p itemProp="text">{a}</p>
+            </div>
           </details>
         ))}
       </div>
