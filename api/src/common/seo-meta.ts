@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { config } from '../config';
 import { localBusinessJsonLd } from './local-business-schema';
+import { injectRendered, renderPage } from './ssr';
 
 // The site is a single-page app: every route used to be served the same
 // index.html, and the title / description were only set once the JavaScript
@@ -93,10 +94,16 @@ export function renderSeoHtml(template: string, urlPath: string): string | null 
   return html;
 }
 
+// Vrai pour les pages publiques qui ont leur propre titre/description : ce
+// sont celles qu'on prérend (les pages privées restent construites par le
+// navigateur, de toute façon en noindex).
+export const isPrerenderedRoute = (urlPath: string): boolean => Boolean(PUBLIC[urlPath]);
+
 export function seoMetaMiddleware(clientDist: string) {
   const indexPath = path.join(clientDist, 'index.html');
+  const ssrDir = path.join(clientDist, '..', 'dist-ssr');
   let template: string | null = null;
-  return (req: Request, res: Response, next: NextFunction): void => {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     if (req.method !== 'GET' || !(req.headers.accept ?? '').includes('text/html')) return next();
     try {
       template ??= fs.readFileSync(indexPath, 'utf8');
@@ -113,7 +120,8 @@ export function seoMetaMiddleware(clientDist: string) {
         return;
       }
       res.setHeader('Cache-Control', 'no-cache');
-      res.type('html').send(html);
+      const page = isPrerenderedRoute(urlPath) ? await renderPage(ssrDir, urlPath) : null;
+      res.type('html').send(page ? injectRendered(html, page.appHtml, page.preload) : html);
     } catch {
       next();
     }

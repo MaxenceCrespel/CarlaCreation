@@ -77,6 +77,8 @@ COPY --from=api-build /build/api/src ./src
 COPY --from=api-build /build/api/tsconfig.json ./tsconfig.json
 COPY --from=api-build /build/api/package.json ./package.json
 COPY --from=client-build /build/client/dist /client/dist
+# Bundle de rendu serveur : prérendu HTML des pages publiques (api/src/common/ssr.ts).
+COPY --from=client-build /build/client/dist-ssr /client/dist-ssr
 
 RUN mkdir -p data uploads \
   && addgroup -S app && adduser -S app -G app \
