@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
 import { config } from '../config';
+import { localBusinessJsonLd } from './local-business-schema';
 
 // The site is a single-page app: every route used to be served the same
 // index.html, and the title / description were only set once the JavaScript
@@ -82,7 +83,10 @@ export function renderSeoHtml(template: string, urlPath: string): string | null 
       .replace(/<meta name="description" content="[^"]*" \/>/, `<meta name="description" content="${esc(meta.description)}" />`)
       .replace(/<meta property="og:title" content="[^"]*" \/>/, `<meta property="og:title" content="${esc(meta.title)}" />`)
       .replace(/<meta property="og:description" content="[^"]*" \/>/, `<meta property="og:description" content="${esc(meta.description)}" />`)
-      .replace('</head>', `    <link rel="canonical" href="${url}" />\n    <meta property="og:url" content="${url}" />\n  </head>`);
+      .replace(
+        '</head>',
+        `    <link rel="canonical" href="${url}" />\n    <meta property="og:url" content="${url}" />\n    <script type="application/ld+json" data-seo="local-business">${localBusinessJsonLd()}</script>\n  </head>`,
+      );
   } else {
     html = html.replace(/<meta name="robots" content="[^"]*" \/>/, '<meta name="robots" content="noindex, nofollow" />');
   }

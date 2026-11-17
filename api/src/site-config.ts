@@ -24,6 +24,9 @@ export const siteConfig = {
   // jamais seulement aux satisfaites : Google interdit ce tri).
   instagramUrl: 'https://www.instagram.com/creationbycarla/',
   googleReviewUrl: 'https://g.page/r/CZxWuZLVNj8NEBM/review',
+  // Lien public de la fiche Google Business Profile (relie le site, la fiche et
+  // Instagram pour Google via le champ schema.org `sameAs`).
+  googleProfileUrl: 'https://maps.app.goo.gl/HUwixfRkZNx12YRP7',
   navLinks: [
     { href: '/', label: 'Accueil', key: 'home' },
     { href: '/services', label: 'Prestations', key: 'services' },

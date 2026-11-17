@@ -13,10 +13,13 @@ import { storeReferral } from '../utils/referralStorage';
 // works from home / travels to clients, the postal address must only ever
 // appear in the booking confirmation email (see MailService), never here.
 function useLocalBusinessSchema() {
-  const { siteName, sitePhoneHref, siteEmail, siteUrl, instagramUrl } = useSiteConfig();
+  const { siteName, sitePhoneHref, siteEmail, siteUrl, instagramUrl, googleProfileUrl } = useSiteConfig();
 
   useEffect(() => {
     if (!siteUrl) return;
+    // Le serveur envoie déjà ces données dans le HTML des pages publiques
+    // (api/src/common/local-business-schema.ts) : on ne les remplace pas.
+    if (document.querySelector('script[data-seo="local-business"]')) return;
 
     const schema = {
       '@context': 'https://schema.org',
@@ -32,7 +35,8 @@ function useLocalBusinessSchema() {
       image: `${siteUrl}/favicon.svg`,
       telephone: sitePhoneHref || undefined,
       email: siteEmail || undefined,
-      sameAs: instagramUrl ? [instagramUrl] : undefined,
+      sameAs: [instagramUrl, googleProfileUrl].filter(Boolean),
+      hasMap: googleProfileUrl || undefined,
     };
 
     let el = document.querySelector('script[data-seo="local-business"]');
@@ -43,7 +47,7 @@ function useLocalBusinessSchema() {
       document.head.appendChild(el);
     }
     el.textContent = JSON.stringify(schema);
-  }, [siteName, sitePhoneHref, siteEmail, siteUrl]);
+  }, [siteName, sitePhoneHref, siteEmail, siteUrl, instagramUrl, googleProfileUrl]);
 }
 
 // Fixed bottom bar on phones only (CSS), hidden where it would compete with
