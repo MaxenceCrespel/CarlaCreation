@@ -214,6 +214,8 @@ img { max-width: 100%; display: block; }
 
 .page-hero { padding-bottom: 24px; }
 .page-hero h1 { max-width: 640px; margin-left: auto; margin-right: auto; }
+/* Le bas de section suffit : pas de marge en plus sous le dernier paragraphe. */
+.page-hero .section-lead:last-child { margin-bottom: 0; }
 
 .category-title {
   font-size: 1.3rem;
