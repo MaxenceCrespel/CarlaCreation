@@ -5,6 +5,7 @@ import { takePreload } from '../utils/preload';
 import { useSeo } from '../hooks/useSeo';
 import { formatDuration, formatPrice } from '../utils/format';
 import { initialCategoryId } from '../utils/categoryParam';
+import { useSiteConfig } from '../context/SiteConfigContext';
 
 function ServiceCard({ service }) {
   return (
@@ -27,7 +28,7 @@ const FAQ_ITEMS = [
   },
   {
     q: 'Dois-je créer un compte pour réserver ?',
-    a: 'Non, la réservation en ligne ne nécessite aucun compte : renseignez simplement vos coordonnées.',
+    a: 'Non, la réservation en ligne ne nécessite aucun compte : renseignez simplement vos coordonnées. Un compte gratuit reste utile : il fait cumuler des points de fidélité, échangeables contre des remises.',
   },
   {
     q: 'Comment est confirmée ma réservation ?',
@@ -46,6 +47,7 @@ export default function Services() {
       'Tous mes tarifs et durées de coiffeuse à Loos, près de Lille : coupe, coloration, balayage, brushing, pose d\'ongles, semi-permanent, manucure et nail art.',
     path: '/services',
   });
+  const { travelFreeRadiusKm } = useSiteConfig();
   const [searchParams] = useSearchParams();
   const [preloaded] = useState(() => ({ services: takePreload('/services'), categories: takePreload('/service-categories') }));
   const [services, setServices] = useState(preloaded.services ?? null);
@@ -99,11 +101,10 @@ export default function Services() {
           <p className="eyebrow center">Mes prestations</p>
           <h1 className="center">Des soins pour chaque style</h1>
           <p className="section-lead center">
-            Tarifs indicatifs — un devis précis pourra être établi lors de votre diagnostic en studio.
-          </p>
-          <p className="section-lead center">
-            Toutes ces prestations sont possibles <Link to="/coiffeuse-a-domicile">à domicile</Link> à Loos, Lille et
-            alentours. <Link to="/a-propos">En savoir plus sur Carla</Link>.
+            Toutes les prestations sont possibles au studio à Loos ou <Link to="/coiffeuse-a-domicile">chez vous</Link> à
+            Lille et alentours
+            {Number.isFinite(travelFreeRadiusKm) ? `, déplacement offert jusqu'à ${travelFreeRadiusKm} km` : ''}. Le prix
+            peut être ajusté avec vous en cas de besoin particulier.
           </p>
         </div>
       </section>

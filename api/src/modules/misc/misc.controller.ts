@@ -2,6 +2,7 @@ import { Controller, Get } from '@nestjs/common';
 import { config } from '../../config';
 import { siteConfig } from '../../site-config';
 import { SettingsService } from '../settings/settings.service';
+import { CENTS_PER_POINT, REFERRAL_REFEREE_POINTS, REFERRAL_SPONSOR_POINTS, REWARD_TIERS } from '../rewards/loyalty.constants';
 import { freeRadiusKm } from '../reservations/travel-fee.util';
 
 @Controller('api')
@@ -32,6 +33,15 @@ export class MiscController {
       // Lets the booking form show/hide the "payer en ligne vs payer sur
       // place" choice — no point offering it when Stripe isn't configured.
       stripeEnabled: config.STRIPE_ENABLED,
+      // Règles du programme de fidélité, lues par la page d'accueil pour ne
+      // jamais afficher d'autres chiffres que ceux réellement appliqués.
+      loyalty: {
+        centsPerPoint: CENTS_PER_POINT,
+        tiers: REWARD_TIERS,
+        referralSponsorPoints: REFERRAL_SPONSOR_POINTS,
+        referralRefereePoints: REFERRAL_REFEREE_POINTS,
+        birthdayDiscountPercent: await this.settingsService.getBirthdayDiscountPercent(),
+      },
     };
   }
 }

@@ -1456,7 +1456,7 @@ export default function Booking() {
                   </div>
                 ) : (
                   <div className="account-banner">
-                    <span>Déjà un compte, ou envie d'en créer un pour cumuler des points ? C'est facultatif.</span>
+                    <span>Déjà un compte, ou envie d'en créer un gratuitement pour cumuler des points de fidélité (remises sur vos prochains rendez-vous) ? C'est facultatif.</span>
                     <button type="button" className="link-btn" onClick={() => setShowAccountModal(true)}>Se connecter / créer un compte</button>
                   </div>
                 )}
