@@ -1,0 +1,2 @@
+# Clé IndexNow : publique par conception (servie à /<clé>.txt pour Bing), pas un secret.
+ca06d5b652f648eb6d6991e327758ddbfaab1b66:api/src/modules/seo/indexnow.ts:generic-api-key:9
