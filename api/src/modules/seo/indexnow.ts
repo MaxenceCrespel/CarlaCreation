@@ -6,7 +6,8 @@ import { PUBLIC_PAGES } from './public-pages';
 // démarrage en prod, donc à chaque déploiement. Google n'utilise pas ce
 // protocole. La clé n'est pas un secret : elle est publiée à
 // /<clé>.txt (SeoController) pour prouver que le site nous appartient.
-export const INDEXNOW_KEY = 'd50b5ce41d575aa73cfa9750575922f8';
+// gitleaks la prend pour une clé d'API (generic-api-key) : faux positif.
+export const INDEXNOW_KEY = 'd50b5ce41d575aa73cfa9750575922f8'; // gitleaks:allow
 const ENDPOINT = 'https://api.indexnow.org/indexnow';
 const TIMEOUT_MS = 10_000;
 
