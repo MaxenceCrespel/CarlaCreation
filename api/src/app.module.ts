@@ -19,6 +19,8 @@ import { StripeModule } from './modules/stripe/stripe.module';
 import { ImagesModule } from './modules/images/images.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { SeoModule } from './modules/seo/seo.module';
+import { INDEXNOW_KEY } from './modules/seo/indexnow';
+import { CLIENT_DIST } from './common/client-dist';
 import { HealthModule } from './modules/health/health.module';
 import { MiscModule } from './modules/misc/misc.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
@@ -67,8 +69,8 @@ class NoopThrottlerGuard implements CanActivate {
     // client-side route (e.g. /booking, /admin) that isn't a real file —
     // excluding /api, /uploads and /healthz, which are handled by controllers.
     ServeStaticModule.forRoot({
-      rootPath: path.join(__dirname, '..', '..', 'client', 'dist'),
-      exclude: ['/api/{*splat}', '/uploads/{*splat}', '/img/{*splat}', '/healthz', '/robots.txt', '/sitemap.xml'],
+      rootPath: CLIENT_DIST,
+      exclude: ['/api/{*splat}', '/uploads/{*splat}', '/img/{*splat}', '/healthz', '/robots.txt', '/sitemap.xml', `/${INDEXNOW_KEY}.txt`],
       serveStaticOptions: {
         // /.well-known/ (ai-catalog.json) lives in a dot-directory, ignored by default.
         dotfiles: 'allow',
