@@ -6,6 +6,8 @@ import { ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
 import compression from 'compression';
 import { seoMetaMiddleware } from './common/seo-meta';
+import { CLIENT_DIST } from './common/client-dist';
+import { indexNowEnabled, notifyIndexNow } from './modules/seo/indexnow';
 import cookieParser from 'cookie-parser';
 import type { Request, Response } from 'express';
 import { AppModule } from './app.module';
@@ -47,7 +49,7 @@ async function bootstrap() {
   // gzip/deflate for the JSON, HTML, CSS and JS responses (images are already compressed).
   app.use(compression());
   // Per-route <title>/description/canonical for crawlers that don't run the SPA's JavaScript.
-  app.use(seoMetaMiddleware(path.join(__dirname, '..', '..', 'client', 'dist')));
+  app.use(seoMetaMiddleware(CLIENT_DIST));
   app.use(helmet.hsts({ maxAge: 63072000, includeSubDomains: true, preload: true }));
 
   app.enableCors({
@@ -84,6 +86,9 @@ async function bootstrap() {
 
   // eslint-disable-next-line no-console
   console.log(`Carla Création API running at ${config.PUBLIC_ORIGIN} (env: ${config.NODE_ENV})`);
+
+  // Signale les pages publiques à Bing & co (IndexNow) à chaque déploiement.
+  if (indexNowEnabled()) void notifyIndexNow();
 
   const shutdown = async (signal: string) => {
     // eslint-disable-next-line no-console
