@@ -2,6 +2,8 @@ import type { NextFunction, Request, Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
 import { config } from '../config';
+import { localBusinessJsonLd } from './local-business-schema';
+import { injectRendered, renderPage } from './ssr';
 
 // The site is a single-page app: every route used to be served the same
 // index.html, and the title / description were only set once the JavaScript
@@ -82,17 +84,26 @@ export function renderSeoHtml(template: string, urlPath: string): string | null 
       .replace(/<meta name="description" content="[^"]*" \/>/, `<meta name="description" content="${esc(meta.description)}" />`)
       .replace(/<meta property="og:title" content="[^"]*" \/>/, `<meta property="og:title" content="${esc(meta.title)}" />`)
       .replace(/<meta property="og:description" content="[^"]*" \/>/, `<meta property="og:description" content="${esc(meta.description)}" />`)
-      .replace('</head>', `    <link rel="canonical" href="${url}" />\n    <meta property="og:url" content="${url}" />\n  </head>`);
+      .replace(
+        '</head>',
+        `    <link rel="canonical" href="${url}" />\n    <meta property="og:url" content="${url}" />\n    <script type="application/ld+json" data-seo="local-business">${localBusinessJsonLd()}</script>\n  </head>`,
+      );
   } else {
     html = html.replace(/<meta name="robots" content="[^"]*" \/>/, '<meta name="robots" content="noindex, nofollow" />');
   }
   return html;
 }
 
+// Vrai pour les pages publiques qui ont leur propre titre/description : ce
+// sont celles qu'on prérend (les pages privées restent construites par le
+// navigateur, de toute façon en noindex).
+export const isPrerenderedRoute = (urlPath: string): boolean => Boolean(PUBLIC[urlPath]);
+
 export function seoMetaMiddleware(clientDist: string) {
   const indexPath = path.join(clientDist, 'index.html');
+  const ssrDir = path.join(clientDist, '..', 'dist-ssr');
   let template: string | null = null;
-  return (req: Request, res: Response, next: NextFunction): void => {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     if (req.method !== 'GET' || !(req.headers.accept ?? '').includes('text/html')) return next();
     try {
       template ??= fs.readFileSync(indexPath, 'utf8');
@@ -109,7 +120,8 @@ export function seoMetaMiddleware(clientDist: string) {
         return;
       }
       res.setHeader('Cache-Control', 'no-cache');
-      res.type('html').send(html);
+      const page = isPrerenderedRoute(urlPath) ? await renderPage(ssrDir, urlPath) : null;
+      res.type('html').send(page ? injectRendered(html, page.appHtml, page.preload) : html);
     } catch {
       next();
     }

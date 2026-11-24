@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { apiFetch } from '../api/client';
+import { takePreload } from '../utils/preload';
 
 const FALLBACK = {
   siteName: 'Carla Création',
@@ -30,9 +31,11 @@ const FALLBACK = {
 const SiteConfigContext = createContext(FALLBACK);
 
 export function SiteConfigProvider({ children }) {
-  const [siteConfig, setSiteConfig] = useState(FALLBACK);
+  const [preloaded] = useState(() => takePreload('/site-config'));
+  const [siteConfig, setSiteConfig] = useState(preloaded ?? FALLBACK);
 
   useEffect(() => {
+    if (preloaded) return undefined; // déjà fourni par le serveur
     let cancelled = false;
     apiFetch('/site-config')
       .then((data) => {
@@ -44,7 +47,7 @@ export function SiteConfigProvider({ children }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [preloaded]);
 
   return <SiteConfigContext.Provider value={siteConfig}>{children}</SiteConfigContext.Provider>;
 }

@@ -12,3 +12,11 @@
 1193791
 1193792
 1193793
+
+# picomatch <= 4.0.7 (GHSA-fc5q-39xc-vjpf, ReDoS via extglobs répétés), tirée
+# par typeorm -> tinyglobby. Aucun correctif publié à ce jour (le dernier
+# picomatch, 4.0.7, est encore dans la plage vulnérable). Non exploitable ici :
+# typeorm n'y passe que les motifs de fichiers d'entités/migrations écrits dans
+# notre propre configuration, jamais une saisie d'utilisateur. À retirer dès
+# qu'une version corrigée de picomatch existe.
+1247710

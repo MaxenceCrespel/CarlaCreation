@@ -486,3 +486,5 @@ div.m-list-item, label.m-list-item { cursor: default; }
   position: fixed; left: 0; right: 0; bottom: calc(var(--m-tabbar-h) + env(safe-area-inset-bottom)); z-index: 60;
   background: var(--m-surface); border-top: 1px solid var(--color-border); padding: 8px var(--m-gutter);
 }
+
+.m-alert { background: #FDECEA; border: 1px solid #F2C4BE; border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }

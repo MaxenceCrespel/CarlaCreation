@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { apiFetch } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { formatPrice } from '../../utils/format';
+import { reservationAlerts } from './reservationUtils';
 
 const MONTH_LABEL_FORMATTER = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' });
 
@@ -233,7 +234,84 @@ function LocationSplitBar({ atHomeCount, studioCount }) {
   );
 }
 
-export default function DashboardTab() {
+const ALERT_DATE_FORMATTER = new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
+
+function alertWhen(r) {
+  const [y, m, d] = r.reservation_date.split('-').map(Number);
+  return `${ALERT_DATE_FORMATTER.format(new Date(y, m - 1, d))} à ${r.start_time.slice(0, 5)}`;
+}
+
+// Ce qui attend une action sur les rendez-vous : à afficher tout en haut du
+// tableau de bord, avant les statistiques.
+function ReservationAlerts({ goToTab }) {
+  const showToast = useToast();
+  const [reservations, setReservations] = useState(null);
+  const [busyId, setBusyId] = useState(null);
+
+  useEffect(() => {
+    apiFetch('/reservations')
+      .then(setReservations)
+      .catch(() => setReservations([])); // bloc facultatif : on n'affiche rien si le chargement échoue
+  }, []);
+
+  async function setStatus(id, status, successText) {
+    setBusyId(id);
+    try {
+      const res = await apiFetch(`/reservations/${id}/status`, { method: 'PATCH', body: { status } });
+      setReservations((rows) => rows.map((r) => (r.id === id ? { ...r, status } : r)));
+      showToast(res?.paymentWarning || successText, res?.paymentWarning ? 'error' : 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (!reservations) return null;
+  const { toComplete, overdue, toValidate } = reservationAlerts(reservations);
+  if (toComplete.length + overdue.length + toValidate.length === 0) return null;
+
+  return (
+    <section className="card reservation-alerts" role="alert" aria-labelledby="reservation-alerts-title">
+      <h2 id="reservation-alerts-title">À traiter</h2>
+      <ul className="reservation-alert-list">
+        {toComplete.map((r) => (
+          <li key={r.id} className="reservation-alert is-danger">
+            <span>
+              <strong>{r.client_name}</strong> — {alertWhen(r)} · {r.service_name}
+              <small>Rendez-vous passé, pas encore marqué terminé (les points de fidélité ne sont pas crédités).</small>
+            </span>
+            <button type="button" className="btn btn-primary btn-sm" disabled={busyId === r.id} onClick={() => setStatus(r.id, 'completed', 'Rendez-vous terminé.')}>
+              Marquer terminé
+            </button>
+          </li>
+        ))}
+        {overdue.map((r) => (
+          <li key={r.id} className="reservation-alert is-danger">
+            <span>
+              <strong>{r.client_name}</strong> — {alertWhen(r)} · {r.service_name}
+              <small>Demande jamais confirmée et date passée : à traiter dans Réservations.</small>
+            </span>
+            <button type="button" className="btn btn-outline btn-sm" onClick={() => goToTab?.('reservations')}>Ouvrir</button>
+          </li>
+        ))}
+        {toValidate.map((r) => (
+          <li key={r.id} className="reservation-alert is-warning">
+            <span>
+              <strong>{r.client_name}</strong> — {alertWhen(r)} · {r.service_name}
+              <small>Demande en attente de confirmation.</small>
+            </span>
+            <button type="button" className="btn btn-primary btn-sm" disabled={busyId === r.id} onClick={() => setStatus(r.id, 'confirmed', 'Rendez-vous confirmé.')}>
+              Confirmer
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+export default function DashboardTab({ goToTab }) {
   const showToast = useToast();
   const [month, setMonth] = useState(currentMonth());
   const [data, setData] = useState(null);
@@ -275,6 +353,8 @@ export default function DashboardTab() {
 
   return (
     <>
+      <ReservationAlerts goToTab={goToTab} />
+
       <div className="calendar-nav">
         <button type="button" className="btn btn-outline btn-sm" onClick={() => setMonth((m) => shiftMonth(m, -1))} aria-label="Mois précédent">
           &larr;

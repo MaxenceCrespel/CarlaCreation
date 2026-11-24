@@ -11,6 +11,8 @@ function isStandalone() {
 }
 
 function isIOS() {
+  // Rendu serveur (pages prérendues) : pas de navigateur, donc rien à proposer.
+  if (typeof window === 'undefined') return false;
   return /iphone|ipad|ipod/i.test(window.navigator.userAgent);
 }
 

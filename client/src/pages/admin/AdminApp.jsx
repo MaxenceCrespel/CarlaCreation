@@ -178,7 +178,7 @@ export default function AdminApp() {
         </nav>
 
         <main className="admin-main">
-          <ActiveComponent username={session.username} onCredentialsUpdated={(newUsername) => setSession({ username: newUsername })} />
+          <ActiveComponent goToTab={setActiveTab} username={session.username} onCredentialsUpdated={(newUsername) => setSession({ username: newUsername })} />
         </main>
       </div>
 

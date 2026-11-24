@@ -5,6 +5,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ScheduleModule } from '@nestjs/schedule';
 import { config } from './config';
+import { SSR_SECRET } from './common/ssr';
 import { DatabaseModule } from './database/database.module';
 import { MailModule } from './modules/mail/mail.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -49,7 +50,14 @@ class NoopThrottlerGuard implements CanActivate {
     // Global baseline rate limit as a defence against abuse/flooding; tighter
     // limits are applied per-route (login, booking, contact) via @Throttle.
     ThrottlerModule.forRoot({
-      throttlers: [{ limit: 300, ttl: 900_000 }],
+      throttlers: [
+        {
+          limit: 300,
+          ttl: 900_000,
+          // Appels internes du prérendu (voir common/ssr.ts) : jamais limités.
+          skipIf: (context) => context.switchToHttp().getRequest().headers['x-ssr-secret'] === SSR_SECRET,
+        },
+      ],
     }),
     // Powers the @Cron reminder job in ReservationsService (24h-before
     // appointment emails) — registering it here makes SchedulerRegistry
