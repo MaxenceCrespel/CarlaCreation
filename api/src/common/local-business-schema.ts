@@ -16,7 +16,8 @@ export function localBusinessSchema(): Record<string, unknown> {
     description:
       "Coiffeuse et prothésiste ongulaire à Loos, près de Lille : coupe, coloration, balayage, pose d'ongles, semi-permanent, manucure et nail art, en studio ou à domicile.",
     url: config.PUBLIC_ORIGIN,
-    image: `${config.PUBLIC_ORIGIN}/favicon.svg`,
+    image: `${config.PUBLIC_ORIGIN}/og-image.png`,
+    logo: `${config.PUBLIC_ORIGIN}/icon-512.png`,
     telephone: siteConfig.sitePhoneHref,
     email: siteConfig.siteEmail,
     areaServed: ['Loos', 'Lille', 'Ronchin', 'Wattignies', 'Seclin', 'Tourcoing'].map((name) => ({ '@type': 'City', name })),
