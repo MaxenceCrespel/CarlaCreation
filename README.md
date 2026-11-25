@@ -522,6 +522,16 @@ scanne (Trivy, bloquant sur CRITICAL/HIGH), avant de lancer en parallèle
 `docker compose` complète. La CI ne déploie rien : la prod se lance à la main
 (voir [Déploiement (VPS)](#déploiement-vps)).
 
+**Relecture IA des pull requests**, hors du pipeline principal :
+`claude-review.yml` relit chaque PR (hors brouillons et forks) et commente le
+diff (logique métier, sécurité, données, tests manquants) ; `claude.yml` répond
+quand on mentionne `@claude` dans une PR ou une issue (propriétaire et
+collaborateurs uniquement). Mise en place (une fois) : installer l'application
+GitHub [Claude](https://github.com/apps/claude) sur le repo, lancer
+`claude setup-token` en local puis `gh secret set CLAUDE_CODE_OAUTH_TOKEN`. La
+consommation est décomptée de l'abonnement Claude, sans clé API facturée à
+l'usage.
+
 ## Sécurité — points clés
 
 - Toutes les requêtes qui modifient des données (réservation, contact,
